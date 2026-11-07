@@ -1,65 +1,78 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ModificationsKnown.App.Views.GameSkinView">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="16" MaxWidth="820" HorizontalAlignment="Left">
-            <Border Classes="hero">
-                <StackPanel Spacing="10">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBlock Text="游戏皮肤" FontSize="28" FontWeight="SemiBold" />
-                        <Border Background="{DynamicResource AccentSoftBrush}"
-                                CornerRadius="6"
-                                Padding="8,3"
-                                VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Status}"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource AccentBrush}"
-                                       FontWeight="SemiBold" />
-                        </Border>
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="16" MaxWidth="820" HorizontalAlignment="Left">
+                <Border Classes="hero">
+                    <StackPanel Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="游戏皮肤" FontSize="28" FontWeight="SemiBold" />
+                            <Border Background="{DynamicResource AccentSoftBrush}"
+                                    CornerRadius="6"
+                                    Padding="8,3"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Status}"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource AccentBrush}"
+                                           FontWeight="SemiBold" />
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Description}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   FontSize="13"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
-                    <TextBlock Text="{Binding Description}"
-                               Foreground="{DynamicResource TextSecondaryBrush}"
-                               FontSize="13"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="当前版本不会读取或修改游戏内的皮肤目录；这个入口只是占位，避免后续重新设计导航。"
-                               Classes="caption"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+                </Border>
 
-            <Border Classes="card">
+                <Border Classes="card">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="计划中的能力" Classes="h2" />
+                        <ItemsControl ItemsSource="{Binding PlannedFeatures}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="18,*" Margin="0,3">
+                                        <TextBlock Text="·" Foreground="{DynamicResource AccentBrush}" />
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding}"
+                                                   Classes="muted"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Deliberate construction overlay: no game files are touched in this build. -->
+        <Border Background="{DynamicResource ScrimBrush}" ZIndex="10">
+            <Border Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="14"
+                    Padding="28"
+                    Width="420"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Center">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="计划中的能力" Classes="h2" />
-                    <ItemsControl ItemsSource="{Binding PlannedFeatures}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid ColumnDefinitions="18,*" Margin="0,3">
-                                    <TextBlock Text="·" Foreground="{DynamicResource AccentBrush}" />
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding}"
-                                               Classes="muted"
-                                               FontSize="12"
-                                               TextWrapping="Wrap" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="card">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="为什么先不做" Classes="h2" />
-                    <TextBlock Text="皮肤包并不只是图片：Body、Head、Wings 等目录需要完整保留，且与 SkinSync 的配置强耦合。先把模组链路、路径安全和回滚做扎实，再接入皮肤，避免又出现“下载成功但游戏里缺头”的问题。"
+                    <TextBlock Text="施工中"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource AccentBrush}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="游戏皮肤管理正在开发中。"
+                               FontSize="15"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="这个版本不会读取或修改 Body / Head / Wings 等游戏皮肤目录。请先使用模组管理功能。"
                                Classes="muted"
                                FontSize="12"
-                               TextWrapping="Wrap" />
-                    <Button Content="开发中，暂不可用"
-                            IsEnabled="False"
-                            HorizontalAlignment="Left"
-                            Margin="0,4,0,0" />
+                               TextWrapping="Wrap"
+                               TextAlignment="Center" />
                 </StackPanel>
             </Border>
-        </StackPanel>
-    </ScrollViewer>
+        </Border>
+    </Grid>
 </UserControl>

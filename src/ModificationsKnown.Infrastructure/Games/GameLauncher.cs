@@ -1,11 +1,19 @@
 using System.Diagnostics;
 using ModificationsKnown.Core.Common;
+using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 
 namespace ModificationsKnown.Infrastructure.Games;
 
 public sealed class GameLauncher : IGameLauncher
 {
+    private readonly IAppLogger? _logger;
+
+    public GameLauncher(IAppLogger? logger = null)
+    {
+        _logger = logger;
+    }
+
     public Task<OperationResult> LaunchViaSteamAsync(
         GameProfile profile,
         CancellationToken cancellationToken = default)
@@ -15,8 +23,9 @@ public sealed class GameLauncher : IGameLauncher
             try
             {
                 var uri = $"steam://rungameid/{profile.SteamAppId}";
+                _logger?.Info($"Launching via Steam: {uri}");
                 Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
-                return OperationResult.Ok($"正在通过 Steam 启动 {profile.EditionLabel}…");
+                return OperationResult.Ok($"已发送 Steam 启动命令：{profile.EditionLabel}。");
             }
             catch (Exception exception)
             {
@@ -39,13 +48,14 @@ public sealed class GameLauncher : IGameLauncher
 
             try
             {
+                _logger?.Info($"Launching directly: {installation.ExecutablePath}");
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = installation.ExecutablePath,
                     WorkingDirectory = installation.GameDirectory,
                     UseShellExecute = true
                 });
-                return OperationResult.Ok($"正在启动 {installation.Profile.EditionLabel}…");
+                return OperationResult.Ok($"已发送启动命令：{installation.Profile.EditionLabel}。");
             }
             catch (Exception exception)
             {

@@ -43,17 +43,18 @@ public class App : Application
 
         var settings = new JsonAppSettingsService();
         settings.LoadAsync().GetAwaiter().GetResult();
+        ThemeService.LoadCustomThemes(logger);
         ThemeService.Apply(settings.Current.ThemePreset);
         logger.Info("Settings loaded; creating shell");
 
-        _nexusClient = new NexusModsClient(() => settings.Current.NexusApiKey);
+        _nexusClient = new NexusModsClient(() => settings.Current.NexusApiKey, logger);
         _downloader = new HttpFileDownloader();
         _thumbnails = new ThumbnailService(logger);
 
-        var locator = new SteamGameLocator(settings);
-        var modManager = new BepInExModManager();
-        var installer = new ArchiveModInstaller();
-        var launcher = new GameLauncher();
+        var locator = new SteamGameLocator(settings, logger);
+        var modManager = new BepInExModManager(logger);
+        var installer = new ArchiveModInstaller(logger);
+        var launcher = new GameLauncher(logger);
         var dialogs = new UserDialogService(() => desktop.MainWindow);
         var filePicker = new FilePickerService(() => desktop.MainWindow);
 

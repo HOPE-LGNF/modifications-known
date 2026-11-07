@@ -118,20 +118,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     }
 
     [RelayCommand]
-    private async Task LaunchAsync()
-    {
-        if (_shell.Game.Selected is not { } installation)
-        {
-            _shell.SetStatus("请先检测游戏或手动选择游戏目录。", StatusKind.Warning);
-            return;
-        }
-
-        var result = string.IsNullOrWhiteSpace(installation.ExecutablePath)
-            ? await _launcher.LaunchViaSteamAsync(installation.Profile)
-            : await _launcher.LaunchDirectAsync(installation);
-
-        _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
-    }
+    private Task LaunchAsync() => _shell.LaunchGameAsync();
 
     [RelayCommand]
     private async Task OpenFolderAsync()

@@ -81,3 +81,41 @@ resource without touching page XAML.
 
 These are tracked in [ROADMAP.md](ROADMAP.md). The interfaces for some of them
 will be added only after the file/package semantics are proven by tests.
+
+## Custom launcher themes
+
+Built-in palettes live in `src/ModificationsKnown.App/Theming/ThemePalettes.cs`.
+Additional themes are JSON files under `%APPDATA%\ModificationsKnown\themes\`.
+The **导入主题 JSON** button validates a file, copies it into that directory, and
+applies it immediately. A template is provided at
+[`docs/themes/aurora.json`](themes/aurora.json).
+
+The JSON shape is a flat palette:
+
+```json
+{
+  "id": "aurora",
+  "name": "极光",
+  "description": "…",
+  "background": "#0B1018",
+  "sidebar": "#101827",
+  "surface": "#141D2D",
+  "surfaceAlt": "#1B2940",
+  "border": "#2C3F5E",
+  "textPrimary": "#EAF1FF",
+  "textSecondary": "#93A7C4",
+  "accent": "#7CE0C3",
+  "accentHover": "#9BEBD5",
+  "accentSoft": "#163B36",
+  "accentContrast": "#081210",
+  "success": "#7CE0A3",
+  "warning": "#E8C46B",
+  "danger": "#E88888",
+  "heroStart": "#1B2B4A",
+  "heroEnd": "#2B4B58"
+}
+```
+
+All color fields are required. Values are validated before the theme is saved.
+The `id` must be unique against built-in themes and cannot contain path
+separators. Theme files only change launcher brushes; they never touch game files.

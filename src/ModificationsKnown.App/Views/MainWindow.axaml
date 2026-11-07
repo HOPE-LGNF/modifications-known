@@ -155,7 +155,8 @@
                                 Command="{Binding RefreshGameCommand}"
                                 ToolTip.Tip="重新检测 Steam 库和手动路径" />
                         <Button Classes="Primary"
-                                Content="启动游戏"
+                                Content="{Binding LaunchButtonText}"
+                                IsEnabled="{Binding CanLaunch}"
                                 Command="{Binding LaunchGameCommand}" />
                     </StackPanel>
                 </Grid>

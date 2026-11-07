@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.App.Theming;
+using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Settings;
 
 namespace ModificationsKnown.App.ViewModels;
@@ -50,14 +51,22 @@ public partial class LauncherSkinViewModel : ObservableObject, IAsyncPage
 {
     private readonly IAppShell _shell;
     private readonly IAppSettingsService _settings;
+    private readonly IFilePickerService _filePicker;
+    private readonly IAppLogger _logger;
 
     [ObservableProperty]
     private string _currentThemeName = string.Empty;
 
-    public LauncherSkinViewModel(IAppShell shell, IAppSettingsService settings)
+    public LauncherSkinViewModel(
+        IAppShell shell,
+        IAppSettingsService settings,
+        IFilePickerService filePicker,
+        IAppLogger logger)
     {
         _shell = shell;
         _settings = settings;
+        _filePicker = filePicker;
+        _logger = logger;
 
         foreach (var palette in ThemeService.Palettes)
             Themes.Add(new ThemeCardViewModel(palette, ApplyAsync));
@@ -73,6 +82,28 @@ public partial class LauncherSkinViewModel : ObservableObject, IAsyncPage
     {
         RefreshSelection();
         return Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private async Task ImportThemeAsync()
+    {
+        var path = await _filePicker.PickThemeFileAsync();
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        if (!ThemeService.TryImportTheme(path, out var palette, out var error, _logger) || palette is null)
+        {
+            _shell.SetStatus(error, StatusKind.Error);
+            return;
+        }
+
+        if (Themes.All(theme => !string.Equals(theme.Id, palette.Id, StringComparison.OrdinalIgnoreCase)))
+            Themes.Add(new ThemeCardViewModel(palette, ApplyAsync));
+
+        _settings.Current.ThemePreset = palette.Id;
+        await _settings.SaveAsync();
+        ThemeService.Apply(palette);
+        RefreshSelection();
+        _shell.SetStatus($"已导入并应用主题「{palette.Name}」。", StatusKind.Success);
     }
 
     [RelayCommand]

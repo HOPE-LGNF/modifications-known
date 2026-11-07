@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Nexus;
 
 namespace ModificationsKnown.Infrastructure.Nexus;
@@ -25,10 +26,12 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
 
     private readonly HttpClient _httpClient;
     private readonly Func<string?> _apiKeyProvider;
+    private readonly IAppLogger? _logger;
 
-    public NexusModsClient(Func<string?> apiKeyProvider, HttpClient? httpClient = null)
+    public NexusModsClient(Func<string?> apiKeyProvider, IAppLogger? logger = null, HttpClient? httpClient = null)
     {
         _apiKeyProvider = apiKeyProvider;
+        _logger = logger;
         _httpClient = httpClient ?? new HttpClient();
         _httpClient.BaseAddress ??= new Uri(BaseAddress);
         _httpClient.Timeout = TimeSpan.FromSeconds(60);
@@ -42,6 +45,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         CancellationToken cancellationToken = default)
     {
         query = query.Normalize();
+        _logger?.Debug($"Nexus search: domain={gameDomain}, page={query.Page}, size={query.PageSize}, sort={query.Sort}, text={(string.IsNullOrWhiteSpace(query.Text) ? "(none)" : query.Text)}");
 
         try
         {
@@ -124,6 +128,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger?.Debug($"Nexus GraphQL search: HTTP {(int)response.StatusCode}");
         if (!response.IsSuccessStatusCode)
             throw CreateException(response.StatusCode, body);
 
@@ -215,6 +220,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         string gameScopedId,
         CancellationToken cancellationToken = default)
     {
+        _logger?.Debug($"Nexus mod details: domain={gameDomain}, mod={gameScopedId}");
         var envelope = await SendAsync<ModDetailsDto>(
             HttpMethod.Get,
             $"games/{Uri.EscapeDataString(gameDomain)}/mods/{Uri.EscapeDataString(gameScopedId)}",
@@ -251,6 +257,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         string modId,
         CancellationToken cancellationToken = default)
     {
+        _logger?.Debug($"Nexus files: modUid={modId}");
         var envelope = await SendAsync<ModFilesData>(
             HttpMethod.Get,
             $"mods/{Uri.EscapeDataString(modId)}/files",
@@ -271,6 +278,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         string modFileId,
         CancellationToken cancellationToken = default)
     {
+        _logger?.Debug($"Nexus file versions: fileId={modFileId}");
         var envelope = await SendAsync<FileVersionsData>(
             HttpMethod.Get,
             $"mod-files/{Uri.EscapeDataString(modFileId)}/versions",
@@ -294,6 +302,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         string fileVersionGameScopedId,
         CancellationToken cancellationToken = default)
     {
+        _logger?.Debug($"Nexus download link: domain={gameDomain}, gameScopedVersion={fileVersionGameScopedId}");
         var envelope = await SendAsync<DownloadLinksData>(
             HttpMethod.Get,
             $"games/{Uri.EscapeDataString(gameDomain)}/mod-file-versions/{Uri.EscapeDataString(fileVersionGameScopedId)}/download-link",
@@ -327,9 +336,13 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger?.Debug($"Nexus API {(int)response.StatusCode} {method} {relativePath}");
 
         if (!response.IsSuccessStatusCode)
+        {
+            _logger?.Warn($"Nexus API failed: {(int)response.StatusCode} {method} {relativePath}");
             throw CreateException(response.StatusCode, body);
+        }
 
         try
         {

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
+using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Settings;
 
@@ -14,10 +15,12 @@ namespace ModificationsKnown.Infrastructure.Games;
 public sealed partial class SteamGameLocator : IGameLocator
 {
     private readonly IAppSettingsService _settings;
+    private readonly IAppLogger? _logger;
 
-    public SteamGameLocator(IAppSettingsService settings)
+    public SteamGameLocator(IAppSettingsService settings, IAppLogger? logger = null)
     {
         _settings = settings;
+        _logger = logger;
     }
 
     public Task<IReadOnlyList<GameInstallation>> DetectAsync(CancellationToken cancellationToken = default)
@@ -60,6 +63,10 @@ public sealed partial class SteamGameLocator : IGameLocator
                 var manual = InspectPath(manualPath);
                 if (manual is not null) AddIfValid(installations, manual.Profile, manual.GameDirectory);
             }
+
+            _logger?.Debug($"Game detection finished: {installations.Count} installation(s)");
+            foreach (var installation in installations)
+                _logger?.Debug($"Detected {installation.Profile.EditionLabel}: {installation.GameDirectory} (BepInEx={installation.HasBepInEx})");
 
             return installations
                 .GroupBy(installation => installation.GameDirectory, StringComparer.OrdinalIgnoreCase)

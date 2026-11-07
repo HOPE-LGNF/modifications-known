@@ -13,19 +13,20 @@
                                    TextWrapping="Wrap"
                                    MaxWidth="700" />
                     </StackPanel>
-                    <Border Grid.Column="1"
-                            Background="{DynamicResource AccentSoftBrush}"
-                            CornerRadius="8"
-                            Padding="12,8"
-                            VerticalAlignment="Center">
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="当前主题" FontSize="10" Classes="muted" />
-                            <TextBlock Text="{Binding CurrentThemeName}"
-                                       FontSize="14"
-                                       Foreground="{DynamicResource AccentBrush}"
-                                       FontWeight="SemiBold" />
-                        </StackPanel>
-                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+                        <Border Background="{DynamicResource AccentSoftBrush}"
+                                CornerRadius="8"
+                                Padding="12,8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="当前主题" FontSize="10" Classes="muted" />
+                                <TextBlock Text="{Binding CurrentThemeName}"
+                                           FontSize="14"
+                                           Foreground="{DynamicResource AccentBrush}"
+                                           FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Border>
+                        <Button Classes="Ghost" Content="导入主题 JSON" Command="{Binding ImportThemeCommand}" />
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -101,15 +102,7 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <Border Classes="card" Margin="0,0,0,10">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="变量化约定" Classes="h2" />
-                    <TextBlock Text="所有颜色与背景都通过 DynamicResource 读取：AppBackgroundBrush、SurfaceBrush、AccentBrush、HeroStartBrush 等。主题只替换资源，不写死在页面里，后续可以加入启动器背景图而不用重做页面。"
-                               Classes="muted"
-                               FontSize="12"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+
         </StackPanel>
     </ScrollViewer>
 </UserControl>

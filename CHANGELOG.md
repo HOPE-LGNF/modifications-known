@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.1.1] - 2026-11-07
+
+### Fixed
+
+- Fixed the “包数量” badge alignment in the installed header.
+- Launch button now shows a launching state and the status bar changes after the
+  launch command is sent instead of staying on “正在启动…”.
+- Nexus free accounts can now use a browser-download + local-archive-install flow
+  when the API returns 403.
+
+### Added
+
+- `--console` / `--debug-console` startup option for a detailed debug console.
+- Debug-level logs for Nexus requests, game detection, plugin scanning and install
+  steps; all logs are still written to AppData.
+- Nexus source matching for installed packages, with a `本地模组` label when no
+  exact match exists.
+- Enabled/disabled badges are now visually different.
+- Compact/detailed installed-list display mode.
+- Custom launcher theme import from JSON, with a template at
+  `docs/themes/aurora.json`.
+- Construction overlay on the game-skin placeholder page.
+
+### Changed
+
+- Removed the developer-only “变量化约定” section from the appearance page.
+- Removed the “为什么先不做” copy from the game-skin placeholder.
+- Updated GitHub release assets to 0.1.1.
+
+
 ## [0.1.0] - 2026-11-07
 
 ### Added

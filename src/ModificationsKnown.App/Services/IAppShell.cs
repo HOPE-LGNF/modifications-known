@@ -20,6 +20,8 @@ public interface IAppShell
 
     Task RefreshGameAsync();
 
+    Task LaunchGameAsync();
+
     void NavigateTo(string key);
 }
 

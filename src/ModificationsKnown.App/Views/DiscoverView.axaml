@@ -233,6 +233,15 @@
                                             Content="在 Nexus 打开"
                                             Command="{Binding OpenNexusCommand}" />
                                 </Grid>
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                    <Button Classes="Ghost"
+                                            Content="浏览器下载（免费账号）"
+                                            Command="{Binding OpenNexusFilePageCommand}" />
+                                    <Button Grid.Column="1"
+                                            Classes="Ghost"
+                                            Content="安装已下载文件"
+                                            Command="{Binding InstallLocalArchiveCommand}" />
+                                </Grid>
                                 <ProgressBar IsVisible="{Binding IsDownloading}"
                                              Minimum="0"
                                              Maximum="100"

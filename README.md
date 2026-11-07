@@ -2,7 +2,7 @@
 
 > 为《未知伤亡》（Casualties Unknown）做一个安静、可靠、本地优先的模组管理器。
 
-**当前版本：0.1.0（基础可用版）**  
+**当前版本：0.1.1（测试版）**  
 **状态：** 模组浏览、安装、启停、删除、主题与设置已可用；依赖图、版本回滚、崩溃归因和游戏内皮肤仍在路线图中。
 
 ## 它是什么
@@ -12,6 +12,7 @@
 - 通过 Steam `appmanifest` 识别正式版与试玩版，两个版本可以同时存在。
 - 扫描 `BepInEx/plugins`，把一个文件夹视为一个模组包，多 DLL 模组会整体启停。
 - 支持从 Nexus Mods 浏览、查看文件版本、下载并安装。
+- 普通 Nexus 账号无法通过 API 获取直链时，可使用“浏览器下载 + 安装已下载文件”流程。
 - 安装前校验压缩包路径，拒绝 `..` 和绝对路径；先解压到临时目录，再移动到插件目录。
 - 删除模组前默认二次确认；根目录 DLL 不会被误删。
 - 启动器颜色、背景、强调色全部通过 `DynamicResource` 变量提供，支持基础主题切换。
@@ -42,6 +43,20 @@ dotnet restore
 dotnet build
 dotnet run --project src/ModificationsKnown.App
 ```
+
+需要详细日志时，用测试启动参数打开控制台：
+
+```bash
+dotnet run --project src/ModificationsKnown.App -- --console
+```
+
+Windows 发布版同样支持：
+
+```powershell
+.\ModificationsKnown.exe --console
+```
+
+日志同时写入 `%APPDATA%\ModificationsKnown\logs\`。`--debug-console` 是等价别名。
 
 测试：
 
@@ -94,9 +109,10 @@ docs/
 ## 已知限制
 
 - 搜索使用 Nexus GraphQL 的名称过滤；如果该接口变化，会回退到 v3 当前页过滤。
-- 免费 Nexus 账号的下载链接可能返回 403；这不是应用可以绕过的限制。
+- 免费 Nexus 账号的下载链接可能返回 403；应用提供“浏览器下载”和“安装已下载文件”作为回退，不绕过 Nexus 的限制。
 - 尚未实现依赖解析、冲突图、版本回滚、备份和崩溃归因。
 - 游戏内皮肤功能未实现，入口仅作占位。
+- 启动器主题支持导入 JSON，模板见 [docs/themes/aurora.json](docs/themes/aurora.json)。
 - 未实现自动更新；发布流程先由 GitHub Releases 手动完成。
 
 ## 设计原则

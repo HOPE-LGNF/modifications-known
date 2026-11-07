@@ -1,5 +1,6 @@
 using System.Text;
 using ModificationsKnown.Core.Common;
+using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Infrastructure.BepInEx;
@@ -17,18 +18,26 @@ namespace ModificationsKnown.Infrastructure.Installation;
 /// </summary>
 public sealed class ArchiveModInstaller : IModInstaller
 {
+    private readonly IAppLogger? _logger;
+
+    public ArchiveModInstaller(IAppLogger? logger = null)
+    {
+        _logger = logger;
+    }
+
     public Task<OperationResult> InstallArchiveAsync(
         GameInstallation installation,
         string archivePath,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        _logger?.Info($"Installing archive: {archivePath}");
         return Task.Run(
             () => InstallCore(installation, archivePath, progress, cancellationToken),
             cancellationToken);
     }
 
-    private static OperationResult InstallCore(
+    private OperationResult InstallCore(
         GameInstallation installation,
         string archivePath,
         IProgress<double>? progress,
@@ -69,6 +78,7 @@ public sealed class ArchiveModInstaller : IModInstaller
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var result = InstallPackage(installation.PluginsDirectory, package.SourceDirectory, package.PackageName);
+                _logger?.Debug($"Install package result: {package.PackageName} -> {result.Message}");
                 if (result.Success)
                     installed++;
                 else

@@ -7,7 +7,7 @@
             <StackPanel Spacing="3">
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBlock Text="已安装模组" Classes="h2" />
-                    <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="5" Padding="7,2">
+                    <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="5" Padding="7,2" VerticalAlignment="Center">
                         <TextBlock Text="{Binding CountLabel, StringFormat='{}{0} 个包'}"
                                    FontSize="10"
                                    Foreground="{DynamicResource AccentBrush}" />
@@ -22,6 +22,7 @@
                            TextTrimming="CharacterEllipsis" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button Classes="Ghost" Content="{Binding ViewModeButtonText}" Command="{Binding ToggleViewModeCommand}" />
                 <Button Classes="Ghost" Content="打开插件目录" Command="{Binding OpenPluginsFolderCommand}" />
                 <Button Content="重新扫描" Command="{Binding RefreshCommand}" />
             </StackPanel>
@@ -67,21 +68,47 @@
                                                            FontWeight="SemiBold"
                                                            TextTrimming="CharacterEllipsis" />
                                                 <TextBlock Text="{Binding Version}" Classes="caption" VerticalAlignment="Center" />
-                                                <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="4" Padding="5,2">
-                                                    <TextBlock Text="{Binding State}" FontSize="9" />
+                                                <Border Background="{DynamicResource SurfaceAltBrush}"
+                                                        BorderBrush="{DynamicResource BorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="4"
+                                                        Padding="5,2">
+                                                    <TextBlock Text="{Binding SourceLabel}" FontSize="9" Classes="muted" />
+                                                </Border>
+                                                <Border IsVisible="{Binding Mod.IsEnabled}"
+                                                        Background="{DynamicResource AccentSoftBrush}"
+                                                        BorderBrush="{DynamicResource AccentBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="4"
+                                                        Padding="5,2">
+                                                    <TextBlock Text="已启用" FontSize="9" Foreground="{DynamicResource AccentBrush}" />
+                                                </Border>
+                                                <Border IsVisible="{Binding IsDisabled}"
+                                                        Background="{DynamicResource SurfaceAltBrush}"
+                                                        BorderBrush="{DynamicResource BorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="4"
+                                                        Padding="5,2">
+                                                    <TextBlock Text="已禁用" FontSize="9" Foreground="{DynamicResource WarningBrush}" />
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="{Binding PackagePath}"
-                                                       Classes="mono"
-                                                       FontSize="10"
-                                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                                <TextBlock Text="{Binding PluginLabel}" Classes="caption" />
-                                                <TextBlock Text="{Binding DependencyLabel}" Classes="caption" />
+                                            <StackPanel IsVisible="{Binding IsDetailed}" Spacing="3">
+                                                <TextBlock Text="{Binding PackagePath}"
+                                                           Classes="mono"
+                                                           FontSize="10"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                                    <TextBlock Text="{Binding PluginLabel}" Classes="caption" />
+                                                    <TextBlock Text="{Binding DependencyLabel}" Classes="caption" />
+                                                </StackPanel>
                                             </StackPanel>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Button Classes="Ghost"
+                                                    Content="Nexus"
+                                                    IsVisible="{Binding IsNexusMatched}"
+                                                    Command="{Binding OpenNexusCommand}" />
                                             <Button Classes="Ghost"
                                                     Content="{Binding ToggleText}"
                                                     Command="{Binding ToggleCommand}" />

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
@@ -7,8 +8,34 @@ using ModificationsKnown.Core.Settings;
 
 namespace ModificationsKnown.App.ViewModels;
 
-public sealed class InstalledModItemViewModel
+public sealed partial class InstalledModItemViewModel : ObservableObject
 {
+    [ObservableProperty]
+    private bool _isDetailed = true;
+
+    [ObservableProperty]
+    private NexusMatch? _nexusMatch;
+
+    public bool IsNexusMatched => NexusMatch is not null;
+
+    public string SourceLabel => NexusMatch is null ? "本地模组" : "Nexus 模组";
+
+    public string NexusDomain { get; set; } = "scavprototype";
+
+    public string NexusName => NexusMatch?.Name ?? "本地模组";
+
+    public string NexusUrl => NexusMatch is null
+        ? string.Empty
+        : NexusMatch.PageUrl(NexusDomain);
+
+    partial void OnNexusMatchChanged(NexusMatch? value)
+    {
+        OnPropertyChanged(nameof(IsNexusMatched));
+        OnPropertyChanged(nameof(SourceLabel));
+        OnPropertyChanged(nameof(NexusName));
+        OnPropertyChanged(nameof(NexusUrl));
+    }
+
     public InstalledModItemViewModel(InstalledMod mod, Func<InstalledMod, Task> toggle, Func<InstalledMod, Task> delete)
     {
         Mod = mod;
@@ -24,9 +51,29 @@ public sealed class InstalledModItemViewModel
 
     public string State => Mod.StateLabel;
 
+    public bool IsDisabled => !Mod.IsEnabled;
+
     public string ToggleText => Mod.IsEnabled ? "禁用" : "启用";
 
     public string PackagePath => Mod.DirectoryPath;
+
+    public IAsyncRelayCommand OpenNexusCommand => new AsyncRelayCommand(OpenNexusAsync);
+
+    private async Task OpenNexusAsync()
+    {
+        if (NexusMatch is null) return;
+
+        try
+        {
+            var url = NexusMatch.PageUrl(NexusDomain);
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            await Task.CompletedTask;
+        }
+        catch
+        {
+            // The parent page owns user-facing error reporting.
+        }
+    }
 
     public string PluginLabel => Mod.PluginCount <= 1 ? "1 个 DLL" : $"{Mod.PluginCount} 个 DLL";
 
@@ -47,6 +94,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly IModManager _modManager;
     private readonly IUserDialogService _dialogs;
     private readonly IAppSettingsService _settings;
+    private readonly NexusMatchService _nexusMatch;
 
     [ObservableProperty]
     private bool _isBusy;
@@ -69,16 +117,34 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private string _pluginsPath = "—";
 
+    [ObservableProperty]
+    private bool _isCompactView;
+
+    public bool IsDetailedView => !IsCompactView;
+
+    public string ViewModeButtonText => IsCompactView ? "详细列表" : "紧凑列表";
+
+    partial void OnIsCompactViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsDetailedView));
+        OnPropertyChanged(nameof(ViewModeButtonText));
+
+        foreach (var item in Mods)
+            item.IsDetailed = !value;
+    }
+
     public InstalledViewModel(
         IAppShell shell,
         IModManager modManager,
         IUserDialogService dialogs,
-        IAppSettingsService settings)
+        IAppSettingsService settings,
+        NexusMatchService nexusMatch)
     {
         _shell = shell;
         _modManager = modManager;
         _dialogs = dialogs;
         _settings = settings;
+        _nexusMatch = nexusMatch;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
     }
 
@@ -121,19 +187,24 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
             var mods = await _modManager.ScanAsync(installation);
             foreach (var mod in mods)
-                Mods.Add(new InstalledModItemViewModel(mod, ToggleAsync, DeleteAsync));
+                Mods.Add(CreateItem(mod));
 
             CountLabel = mods.Count.ToString();
             EnabledLabel = mods.Count(mod => mod.IsEnabled).ToString();
             EmptyMessage = mods.Count == 0
                 ? "插件目录还是空的。去「模组发现」看看，或手动放入 BepInEx/plugins。"
                 : string.Empty;
+
+            _ = MatchNexusAsync();
         }
         finally
         {
             IsBusy = false;
         }
     }
+
+    [RelayCommand]
+    private void ToggleViewMode() => IsCompactView = !IsCompactView;
 
     [RelayCommand]
     private Task OpenPluginsFolderAsync()
@@ -210,6 +281,12 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         }
     }
 
+    private InstalledModItemViewModel CreateItem(InstalledMod mod) => new(mod, ToggleAsync, DeleteAsync)
+    {
+        IsDetailed = IsDetailedView,
+        NexusDomain = _settings.Current.NexusGameDomain
+    };
+
     private async Task RefreshCoreAsync()
     {
         var installation = _shell.Game.Selected;
@@ -222,10 +299,24 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         var mods = await _modManager.ScanAsync(installation);
         Mods.Clear();
         foreach (var mod in mods)
-            Mods.Add(new InstalledModItemViewModel(mod, ToggleAsync, DeleteAsync));
+            Mods.Add(CreateItem(mod));
 
         CountLabel = mods.Count.ToString();
         EnabledLabel = mods.Count(mod => mod.IsEnabled).ToString();
         EmptyMessage = mods.Count == 0 ? "插件目录还是空的。" : string.Empty;
+        _ = MatchNexusAsync();
+    }
+
+    private async Task MatchNexusAsync()
+    {
+        foreach (var item in Mods.ToList())
+        {
+            var match = await _nexusMatch.ResolveAsync(
+                item.Mod.PackageId,
+                item.Name,
+                item.Mod.Version);
+            if (match is not null)
+                item.NexusMatch = match;
+        }
     }
 }

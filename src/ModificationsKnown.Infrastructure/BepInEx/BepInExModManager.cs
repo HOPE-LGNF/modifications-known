@@ -1,4 +1,5 @@
 using ModificationsKnown.Core.Common;
+using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 
@@ -6,6 +7,13 @@ namespace ModificationsKnown.Infrastructure.BepInEx;
 
 public sealed class BepInExModManager : IModManager
 {
+    private readonly IAppLogger? _logger;
+
+    public BepInExModManager(IAppLogger? logger = null)
+    {
+        _logger = logger;
+    }
+
     /// <summary>
     /// Scans immediate plugin folders plus loose DLLs in BepInEx/plugins.
     /// A folder is treated as one package so multi-DLL mods are enabled and
@@ -33,13 +41,18 @@ public sealed class BepInExModManager : IModManager
         return Task.Run(() => DeleteCore(mod, cancellationToken), cancellationToken);
     }
 
-    private static IReadOnlyList<InstalledMod> ScanCore(
+    private IReadOnlyList<InstalledMod> ScanCore(
         GameInstallation installation,
         CancellationToken cancellationToken)
     {
         var pluginsDirectory = installation.PluginsDirectory;
-        if (!Directory.Exists(pluginsDirectory)) return [];
+        if (!Directory.Exists(pluginsDirectory))
+        {
+            _logger?.Debug($"Plugins directory not found: {pluginsDirectory}");
+            return [];
+        }
 
+        _logger?.Debug($"Scanning plugins: {pluginsDirectory}");
         var mods = new List<InstalledMod>();
 
         foreach (var directory in Directory.EnumerateDirectories(pluginsDirectory))
@@ -82,6 +95,7 @@ public sealed class BepInExModManager : IModManager
             });
         }
 
+        _logger?.Debug($"Scanned {mods.Count} package(s), {mods.Count(mod => mod.IsEnabled)} enabled");
         return mods
             .OrderByDescending(mod => mod.IsEnabled)
             .ThenBy(mod => mod.Name, StringComparer.OrdinalIgnoreCase)
@@ -103,7 +117,7 @@ public sealed class BepInExModManager : IModManager
             metadata.Dependencies);
     }
 
-    private static OperationResult SetEnabledCore(
+    private OperationResult SetEnabledCore(
         InstalledMod mod,
         bool enabled,
         CancellationToken cancellationToken)
@@ -155,6 +169,7 @@ public sealed class BepInExModManager : IModManager
                 applied.Add(move);
             }
 
+            _logger?.Info($"Package {(enabled ? "enabled" : "disabled")}: {mod.PackageId}");
             return OperationResult.Ok(enabled ? "已启用。" : "已禁用。");
         }
         catch (Exception exception)
@@ -177,7 +192,7 @@ public sealed class BepInExModManager : IModManager
         }
     }
 
-    private static OperationResult DeleteCore(InstalledMod mod, CancellationToken cancellationToken)
+    private OperationResult DeleteCore(InstalledMod mod, CancellationToken cancellationToken)
     {
         if (!mod.CanDelete)
             return OperationResult.Fail("根目录 DLL 不允许由此处删除。");
@@ -201,6 +216,7 @@ public sealed class BepInExModManager : IModManager
         {
             cancellationToken.ThrowIfCancellationRequested();
             Directory.Delete(mod.DirectoryPath, recursive: true);
+            _logger?.Info($"Package deleted: {mod.DirectoryPath}");
             return OperationResult.Ok("已删除。");
         }
         catch (Exception exception)

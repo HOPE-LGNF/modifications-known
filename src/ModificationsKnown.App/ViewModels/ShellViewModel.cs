@@ -40,6 +40,19 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     [ObservableProperty]
     private bool _isBusy;
 
+    [ObservableProperty]
+    private bool _isLaunching;
+
+    public bool CanLaunch => !IsLaunching;
+
+    public string LaunchButtonText => IsLaunching ? "启动中…" : "启动游戏";
+
+    partial void OnIsLaunchingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanLaunch));
+        OnPropertyChanged(nameof(LaunchButtonText));
+    }
+
     public ShellViewModel(
         IAppSettingsService settings,
         IAppLogger logger,
@@ -70,12 +83,13 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             new("settings", "设置", "路径、API 与日志", "⚙")
         ];
 
+        var nexusMatch = new NexusMatchService(nexus, settings, logger);
         _pages = new Dictionary<string, object>
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings),
-            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, installer, thumbnails, dialogs),
-            ["installed"] = new InstalledViewModel(this, modManager, dialogs, settings),
-            ["appearance"] = new LauncherSkinViewModel(this, settings),
+            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, installer, thumbnails, filePicker),
+            ["installed"] = new InstalledViewModel(this, modManager, dialogs, settings, nexusMatch),
+            ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger)
         };
@@ -175,19 +189,42 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     }
 
     [RelayCommand]
-    private async Task LaunchGameAsync()
+    public async Task LaunchGameAsync()
     {
+        if (IsLaunching) return;
+
         if (Game.Selected is not { } installation)
         {
             SetStatus("请先检测游戏或手动选择游戏目录。", StatusKind.Warning);
             return;
         }
 
-        var result = string.IsNullOrWhiteSpace(installation.ExecutablePath)
-            ? await _launcher.LaunchViaSteamAsync(installation.Profile)
-            : await _launcher.LaunchDirectAsync(installation);
+        IsLaunching = true;
+        SetStatus($"正在启动 {installation.Profile.EditionLabel}…");
+        _logger.Info($"Launch requested for {installation.Profile.EditionLabel} at {installation.GameDirectory}");
 
-        SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+        try
+        {
+            var result = string.IsNullOrWhiteSpace(installation.ExecutablePath)
+                ? await _launcher.LaunchViaSteamAsync(installation.Profile)
+                : await _launcher.LaunchDirectAsync(installation);
+
+            SetStatus(
+                result.Success
+                    ? $"{result.Message} 如果游戏窗口没有出现，请查看详细日志。"
+                    : result.Message,
+                result.Success ? StatusKind.Success : StatusKind.Error);
+            _logger.Info($"Launch result: {result.Success} — {result.Message}");
+        }
+        catch (Exception exception)
+        {
+            _logger.Error("Launch failed", exception);
+            SetStatus($"启动失败：{exception.Message}", StatusKind.Error);
+        }
+        finally
+        {
+            IsLaunching = false;
+        }
     }
 
     [RelayCommand]

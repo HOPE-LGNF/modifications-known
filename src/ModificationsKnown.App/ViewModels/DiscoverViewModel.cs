@@ -50,6 +50,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private readonly IFileDownloader _downloader;
     private readonly IModInstaller _installer;
     private readonly ThumbnailService _thumbnails;
+    private readonly IFilePickerService _filePicker;
 
     private bool _suppressFileSelection;
     private int _loadVersion;
@@ -112,7 +113,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         IFileDownloader downloader,
         IModInstaller installer,
         ThumbnailService thumbnails,
-        IUserDialogService dialogs)
+        IFilePickerService filePicker)
     {
         _shell = shell;
         _nexus = nexus;
@@ -120,6 +121,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         _downloader = downloader;
         _installer = installer;
         _thumbnails = thumbnails;
+        _filePicker = filePicker;
         ApiKeyMissing = string.IsNullOrWhiteSpace(settings.Current.NexusApiKey);
         _shell.Game.Changed += (_, _) => OnPropertyChanged(nameof(CanInstall));
     }
@@ -302,7 +304,9 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         catch (NexusApiException exception)
         {
             _shell.SetStatus(exception.Message, StatusKind.Error);
-            DownloadStatus = "下载链接不可用；请使用“在 Nexus 打开”。";
+            DownloadStatus = exception.StatusCode == 403
+                ? "普通 API Key 无法获取直链：请点“浏览器下载”，下载完成后点“安装本地文件”。"
+                : "下载链接不可用；请使用“在 Nexus 打开”。";
         }
         catch (Exception exception)
         {
@@ -312,6 +316,64 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         finally
         {
             IsDownloading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task InstallLocalArchiveAsync()
+    {
+        if (_shell.Game.Selected is not { } installation)
+        {
+            _shell.SetStatus("请先选择游戏安装。", StatusKind.Warning);
+            return;
+        }
+
+        if (!installation.HasBepInEx)
+        {
+            _shell.SetStatus("当前游戏没有安装 BepInEx，无法安装模组。", StatusKind.Warning);
+            return;
+        }
+
+        var path = await _filePicker.PickArchiveAsync();
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        IsDownloading = true;
+        DownloadStatus = "正在安装本地压缩包…";
+        DownloadProgress = 0;
+        try
+        {
+            var result = await _installer.InstallArchiveAsync(installation, path);
+            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            DownloadStatus = result.Message;
+        }
+        catch (Exception exception)
+        {
+            _shell.SetStatus($"安装失败：{exception.Message}", StatusKind.Error);
+            DownloadStatus = "安装失败。";
+        }
+        finally
+        {
+            IsDownloading = false;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenNexusFilePage()
+    {
+        if (SelectedCard is null) return;
+
+        var domain = _settings.Current.NexusGameDomain;
+        var url = $"https://www.nexusmods.com/{domain}/mods/{SelectedCard.Summary.GameScopedId}?tab=files";
+        if (SelectedFile is not null)
+            url += $"&file_id={SelectedFile.Id}";
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            _shell.SetStatus($"打开浏览器失败：{exception.Message}", StatusKind.Error);
         }
     }
 

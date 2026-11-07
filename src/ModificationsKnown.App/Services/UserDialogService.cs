@@ -48,6 +48,10 @@ public interface IFilePickerService
     Task<string?> PickExecutableAsync();
 
     Task<string?> PickFolderAsync();
+
+    Task<string?> PickArchiveAsync();
+
+    Task<string?> PickThemeFileAsync();
 }
 
 public sealed class FilePickerService : IFilePickerService
@@ -90,5 +94,43 @@ public sealed class FilePickerService : IFilePickerService
         });
 
         return folders.Count == 0 ? null : folders[0].Path.LocalPath;
+    }
+
+    public async Task<string?> PickArchiveAsync()
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "选择已下载的模组压缩包",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("模组压缩包") { Patterns = ["*.zip", "*.7z", "*.rar"] },
+                new FilePickerFileType("所有文件") { Patterns = ["*"] }
+            ]
+        });
+
+        return files.Count == 0 ? null : files[0].Path.LocalPath;
+    }
+
+    public async Task<string?> PickThemeFileAsync()
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "导入启动器主题（JSON）",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("主题 JSON") { Patterns = ["*.json"] },
+                new FilePickerFileType("所有文件") { Patterns = ["*"] }
+            ]
+        });
+
+        return files.Count == 0 ? null : files[0].Path.LocalPath;
     }
 }

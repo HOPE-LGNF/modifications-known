@@ -50,3 +50,23 @@ provider-neutral models in `Core/Nexus`.
 - The key is stored in `%APPDATA%\ModificationsKnown\settings.json`.
 - Downloads use HTTPS and stream to a `.part` file with a 4 GB cap.
 - Archive extraction rejects absolute paths and `..` traversal.
+
+## Free accounts
+
+The `download-link` endpoint requires either a premium account, a file with
+direct downloads enabled, or a website-generated `key`/`expires` pair. A normal
+personal API key alone cannot bypass that restriction.
+
+The launcher therefore exposes:
+
+1. **浏览器下载（免费账号）** — opens the exact Nexus file tab.
+2. **安装已下载文件** — lets the user pick the downloaded archive; it goes
+   through the same path-validated installer as an API download.
+
+This keeps the flow honest and avoids scraping logged-in browser sessions.
+
+## Debugging API calls
+
+Start the launcher with `--console` (or `--debug-console`) to see detailed logs
+for search, details, file/version lookups, download-link failures and install
+steps. API keys are never logged.

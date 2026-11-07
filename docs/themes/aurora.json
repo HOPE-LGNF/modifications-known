@@ -1,0 +1,21 @@
+{
+  "id": "aurora",
+  "name": "极光",
+  "description": "冷紫与青绿的极光配色示例。复制此文件并修改颜色即可制作自己的启动器主题。",
+  "background": "#0B1018",
+  "sidebar": "#101827",
+  "surface": "#141D2D",
+  "surfaceAlt": "#1B2940",
+  "border": "#2C3F5E",
+  "textPrimary": "#EAF1FF",
+  "textSecondary": "#93A7C4",
+  "accent": "#7CE0C3",
+  "accentHover": "#9BEBD5",
+  "accentSoft": "#163B36",
+  "accentContrast": "#081210",
+  "success": "#7CE0A3",
+  "warning": "#E8C46B",
+  "danger": "#E88888",
+  "heroStart": "#1B2B4A",
+  "heroEnd": "#2B4B58"
+}

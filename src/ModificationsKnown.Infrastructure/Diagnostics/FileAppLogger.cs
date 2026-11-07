@@ -17,6 +17,8 @@ public sealed class FileAppLogger : IAppLogger
 
     public string LogDirectory => AppPaths.LogsDirectory;
 
+    public void Debug(string message) => Write("DEBUG", message);
+
     public void Info(string message) => Write("INFO", message);
 
     public void Warn(string message) => Write("WARN", message);
@@ -58,5 +60,14 @@ public sealed class FileAppLogger : IAppLogger
         }
 
         System.Diagnostics.Debug.WriteLine(line);
+
+        try
+        {
+            Console.WriteLine(line);
+        }
+        catch
+        {
+            // No console is attached.
+        }
     }
 }

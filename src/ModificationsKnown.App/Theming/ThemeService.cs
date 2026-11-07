@@ -1,18 +1,96 @@
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Styling;
+using ModificationsKnown.Core.Diagnostics;
+using ModificationsKnown.Infrastructure.Storage;
 
 namespace ModificationsKnown.App.Theming;
 
 public static class ThemeService
 {
-    public static IReadOnlyList<ThemePalette> Palettes => ThemePalettes.All;
+    private static readonly List<ThemePalette> Themes = new(ThemePalettes.All);
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
+
+    public static IReadOnlyList<ThemePalette> Palettes => Themes;
+
+    public static string ThemesDirectory => Path.Combine(AppPaths.RootDirectory, "themes");
 
     public static ThemePalette Current { get; private set; } = ThemePalettes.All[0];
 
+    public static void LoadCustomThemes(IAppLogger? logger = null)
+    {
+        try
+        {
+            Directory.CreateDirectory(ThemesDirectory);
+            foreach (var file in Directory.EnumerateFiles(ThemesDirectory, "*.json"))
+            {
+                if (!TryReadTheme(file, out var palette, out var error, logger))
+                    continue;
+                if (palette is null) continue;
+                if (Themes.Any(theme => string.Equals(theme.Id, palette.Id, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                Themes.Add(palette);
+                logger?.Info($"Loaded custom theme: {palette.Name} ({palette.Id})");
+            }
+        }
+        catch (Exception exception)
+        {
+            logger?.Warn($"加载自定义主题失败：{exception.Message}");
+        }
+    }
+
+    public static bool TryImportTheme(
+        string sourcePath,
+        out ThemePalette? palette,
+        out string error,
+        IAppLogger? logger = null)
+    {
+        palette = null;
+        if (!TryReadTheme(sourcePath, out palette, out error, logger))
+            return false;
+        if (palette is null) return false;
+
+        var imported = palette;
+        if (ThemePalettes.All.Any(theme => string.Equals(theme.Id, imported.Id, StringComparison.OrdinalIgnoreCase)))
+        {
+            error = "主题 ID 与内置主题冲突，请换一个 id。";
+            return false;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(ThemesDirectory);
+            var destination = Path.Combine(ThemesDirectory, $"{imported.Id}.json");
+            if (!string.Equals(Path.GetFullPath(sourcePath), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
+                File.Copy(sourcePath, destination, overwrite: true);
+
+            var existing = Themes.FindIndex(theme => string.Equals(theme.Id, imported.Id, StringComparison.OrdinalIgnoreCase));
+            if (existing >= 0) Themes[existing] = imported;
+            else Themes.Add(imported);
+
+            logger?.Info($"Imported custom theme: {imported.Name} ({imported.Id})");
+            palette = imported;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            error = $"保存主题失败：{exception.Message}";
+            logger?.Warn(error);
+            return false;
+        }
+    }
+
     public static void Apply(string? themeId)
     {
-        var palette = ThemePalettes.Get(themeId);
+        var palette = Themes.FirstOrDefault(theme => string.Equals(theme.Id, themeId, StringComparison.OrdinalIgnoreCase))
+                      ?? ThemePalettes.Get(themeId);
         Current = palette;
         Apply(palette);
     }
@@ -36,12 +114,68 @@ public static class ThemeService
         resources["AccentHoverBrush"] = Brush(palette.AccentHover);
         resources["AccentSoftBrush"] = Brush(palette.AccentSoft);
         resources["AccentContrastBrush"] = Brush(palette.AccentContrast);
+        resources["ScrimBrush"] = new SolidColorBrush(Color.Parse("#CC080B09"));
         resources["SuccessBrush"] = Brush(palette.Success);
         resources["WarningBrush"] = Brush(palette.Warning);
         resources["DangerBrush"] = Brush(palette.Danger);
         resources["HeroStartBrush"] = Brush(palette.HeroStart);
         resources["HeroEndBrush"] = Brush(palette.HeroEnd);
     }
+
+    private static bool TryReadTheme(
+        string path,
+        out ThemePalette? palette,
+        out string error,
+        IAppLogger? logger)
+    {
+        palette = null;
+        try
+        {
+            var json = File.ReadAllText(path);
+            var candidate = JsonSerializer.Deserialize<ThemePalette>(json, JsonOptions);
+            if (candidate is null)
+            {
+                error = "主题文件是空的。";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(candidate.Id)
+                || candidate.Id.Contains('/')
+                || candidate.Id.Contains('\\')
+                || candidate.Id.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                error = "主题 id 不能为空，也不能包含路径分隔符。";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(candidate.Name))
+            {
+                error = "主题 name 不能为空。";
+                return false;
+            }
+
+            foreach (var color in CandidateColors(candidate))
+                Color.Parse(color);
+
+            palette = candidate;
+            error = string.Empty;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            error = $"主题 JSON 无效：{exception.Message}";
+            logger?.Warn(error);
+            return false;
+        }
+    }
+
+    private static IEnumerable<string> CandidateColors(ThemePalette theme) =>
+    [
+        theme.Background, theme.Sidebar, theme.Surface, theme.SurfaceAlt, theme.Border,
+        theme.TextPrimary, theme.TextSecondary, theme.Accent, theme.AccentHover,
+        theme.AccentSoft, theme.AccentContrast, theme.Success, theme.Warning,
+        theme.Danger, theme.HeroStart, theme.HeroEnd
+    ];
 
     private static IBrush Brush(string hex) => new SolidColorBrush(Color.Parse(hex));
 }
