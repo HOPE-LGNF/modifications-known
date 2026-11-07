@@ -35,6 +35,7 @@ public static class ThemeService
         resources["AccentBrush"] = Brush(palette.Accent);
         resources["AccentHoverBrush"] = Brush(palette.AccentHover);
         resources["AccentSoftBrush"] = Brush(palette.AccentSoft);
+        resources["AccentContrastBrush"] = Brush(palette.AccentContrast);
         resources["SuccessBrush"] = Brush(palette.Success);
         resources["WarningBrush"] = Brush(palette.Warning);
         resources["DangerBrush"] = Brush(palette.Danger);
