@@ -17,6 +17,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
 {
     private const string BaseAddress = "https://api.nexusmods.com/v3/";
     private const string GraphQlAddress = "https://api.nexusmods.com/v2/graphql";
+    private const string LegacyBaseAddress = "https://api.nexusmods.com/v1/";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -314,6 +315,57 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
             .ToList() ?? [];
     }
 
+    public async Task<IReadOnlyList<NexusDownloadLink>> GetNxmDownloadLinksAsync(
+        string gameDomain,
+        long modId,
+        long fileId,
+        string? key,
+        long? expires,
+        CancellationToken cancellationToken = default)
+    {
+        _logger?.Debug($"NXM download link request: domain={gameDomain}, mod={modId}, file={fileId}, hasKey={!string.IsNullOrWhiteSpace(key)}");
+
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(key) && expires is not null)
+        {
+            query.Add("key=" + Uri.EscapeDataString(key));
+            query.Add("expires=" + expires.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        var url = $"{LegacyBaseAddress}games/{Uri.EscapeDataString(gameDomain)}/mods/{modId}/files/{fileId}/download_link.json";
+        if (query.Count > 0) url += "?" + string.Join("&", query);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        var apiKey = _apiKeyProvider();
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            request.Headers.TryAddWithoutValidation("apikey", apiKey.Trim());
+        request.Headers.TryAddWithoutValidation("Application-Name", "ModificationsKnown");
+        request.Headers.TryAddWithoutValidation("Application-Version", "0.1.2");
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger?.Debug($"NXM download link: HTTP {(int)response.StatusCode}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger?.Warn($"NXM download link failed: HTTP {(int)response.StatusCode}");
+            throw CreateException(response.StatusCode, body);
+        }
+
+        try
+        {
+            var links = JsonSerializer.Deserialize<List<LegacyDownloadLinkDto>>(body, JsonOptions) ?? [];
+            return links
+                .Where(link => !string.IsNullOrWhiteSpace(link.Uri))
+                .Select(link => new NexusDownloadLink(link.Name ?? "Nexus CDN", link.Uri!))
+                .ToList();
+        }
+        catch (JsonException exception)
+        {
+            throw new NexusApiException("Nexus 返回的 NXM 下载链接结构无法解析。", (int)response.StatusCode, body, exception);
+        }
+    }
+
     public void Dispose() => _httpClient.Dispose();
 
     private async Task<ApiEnvelope<T>> SendAsync<T>(
@@ -359,9 +411,11 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
     {
         var message = status switch
         {
+            HttpStatusCode.BadRequest => "NXM 下载授权无效。请回到 Nexus 文件页重新点击“Mod manager download”。",
             HttpStatusCode.Unauthorized => "Nexus API Key 无效或已过期。请在设置中重新填写。",
             HttpStatusCode.Forbidden => "Nexus 拒绝了该请求。免费账号通常无法直接生成下载链接；请使用“在 Nexus 打开”，或配置 Premium API Key。",
             HttpStatusCode.NotFound => "Nexus 上找不到该模组或文件。",
+            HttpStatusCode.Gone => "NXM 下载授权已过期。请回到 Nexus 文件页重新点击“Mod manager download”。",
             HttpStatusCode.TooManyRequests => "Nexus API 请求过于频繁，请稍后再试。",
             _ => $"Nexus 请求失败（HTTP {(int)status}）。"
         };
@@ -578,6 +632,15 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
 
         [JsonPropertyName("url")]
         public string Url { get; init; } = string.Empty;
+    }
+
+    private sealed class LegacyDownloadLinkDto
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; init; }
+
+        [JsonPropertyName("URI")]
+        public string? Uri { get; init; }
     }
 
     private sealed class GraphQlEnvelope<T>

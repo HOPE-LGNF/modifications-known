@@ -18,6 +18,8 @@ namespace ModificationsKnown.App;
 
 public class App : Application
 {
+    public static string? StartupNxmLink { get; set; }
+
     private NexusModsClient? _nexusClient;
     private HttpFileDownloader? _downloader;
     private ThumbnailService? _thumbnails;
@@ -88,7 +90,22 @@ public class App : Application
         window.Opened += async (_, _) =>
         {
             logger.Info("Main window opened");
-            await shell.InitializeAsync();
+            try
+            {
+                await shell.InitializeAsync();
+                logger.Info($"Startup NXM: {(string.IsNullOrWhiteSpace(StartupNxmLink) ? "none" : "present")}");
+
+                if (!string.IsNullOrWhiteSpace(StartupNxmLink))
+                {
+                    var nxm = StartupNxmLink;
+                    StartupNxmLink = null;
+                    await shell.HandleNxmLinkAsync(nxm);
+                }
+            }
+            catch (Exception exception)
+            {
+                logger.Error("Startup initialization failed", exception);
+            }
         };
 
         base.OnFrameworkInitializationCompleted();

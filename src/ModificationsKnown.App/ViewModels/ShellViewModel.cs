@@ -147,6 +147,18 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             _logger.Info(message);
     }
 
+    public async Task HandleNxmLinkAsync(string raw)
+    {
+        if (_pages.GetValueOrDefault("discover") is not DiscoverViewModel discover)
+        {
+            SetStatus("模组发现页尚未初始化。", StatusKind.Error);
+            return;
+        }
+
+        NavigateTo("discover");
+        await discover.HandleNxmLinkAsync(raw);
+    }
+
     public void NavigateTo(string key)
     {
         var item = NavigationItems.FirstOrDefault(candidate => candidate.Key == key);

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.2] - 2026-11-07
+
+### Added
+
+- NXM first-stage testing: paste a copied `nxm://` link into the Discover page,
+  or pass it with `--nxm`.
+- Strict `NxmLinkParser` validation for game domain, mod/file IDs and key/expiry.
+- Legacy v1 NXM download-link lookup using `modId`/`fileId` and optional
+  `key`/`expires`.
+- Unit tests for NXM parsing and the v1 request shape (HTTP mocked, no live key).
+
 ## [0.1.1] - 2026-11-07
 
 ### Fixed

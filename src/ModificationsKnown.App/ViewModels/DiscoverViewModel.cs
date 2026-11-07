@@ -106,6 +106,9 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private string _downloadStatus = string.Empty;
 
+    [ObservableProperty]
+    private string _nxmLinkText = string.Empty;
+
     public DiscoverViewModel(
         IAppShell shell,
         INexusModsClient nexus,
@@ -374,6 +377,114 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         catch (Exception exception)
         {
             _shell.SetStatus($"打开浏览器失败：{exception.Message}", StatusKind.Error);
+        }
+    }
+
+    [RelayCommand]
+    private async Task ProcessNxmAsync()
+    {
+        await HandleNxmLinkAsync(NxmLinkText);
+    }
+
+    public async Task HandleNxmLinkAsync(string raw)
+    {
+        if (IsDownloading) return;
+
+        if (!NxmLinkParser.TryParse(raw, out var nxm, out var parseError) || nxm is null)
+        {
+            _shell.SetStatus(parseError, StatusKind.Error);
+            DownloadStatus = parseError;
+            return;
+        }
+
+        if (!string.Equals(nxm.GameDomain, _settings.Current.NexusGameDomain, StringComparison.OrdinalIgnoreCase))
+        {
+            var message = $"NXM 游戏域是「{nxm.GameDomain}」，当前设置为「{_settings.Current.NexusGameDomain}」。请检查设置。";
+            _shell.SetStatus(message, StatusKind.Error);
+            DownloadStatus = message;
+            return;
+        }
+
+        if (nxm.IsExpired(DateTimeOffset.UtcNow))
+        {
+            const string message = "NXM 下载授权已过期。请回到 Nexus 文件页重新点击“Mod manager download”。";
+            _shell.SetStatus(message, StatusKind.Error);
+            DownloadStatus = message;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey))
+        {
+            const string message = "处理 NXM 链接仍需要 Nexus API Key，请先在设置中填写。";
+            _shell.SetStatus(message, StatusKind.Warning);
+            DownloadStatus = message;
+            return;
+        }
+
+        if (_shell.Game.Selected is not { } installation)
+        {
+            _shell.SetStatus("请先选择游戏安装。", StatusKind.Warning);
+            return;
+        }
+
+        if (!installation.HasBepInEx)
+        {
+            _shell.SetStatus("当前游戏没有安装 BepInEx，无法安装模组。", StatusKind.Warning);
+            return;
+        }
+
+        IsDownloading = true;
+        DownloadStatus = "正在通过 NXM 获取下载链接…";
+        DownloadProgress = 0;
+        try
+        {
+            var links = await _nexus.GetNxmDownloadLinksAsync(
+                nxm.GameDomain,
+                nxm.ModId,
+                nxm.FileId,
+                nxm.Key,
+                nxm.Expires);
+
+            var link = links.FirstOrDefault(candidate => Uri.TryCreate(candidate.Url, UriKind.Absolute, out _));
+            if (link is null)
+            {
+                _shell.SetStatus("Nexus 没有返回可用的 NXM 下载链接。", StatusKind.Error);
+                return;
+            }
+
+            DownloadStatus = "正在下载 NXM 文件…";
+            var extension = GetExtension(link.Url);
+            var fileName = $"nxm-{nxm.ModId}-{nxm.FileId}{extension}";
+            var destination = Path.Combine(AppPaths.DownloadsDirectory, fileName);
+
+            var progress = new Progress<double>(value => DownloadProgress = value);
+            var download = await _downloader.DownloadAsync(link.Url, destination, progress);
+            if (!download.Success)
+            {
+                _shell.SetStatus(download.Message, StatusKind.Error);
+                DownloadStatus = download.Message;
+                return;
+            }
+
+            DownloadStatus = "正在安装 NXM 文件…";
+            var installed = await _installer.InstallArchiveAsync(installation, destination);
+            _shell.SetStatus(installed.Message, installed.Success ? StatusKind.Success : StatusKind.Error);
+            DownloadStatus = installed.Message;
+        }
+        catch (NexusApiException exception)
+        {
+            _shell.SetStatus(exception.Message, StatusKind.Error);
+            DownloadStatus = exception.Message;
+        }
+        catch (Exception exception)
+        {
+            _shell.SetStatus($"NXM 下载失败：{exception.Message}", StatusKind.Error);
+            DownloadStatus = "NXM 下载失败。";
+        }
+        finally
+        {
+            IsDownloading = false;
+            NxmLinkText = string.Empty;
         }
     }
 

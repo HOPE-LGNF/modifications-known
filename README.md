@@ -2,7 +2,7 @@
 
 > 为《未知伤亡》（Casualties Unknown）做一个安静、可靠、本地优先的模组管理器。
 
-**当前版本：0.1.1（测试版）**  
+**当前版本：0.1.2（NXM 测试版）**  
 **状态：** 模组浏览、安装、启停、删除、主题与设置已可用；依赖图、版本回滚、崩溃归因和游戏内皮肤仍在路线图中。
 
 ## 它是什么
@@ -43,6 +43,20 @@ dotnet restore
 dotnet build
 dotnet run --project src/ModificationsKnown.App
 ```
+
+NXM 粘贴测试（v0.1.2 新增）：
+
+1. 在 Nexus 文件页右键“Mod manager download”，复制链接地址；
+2. 打开“模组发现”，把 `nxm://...` 粘贴到“NXM 链接测试”；
+3. 点“处理 NXM”。
+
+也可以从命令行传入：
+
+```powershell
+.\ModificationsKnown.exe --nxm "nxm://scavprototype/mods/67/files/123456?key=...&expires=..."
+```
+
+当前版本**不注册系统协议**；把 NXM 交给启动器仍需要手动粘贴或命令行。协议注册和单实例会作为下一步验证。
 
 需要详细日志时，用测试启动参数打开控制台：
 

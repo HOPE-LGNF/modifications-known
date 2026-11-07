@@ -54,4 +54,16 @@ public interface INexusModsClient
         string gameDomain,
         string fileVersionGameScopedId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Legacy v1 download-link lookup used by NXM links. The NXM link supplies
+    /// mod/file ids and, for free accounts, a short-lived key/expires pair.
+    /// </summary>
+    Task<IReadOnlyList<NexusDownloadLink>> GetNxmDownloadLinksAsync(
+        string gameDomain,
+        long modId,
+        long fileId,
+        string? key,
+        long? expires,
+        CancellationToken cancellationToken = default);
 }
