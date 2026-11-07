@@ -86,11 +86,12 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
         var nexusMatch = new NexusMatchService(nexus, settings, logger);
         var sources = new JsonInstalledSourceStore(logger);
+        var operations = new ModOperationService(modManager, installer);
         _pages = new Dictionary<string, object>
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings),
-            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, installer, thumbnails, filePicker, sources),
-            ["installed"] = new InstalledViewModel(this, modManager, dialogs, settings, nexusMatch, sources),
+            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, filePicker, sources),
+            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger)

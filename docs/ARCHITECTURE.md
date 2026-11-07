@@ -38,32 +38,45 @@ ModificationsKnown.App
 `libraryfolders.vdf`, so both editions can coexist. UI defaults to the full game
 when both are present, but the user can switch.
 
-### 2. A package is the unit of management
+### 2. Package manifests and ownership boundaries
+
+An installed package is a directory under `BepInEx/plugins`. Every launcher-owned
+package contains `.modifications-known/manifest.json`, listing the files, sizes,
+SHA-256 hashes and optional Nexus source. The manifest is written in staging and
+moved together with the files, so an installed package and its ownership record
+commit as one unit.
+
+A directory without a valid manifest is **unmanaged**. It is visible and can be
+enabled/disabled, but normal uninstall is disabled; only the explicit “delete
+whole directory” action removes it. This preserves manually added files and
+avoids treating a folder name as proof of ownership.
+
+### 3. A package is the unit of management
 
 `InstalledMod` represents a folder in `BepInEx/plugins`. All DLLs in that folder
 are scanned for `BepInPlugin`/`BepInDependency` and are enabled/disabled together.
 This is safer than renaming only `dllFiles[0]` for multi-DLL mods.
 
-### 3. Never load plugin assemblies
+### 4. Never load plugin assemblies
 
 `BepInExAssemblyReader` uses `PEReader`/`MetadataReader` to read attributes. A
 broken or malicious plugin is not executed during a scan.
 
-### 4. Archive installation is staged
+### 5. Archive installation is staged
 
 `ArchiveModInstaller` extracts to a temp directory, validates every archive entry
 against path traversal, then copies package folders into a staging directory next
 to the plugins directory. Only a validated staging folder is moved into place.
 Existing packages are not overwritten.
 
-### 5. Nexus v3 is an adapter
+### 6. Nexus v3 is an adapter
 
 Nexus marks v3 endpoints as experimental. DTOs live only in
 `NexusModsClient`; the rest of the app uses `NexusModSummary`, `NexusModDetails`,
 `NexusFileVersion`, etc. If the API changes, only the adapter and its tests need
 updating.
 
-### 6. Theme values are resources
+### 7. Theme values are resources
 
 Views use `DynamicResource` keys such as `AppBackgroundBrush`, `SurfaceBrush`,
 `AccentBrush` and `HeroStartBrush`. `ThemeService` applies a `ThemePalette` by

@@ -110,14 +110,20 @@ Known limits of the first stage:
   fallback; the signed URL is not logged
 
 
-## Installed source records (0.1.4 interim)
+## Installed package source (0.2.0)
 
-After a successful Nexus/NXM install, the launcher records the package folder,
-Nexus name, game-scoped id and file id in
-`%APPDATA%\ModificationsKnown\installed-sources.json`. The installed list reads
-this before attempting the name-only Nexus Match fallback.
+Successful Nexus/NXM installs now write source metadata into the in-package
+manifest:
 
-This is intentionally a sidecar file, not the final package manifest. It lets the
-current release distinguish “installed by the launcher” from “manually placed”
-without pretending that ownership/hash tracking is already complete. Packages
-installed before 0.1.4 have no record and still show `本地模组` until reinstalled.
+```text
+BepInEx/plugins/<package>/.modifications-known/manifest.json
+```
+
+The manifest contains a `source` object with provider, Nexus name, game domain,
+game-scoped id, mod uid, file id and release version. The installed list reads
+this first; `%APPDATA%\ModificationsKnown\installed-sources.json` remains only
+as a compatibility fallback for packages installed by older builds.
+
+The manifest is written in staging and moved with the package, so a package and
+its ownership/source record commit together. Manually placed packages have no
+manifest and are treated as unmanaged; they are not removed by “卸载”.

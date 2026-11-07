@@ -75,6 +75,13 @@
                                                         Padding="5,2">
                                                     <TextBlock Text="{Binding SourceLabel}" FontSize="9" Classes="muted" />
                                                 </Border>
+                                                <Border Background="{DynamicResource SurfaceAltBrush}"
+                                                        BorderBrush="{DynamicResource BorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="4"
+                                                        Padding="5,2">
+                                                    <TextBlock Text="{Binding ManagementLabel}" FontSize="9" Classes="muted" />
+                                                </Border>
                                                 <Border IsVisible="{Binding Mod.IsEnabled}"
                                                         Background="{DynamicResource AccentSoftBrush}"
                                                         BorderBrush="{DynamicResource AccentBrush}"
@@ -98,9 +105,10 @@
                                                            FontSize="10"
                                                            Foreground="{DynamicResource TextSecondaryBrush}"
                                                            TextTrimming="CharacterEllipsis" />
-                                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                                    <StackPanel Orientation="Horizontal" Spacing="12">
                                                     <TextBlock Text="{Binding PluginLabel}" Classes="caption" />
                                                     <TextBlock Text="{Binding DependencyLabel}" Classes="caption" />
+                                                    <TextBlock Text="{Binding FileStateLabel}" Classes="caption" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </StackPanel>
@@ -113,9 +121,13 @@
                                                     Content="{Binding ToggleText}"
                                                     Command="{Binding ToggleCommand}" />
                                             <Button Classes="Danger"
-                                                    Content="删除"
+                                                    Content="卸载"
                                                     IsVisible="{Binding CanDelete}"
-                                                    Command="{Binding DeleteCommand}" />
+                                                    Command="{Binding UninstallCommand}" />
+                                            <Button Classes="Danger"
+                                                    Content="删除目录"
+                                                    IsVisible="{Binding CanDeleteWhole}"
+                                                    Command="{Binding DeleteWholeCommand}" />
                                         </StackPanel>
                                     </Grid>
                                 </Border>

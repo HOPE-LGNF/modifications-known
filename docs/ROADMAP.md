@@ -19,7 +19,9 @@
 
 ## 0.2 — Trust and rollback
 
-- [ ] Install manifest per package (source, version, files, hashes)
+- [x] Install manifest per package (source, version, files, hashes)
+- [x] Managed/unmanaged package boundary
+- [x] Managed uninstall preserving user-added/modified files
 - [ ] Backup before overwrite; restore the last N operations
 - [ ] Upgrade/downgrade a package without losing config
 - [ ] Package comparison and duplicate detection

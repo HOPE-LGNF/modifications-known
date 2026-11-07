@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
@@ -14,11 +15,6 @@ public sealed class BepInExModManager : IModManager
         _logger = logger;
     }
 
-    /// <summary>
-    /// Scans immediate plugin folders plus loose DLLs in BepInEx/plugins.
-    /// A folder is treated as one package so multi-DLL mods are enabled and
-    /// disabled together.
-    /// </summary>
     public Task<IReadOnlyList<InstalledMod>> ScanAsync(
         GameInstallation installation,
         CancellationToken cancellationToken = default)
@@ -27,18 +23,28 @@ public sealed class BepInExModManager : IModManager
     }
 
     public Task<OperationResult> SetEnabledAsync(
+        GameInstallation installation,
         InstalledMod mod,
         bool enabled,
         CancellationToken cancellationToken = default)
     {
-        return Task.Run(() => SetEnabledCore(mod, enabled, cancellationToken), cancellationToken);
+        return Task.Run(() => SetEnabledCore(installation, mod, enabled, cancellationToken), cancellationToken);
     }
 
-    public Task<OperationResult> DeleteAsync(
+    public Task<OperationResult> UninstallManagedAsync(
+        GameInstallation installation,
         InstalledMod mod,
         CancellationToken cancellationToken = default)
     {
-        return Task.Run(() => DeleteCore(mod, cancellationToken), cancellationToken);
+        return Task.Run(() => UninstallManagedCore(installation, mod, cancellationToken), cancellationToken);
+    }
+
+    public Task<OperationResult> DeleteWholePackageAsync(
+        GameInstallation installation,
+        InstalledMod mod,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() => DeleteWholeCore(installation, mod, cancellationToken), cancellationToken);
     }
 
     private IReadOnlyList<InstalledMod> ScanCore(
@@ -52,37 +58,42 @@ public sealed class BepInExModManager : IModManager
             return [];
         }
 
-        _logger?.Debug($"Scanning plugins: {pluginsDirectory}");
+        _logger?.Debug($"Scanning plugins (recursive DLL discovery): {pluginsDirectory}");
         var mods = new List<InstalledMod>();
 
         foreach (var directory in Directory.EnumerateDirectories(pluginsDirectory))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var pluginFiles = Directory.EnumerateFiles(directory, "*.dll", SearchOption.TopDirectoryOnly)
-                .Concat(Directory.EnumerateFiles(directory, "*.dll.disabled", SearchOption.TopDirectoryOnly))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            var dllFiles = EnumerateDllFiles(directory).ToList();
+            if (dllFiles.Count == 0) continue;
 
-            if (pluginFiles.Count == 0) continue;
-
-            var plugins = pluginFiles.Select(ReadPlugin).ToList();
+            var manifest = ReadManifest(directory);
+            var plugins = dllFiles.Select(ReadPlugin).ToList();
+            var comparison = manifest.Manifest is null
+                ? new ManifestComparison([], [], [])
+                : CompareManifest(directory, manifest.Manifest);
 
             mods.Add(new InstalledMod
             {
                 PackageId = Path.GetFileName(directory),
                 DirectoryPath = directory,
                 Plugins = plugins,
-                CanDelete = true
+                Manifest = manifest.Manifest,
+                ManifestState = manifest.State,
+                ManifestError = manifest.Error,
+                MissingFiles = comparison.Missing,
+                ModifiedFiles = comparison.Modified,
+                UnexpectedFiles = comparison.Unexpected,
+                CanDeleteWhole = true
             });
         }
 
-        // BepInEx also loads loose DLLs directly in plugins. They are shown, but
-        // deletion is disabled because a loose DLL may be a shared dependency.
-        foreach (var file in Directory.EnumerateFiles(pluginsDirectory, "*.dll", SearchOption.TopDirectoryOnly)
-                     .Concat(Directory.EnumerateFiles(pluginsDirectory, "*.dll.disabled", SearchOption.TopDirectoryOnly))
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        // Loose DLLs directly in plugins are kept read-only: there is no reliable
+        // ownership boundary for a single file.
+        foreach (var file in Directory.EnumerateFiles(pluginsDirectory, "*", SearchOption.TopDirectoryOnly)
+                     .Where(IsDllFile)
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -91,16 +102,90 @@ public sealed class BepInExModManager : IModManager
                 PackageId = Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(file)),
                 DirectoryPath = pluginsDirectory,
                 Plugins = [ReadPlugin(file)],
-                CanDelete = false
+                ManifestState = PackageManifestState.Unmanaged,
+                CanDeleteWhole = false
             });
         }
 
-        _logger?.Debug($"Scanned {mods.Count} package(s), {mods.Count(mod => mod.IsEnabled)} enabled");
+        _logger?.Debug($"Scanned {mods.Count} package(s), {mods.Count(mod => mod.IsEnabled)} enabled, {mods.Count(mod => mod.IsManaged)} managed");
         return mods
             .OrderByDescending(mod => mod.IsEnabled)
             .ThenBy(mod => mod.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    private static (PackageManifest? Manifest, PackageManifestState State, string? Error) ReadManifest(string directory)
+    {
+        var manifestPath = PackageManifestReader.GetManifestPath(directory);
+        if (!File.Exists(manifestPath))
+            return (null, PackageManifestState.Unmanaged, null);
+
+        return PackageManifestReader.TryRead(directory, out var manifest, out var error)
+            ? (manifest, PackageManifestState.Managed, null)
+            : (null, PackageManifestState.Broken, error);
+    }
+
+    private static ManifestComparison CompareManifest(string directory, PackageManifest manifest)
+    {
+        var expected = manifest.Files
+            .GroupBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        var actual = EnumeratePackageFiles(directory)
+            .Select(path => Path.GetRelativePath(directory, path).Replace('\\', '/'))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = new List<string>();
+        var modified = new List<string>();
+
+        foreach (var file in expected.Values)
+        {
+            var fullPath = Path.Combine(directory, file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(fullPath))
+            {
+                missing.Add(file.RelativePath);
+                continue;
+            }
+
+            try
+            {
+                if (new FileInfo(fullPath).Length != file.Size
+                    || !string.Equals(HashFile(fullPath), file.Sha256, StringComparison.OrdinalIgnoreCase))
+                    modified.Add(file.RelativePath);
+            }
+            catch
+            {
+                modified.Add(file.RelativePath);
+            }
+        }
+
+        var unexpected = actual
+            .Where(path => !expected.ContainsKey(path))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new ManifestComparison(missing, modified, unexpected);
+    }
+
+    private static IEnumerable<string> EnumerateDllFiles(string directory) =>
+        Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
+            .Where(IsDllFile)
+            .Where(path => !IsInsideManifestDirectory(directory, path))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+
+    private static IEnumerable<string> EnumeratePackageFiles(string directory) =>
+        Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
+            .Where(path => !IsInsideManifestDirectory(directory, path));
+
+    private static bool IsInsideManifestDirectory(string packageDirectory, string filePath)
+    {
+        var manifestDirectory = Path.Combine(packageDirectory, PackageManifest.DirectoryName);
+        return PathSafety.IsWithinDirectory(filePath, manifestDirectory);
+    }
+
+    private static bool IsDllFile(string path) =>
+        path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+        || path.EndsWith(".dll.disabled", StringComparison.OrdinalIgnoreCase);
 
     private static InstalledPlugin ReadPlugin(string filePath)
     {
@@ -118,13 +203,13 @@ public sealed class BepInExModManager : IModManager
     }
 
     private OperationResult SetEnabledCore(
+        GameInstallation installation,
         InstalledMod mod,
         bool enabled,
         CancellationToken cancellationToken)
     {
-        var root = Path.GetDirectoryName(mod.DirectoryPath) is { } parent
-            ? parent
-            : mod.DirectoryPath;
+        if (!IsSafePackage(installation, mod, allowRoot: true, out var error))
+            return OperationResult.Fail(error);
 
         var moves = new List<(string Source, string Destination)>();
 
@@ -132,7 +217,7 @@ public sealed class BepInExModManager : IModManager
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!PathSafety.IsWithinDirectory(plugin.FilePath, root))
+            if (!PathSafety.IsWithinDirectory(plugin.FilePath, installation.PluginsDirectory))
                 return OperationResult.Fail("拒绝操作：插件路径不在 BepInEx/plugins 目录内。");
 
             if (enabled)
@@ -174,13 +259,11 @@ public sealed class BepInExModManager : IModManager
         }
         catch (Exception exception)
         {
-            // Best-effort rollback so a package is never left half-toggled.
             foreach (var move in applied.AsEnumerable().Reverse())
             {
                 try
                 {
-                    if (File.Exists(move.Destination))
-                        File.Move(move.Destination, move.Source);
+                    if (File.Exists(move.Destination)) File.Move(move.Destination, move.Source);
                 }
                 catch
                 {
@@ -192,36 +275,188 @@ public sealed class BepInExModManager : IModManager
         }
     }
 
-    private OperationResult DeleteCore(InstalledMod mod, CancellationToken cancellationToken)
+    private OperationResult UninstallManagedCore(
+        GameInstallation installation,
+        InstalledMod mod,
+        CancellationToken cancellationToken)
     {
-        if (!mod.CanDelete)
-            return OperationResult.Fail("根目录 DLL 不允许由此处删除。");
+        if (!mod.IsManaged || mod.Manifest is null)
+            return OperationResult.Fail("这个包没有安装清单，只能使用“删除整个目录”。");
 
-        var pluginsRoot = mod.DirectoryPath.EndsWith("plugins", StringComparison.OrdinalIgnoreCase)
-            ? mod.DirectoryPath
-            : Path.GetDirectoryName(mod.DirectoryPath);
+        if (!IsSafePackage(installation, mod, allowRoot: false, out var error))
+            return OperationResult.Fail(error);
 
-        if (string.IsNullOrWhiteSpace(pluginsRoot)
-            || !Directory.Exists(mod.DirectoryPath)
-            || !PathSafety.IsWithinDirectory(mod.DirectoryPath, pluginsRoot)
-            || string.Equals(
-                Path.GetFullPath(mod.DirectoryPath).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(pluginsRoot).TrimEnd(Path.DirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase))
+        var deleted = 0;
+        var missing = 0;
+        var preserved = 0;
+
+        foreach (var file in mod.Manifest.Files)
         {
-            return OperationResult.Fail("拒绝删除：目标不是插件目录内的独立包。");
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!PackageManifestReader.IsSafeRelativePath(file.RelativePath))
+            {
+                preserved++;
+                continue;
+            }
+
+            var path = Path.GetFullPath(Path.Combine(
+                mod.DirectoryPath,
+                file.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+
+            if (!PathSafety.IsWithinDirectory(path, mod.DirectoryPath))
+            {
+                preserved++;
+                continue;
+            }
+
+            if (!File.Exists(path))
+            {
+                missing++;
+                continue;
+            }
+
+            try
+            {
+                if (string.Equals(HashFile(path), file.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Delete(path);
+                    deleted++;
+                }
+                else
+                {
+                    // The user changed this file. Never delete it silently.
+                    preserved++;
+                }
+            }
+            catch
+            {
+                preserved++;
+            }
         }
+
+        TryRemoveManifestDirectory(mod.DirectoryPath);
+        CleanupEmptyDirectories(mod.DirectoryPath);
+
+        var remaining = Directory.Exists(mod.DirectoryPath)
+            ? Directory.EnumerateFileSystemEntries(mod.DirectoryPath, "*", SearchOption.AllDirectories).Any()
+            : false;
+
+        _logger?.Info($"Uninstalled managed package {mod.PackageId}: deleted={deleted}, missing={missing}, preserved={preserved}");
+        return OperationResult.Ok(
+            preserved > 0
+                ? $"已移除 {deleted} 个托管文件；保留了 {preserved} 个用户新增/修改文件{(missing > 0 ? $"，{missing} 个文件已不存在" : "")}。"
+                : $"已卸载「{mod.PackageId}」{(deleted > 0 ? $"，移除 {deleted} 个文件" : "")}。{(remaining ? "目录中仍有用户文件。" : "")}");
+    }
+
+    private OperationResult DeleteWholeCore(
+        GameInstallation installation,
+        InstalledMod mod,
+        CancellationToken cancellationToken)
+    {
+        if (!IsSafePackage(installation, mod, allowRoot: false, out var error))
+            return OperationResult.Fail(error);
 
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
             Directory.Delete(mod.DirectoryPath, recursive: true);
-            _logger?.Info($"Package deleted: {mod.DirectoryPath}");
-            return OperationResult.Ok("已删除。");
+            _logger?.Info($"Package directory deleted: {mod.DirectoryPath}");
+            return OperationResult.Ok("已删除整个包目录。");
         }
         catch (Exception exception)
         {
             return OperationResult.Fail($"删除失败：{exception.Message}");
         }
     }
+
+    private static bool IsSafePackage(
+        GameInstallation installation,
+        InstalledMod mod,
+        bool allowRoot,
+        out string error)
+    {
+        error = string.Empty;
+        var pluginsRoot = Path.GetFullPath(installation.PluginsDirectory);
+        var packagePath = Path.GetFullPath(mod.DirectoryPath);
+
+        if (!Directory.Exists(packagePath))
+        {
+            error = "包目录不存在。";
+            return false;
+        }
+
+        if (!PathSafety.IsWithinDirectory(packagePath, pluginsRoot))
+        {
+            error = "拒绝操作：目标不在当前游戏的 BepInEx/plugins 内。";
+            return false;
+        }
+
+        if (!allowRoot
+            && string.Equals(
+                packagePath.TrimEnd(Path.DirectorySeparatorChar),
+                pluginsRoot.TrimEnd(Path.DirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            error = "拒绝操作：根目录 DLL 不能按包删除。";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void TryRemoveManifestDirectory(string packageDirectory)
+    {
+        var manifestDirectory = Path.Combine(packageDirectory, PackageManifest.DirectoryName);
+        if (!Directory.Exists(manifestDirectory)) return;
+
+        try
+        {
+            Directory.Delete(manifestDirectory, recursive: true);
+        }
+        catch
+        {
+            // If a user put files there, keep them; they are not managed.
+        }
+    }
+
+    private static void CleanupEmptyDirectories(string packageDirectory)
+    {
+        if (!Directory.Exists(packageDirectory)) return;
+
+        foreach (var directory in Directory.EnumerateDirectories(packageDirectory, "*", SearchOption.AllDirectories)
+                     .OrderByDescending(path => path.Length))
+        {
+            try
+            {
+                if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                    Directory.Delete(directory);
+            }
+            catch
+            {
+                // Best-effort cleanup.
+            }
+        }
+
+        try
+        {
+            if (!Directory.EnumerateFileSystemEntries(packageDirectory).Any())
+                Directory.Delete(packageDirectory);
+        }
+        catch
+        {
+            // Best-effort cleanup.
+        }
+    }
+
+    private static string HashFile(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
+    private sealed record ManifestComparison(
+        IReadOnlyList<string> Missing,
+        IReadOnlyList<string> Modified,
+        IReadOnlyList<string> Unexpected);
 }

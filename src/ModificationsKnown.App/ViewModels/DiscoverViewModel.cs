@@ -49,7 +49,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private readonly INexusModsClient _nexus;
     private readonly IAppSettingsService _settings;
     private readonly IFileDownloader _downloader;
-    private readonly IModInstaller _installer;
+    private readonly ModOperationService _operations;
     private readonly ThumbnailService _thumbnails;
     private readonly IFilePickerService _filePicker;
     private readonly IInstalledSourceStore _sources;
@@ -121,7 +121,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         INexusModsClient nexus,
         IAppSettingsService settings,
         IFileDownloader downloader,
-        IModInstaller installer,
+        ModOperationService operations,
         ThumbnailService thumbnails,
         IFilePickerService filePicker,
         IInstalledSourceStore sources)
@@ -130,7 +130,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         _nexus = nexus;
         _settings = settings;
         _downloader = downloader;
-        _installer = installer;
+        _operations = operations;
         _thumbnails = thumbnails;
         _filePicker = filePicker;
         _sources = sources;
@@ -308,7 +308,14 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             }
 
             DownloadStatus = "正在安装…";
-            var installed = await _installer.InstallArchiveAsync(installation, destination);
+            var source = PackageSource.Nexus(
+                card.Summary.Name,
+                _settings.Current.NexusGameDomain,
+                card.Summary.GameScopedId,
+                card.Summary.Id,
+                file?.Id,
+                card.Summary.Version);
+            var installed = await _operations.InstallArchiveAsync(installation, destination, source, progress);
             if (installed.Success)
             {
                 await RecordSourceAsync(
@@ -370,7 +377,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         DownloadProgress = 0;
         try
         {
-            var result = await _installer.InstallArchiveAsync(installation, path);
+            var result = await _operations.InstallArchiveAsync(installation, path);
             _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
             DownloadStatus = result.Message;
         }
@@ -498,25 +505,33 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             HasNxmFallback = false;
             _nxmFallbackUrl = null;
 
+            DownloadStatus = "正在读取 Nexus 元数据…";
+            var nexusName = $"Nexus 模组 #{nxm.ModId}";
+            string? nexusVersion = null;
+            var modUid = string.Empty;
+            try
+            {
+                var details = await _nexus.GetModAsync(nxm.GameDomain, nxm.ModId.ToString());
+                nexusName = details.Summary.Name;
+                nexusVersion = details.Summary.Version;
+                modUid = details.Summary.Id;
+            }
+            catch (Exception exception)
+            {
+                _shell.SetStatus($"读取 Nexus 名称失败：{exception.Message}", StatusKind.Warning);
+            }
+
             DownloadStatus = "正在安装 NXM 文件…";
-            var installed = await _installer.InstallArchiveAsync(installation, destination);
+            var source = PackageSource.Nexus(
+                nexusName,
+                nxm.GameDomain,
+                nxm.ModId.ToString(),
+                modUid,
+                nxm.FileId.ToString(),
+                nexusVersion);
+            var installed = await _operations.InstallArchiveAsync(installation, destination, source, progress);
             if (installed.Success)
             {
-                var nexusName = $"Nexus 模组 #{nxm.ModId}";
-                string? nexusVersion = null;
-                string modUid = string.Empty;
-                try
-                {
-                    var details = await _nexus.GetModAsync(nxm.GameDomain, nxm.ModId.ToString());
-                    nexusName = details.Summary.Name;
-                    nexusVersion = details.Summary.Version;
-                    modUid = details.Summary.Id;
-                }
-                catch (Exception exception)
-                {
-                    _shell.SetStatus($"安装完成，但读取 Nexus 名称失败：{exception.Message}", StatusKind.Warning);
-                }
-
                 await RecordSourceAsync(
                     installation,
                     installed,

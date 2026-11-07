@@ -18,7 +18,7 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
 
     public bool IsNexusMatched => NexusMatch is not null;
 
-    public string SourceLabel => NexusMatch is null ? "本地模组" : "Nexus 模组";
+    public string SourceLabel => NexusMatch is null ? "未关联 Nexus" : "Nexus 模组";
 
     public string NexusDomain { get; set; } = "scavprototype";
 
@@ -36,11 +36,16 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
         OnPropertyChanged(nameof(NexusUrl));
     }
 
-    public InstalledModItemViewModel(InstalledMod mod, Func<InstalledMod, Task> toggle, Func<InstalledMod, Task> delete)
+    public InstalledModItemViewModel(
+        InstalledMod mod,
+        Func<InstalledMod, Task> toggle,
+        Func<InstalledMod, Task> uninstall,
+        Func<InstalledMod, Task> deleteWhole)
     {
         Mod = mod;
         ToggleCommand = new AsyncRelayCommand(() => toggle(Mod));
-        DeleteCommand = new AsyncRelayCommand(() => delete(Mod));
+        UninstallCommand = new AsyncRelayCommand(() => uninstall(Mod));
+        DeleteWholeCommand = new AsyncRelayCommand(() => deleteWhole(Mod));
     }
 
     public InstalledMod Mod { get; }
@@ -83,19 +88,42 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
 
     public bool CanDelete => Mod.CanDelete;
 
+    public bool CanDeleteWhole => Mod.CanDeleteWhole;
+
+    public bool IsManaged => Mod.IsManaged;
+
+    public string ManagementLabel => Mod.ManagementLabel;
+
+    public string FileStateLabel
+    {
+        get
+        {
+            if (!Mod.IsManaged) return "未托管";
+
+            var parts = new List<string>();
+            if (Mod.MissingFiles.Count > 0) parts.Add($"缺失 {Mod.MissingFiles.Count}");
+            if (Mod.ModifiedFiles.Count > 0) parts.Add($"修改 {Mod.ModifiedFiles.Count}");
+            if (Mod.UnexpectedFiles.Count > 0) parts.Add($"新增 {Mod.UnexpectedFiles.Count}");
+            return parts.Count == 0 ? "文件完整" : string.Join(" · ", parts);
+        }
+    }
+
     public IAsyncRelayCommand ToggleCommand { get; }
 
-    public IAsyncRelayCommand DeleteCommand { get; }
+    public IAsyncRelayCommand UninstallCommand { get; }
+
+    public IAsyncRelayCommand DeleteWholeCommand { get; }
 }
 
 public partial class InstalledViewModel : ObservableObject, IAsyncPage
 {
     private readonly IAppShell _shell;
-    private readonly IModManager _modManager;
+    private readonly ModOperationService _operations;
     private readonly IUserDialogService _dialogs;
     private readonly IAppSettingsService _settings;
     private readonly NexusMatchService _nexusMatch;
     private readonly IInstalledSourceStore _sources;
+    private int _refreshGeneration;
 
     [ObservableProperty]
     private bool _isBusy;
@@ -136,14 +164,14 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
     public InstalledViewModel(
         IAppShell shell,
-        IModManager modManager,
+        ModOperationService operations,
         IUserDialogService dialogs,
         IAppSettingsService settings,
         NexusMatchService nexusMatch,
         IInstalledSourceStore sources)
     {
         _shell = shell;
-        _modManager = modManager;
+        _operations = operations;
         _dialogs = dialogs;
         _settings = settings;
         _nexusMatch = nexusMatch;
@@ -156,17 +184,22 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     public Task OnActivatedAsync() => RefreshAsync();
 
     [RelayCommand]
-    private async Task RefreshAsync()
+    private Task RefreshAsync() => RefreshCoreAsync();
+
+    private async Task RefreshCoreAsync()
     {
-        if (IsBusy) return;
+        // A scan belongs to the installation selected when it starts. A newer
+        // scan supersedes it; the old result must never be painted over the new
+        // selection.
+        var installation = _shell.Game.Selected;
+        var generation = ++_refreshGeneration;
         IsBusy = true;
         try
         {
-            Mods.Clear();
-            var installation = _shell.Game.Selected;
-
             if (installation is null)
             {
+                if (generation != _refreshGeneration) return;
+                Mods.Clear();
                 HasGame = false;
                 BepInExMissing = false;
                 EmptyMessage = "尚未选择游戏安装。请先在设置中检测游戏。";
@@ -182,13 +215,22 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
             if (!installation.HasPluginsDirectory)
             {
+                if (generation != _refreshGeneration) return;
+                Mods.Clear();
                 EmptyMessage = "没有找到 BepInEx/plugins。请先安装 BepInEx。";
                 CountLabel = "0";
                 EnabledLabel = "0";
                 return;
             }
 
-            var mods = await _modManager.ScanAsync(installation);
+            var mods = await _operations.ScanAsync(installation);
+
+            if (generation != _refreshGeneration
+                || !ReferenceEquals(_shell.Game.Selected, installation)
+                || !PathEquals(_shell.Game.Selected?.GameDirectory, installation.GameDirectory))
+                return;
+
+            Mods.Clear();
             foreach (var mod in mods)
                 Mods.Add(CreateItem(mod));
 
@@ -198,13 +240,17 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 ? "插件目录还是空的。去「模组发现」看看，或手动放入 BepInEx/plugins。"
                 : string.Empty;
 
-            _ = MatchNexusAsync();
+            _ = MatchNexusAsync(generation);
         }
         finally
         {
-            IsBusy = false;
+            if (generation == _refreshGeneration)
+                IsBusy = false;
         }
     }
+
+    private static bool PathEquals(string? left, string? right) =>
+        string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 
     [RelayCommand]
     private void ToggleViewMode() => IsCompactView = !IsCompactView;
@@ -242,7 +288,9 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         IsBusy = true;
         try
         {
-            var result = await _modManager.SetEnabledAsync(mod, !mod.IsEnabled);
+            var installation = _shell.Game.Selected
+                ?? throw new InvalidOperationException("尚未选择游戏安装。");
+            var result = await _operations.SetEnabledAsync(installation, mod, !mod.IsEnabled);
             _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
             await RefreshCoreAsync();
         }
@@ -252,21 +300,21 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         }
     }
 
-    private async Task DeleteAsync(InstalledMod mod)
+    private async Task UninstallAsync(InstalledMod mod)
     {
         if (IsBusy) return;
         if (!mod.CanDelete)
         {
-            _shell.SetStatus("根目录 DLL 不允许从这里删除。", StatusKind.Warning);
+            _shell.SetStatus("这个包没有安装清单，不能按清单卸载；请使用“删除目录”。", StatusKind.Warning);
             return;
         }
 
         if (_settings.Current.ConfirmBeforeDelete)
         {
             var confirmed = await _dialogs.ConfirmAsync(
-                "删除模组",
-                $"将删除整个模组目录：\n{mod.DirectoryPath}\n\n此操作不可恢复。",
-                "删除",
+                "卸载模组",
+                $"将从「{mod.Name}」中移除安装清单记录的文件。\n用户后来新增或修改的文件会保留。\n\n{mod.DirectoryPath}",
+                "卸载",
                 "取消");
             if (!confirmed) return;
         }
@@ -274,7 +322,40 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         IsBusy = true;
         try
         {
-            var result = await _modManager.DeleteAsync(mod);
+            var installation = _shell.Game.Selected
+                ?? throw new InvalidOperationException("尚未选择游戏安装。");
+            var result = await _operations.UninstallManagedAsync(installation, mod);
+            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            await RefreshCoreAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task DeleteWholeAsync(InstalledMod mod)
+    {
+        if (IsBusy) return;
+        if (!mod.CanDeleteWhole)
+        {
+            _shell.SetStatus("根目录 DLL 不能删除整个插件目录。", StatusKind.Warning);
+            return;
+        }
+
+        var confirmed = await _dialogs.ConfirmAsync(
+            "删除整个模组目录",
+            $"这会删除整个目录，包括未托管文件和用户后来添加的文件：\n{mod.DirectoryPath}\n\n此操作不可恢复，确认继续吗？",
+            "删除整个目录",
+            "取消");
+        if (!confirmed) return;
+
+        IsBusy = true;
+        try
+        {
+            var installation = _shell.Game.Selected
+                ?? throw new InvalidOperationException("尚未选择游戏安装。");
+            var result = await _operations.DeleteWholePackageAsync(installation, mod);
             _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
             await RefreshCoreAsync();
         }
@@ -287,12 +368,15 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private InstalledModItemViewModel CreateItem(InstalledMod mod)
     {
         var installation = _shell.Game.Selected;
-        var source = installation is null ? null : _sources.Get(installation.GameDirectory, mod.PackageId);
-        var match = source is null
-            ? null
-            : new NexusMatch(source.NexusName, source.GameScopedId, source.ModUid);
+        var sidecar = installation is null ? null : _sources.Get(installation.GameDirectory, mod.PackageId);
+        var source = mod.Source;
+        var match = source is { Provider: "nexus", GameScopedId: not null }
+            ? new NexusMatch(source.NexusName ?? $"Nexus 模组 #{source.GameScopedId}", source.GameScopedId, source.ModUid ?? string.Empty)
+            : sidecar is null
+                ? null
+                : new NexusMatch(sidecar.NexusName, sidecar.GameScopedId, sidecar.ModUid);
 
-        return new InstalledModItemViewModel(mod, ToggleAsync, DeleteAsync)
+        return new InstalledModItemViewModel(mod, ToggleAsync, UninstallAsync, DeleteWholeAsync)
         {
             IsDetailed = IsDetailedView,
             NexusDomain = _settings.Current.NexusGameDomain,
@@ -300,36 +384,18 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         };
     }
 
-    private async Task RefreshCoreAsync()
-    {
-        var installation = _shell.Game.Selected;
-        if (installation is null || !installation.HasPluginsDirectory)
-        {
-            await RefreshAsync();
-            return;
-        }
-
-        var mods = await _modManager.ScanAsync(installation);
-        Mods.Clear();
-        foreach (var mod in mods)
-            Mods.Add(CreateItem(mod));
-
-        CountLabel = mods.Count.ToString();
-        EnabledLabel = mods.Count(mod => mod.IsEnabled).ToString();
-        EmptyMessage = mods.Count == 0 ? "插件目录还是空的。" : string.Empty;
-        _ = MatchNexusAsync();
-    }
-
-    private async Task MatchNexusAsync()
+    private async Task MatchNexusAsync(int generation)
     {
         foreach (var item in Mods.ToList())
         {
+            if (generation != _refreshGeneration) return;
             if (item.IsNexusMatched) continue;
 
             var match = await _nexusMatch.ResolveAsync(
                 item.Mod.PackageId,
                 item.Name,
                 item.Mod.Version);
+            if (generation != _refreshGeneration) return;
             if (match is not null)
                 item.NexusMatch = match;
         }

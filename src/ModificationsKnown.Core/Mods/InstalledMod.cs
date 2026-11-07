@@ -13,9 +13,39 @@ public sealed class InstalledMod
 
     public required IReadOnlyList<InstalledPlugin> Plugins { get; init; }
 
-    public bool CanDelete { get; init; }
+    public PackageManifest? Manifest { get; init; }
+
+    public PackageManifestState ManifestState { get; init; } = PackageManifestState.Unmanaged;
+
+    public string? ManifestError { get; init; }
+
+    public IReadOnlyList<string> MissingFiles { get; init; } = [];
+
+    public IReadOnlyList<string> ModifiedFiles { get; init; } = [];
+
+    public IReadOnlyList<string> UnexpectedFiles { get; init; } = [];
+
+    public bool IsManaged => ManifestState == PackageManifestState.Managed && Manifest is not null;
+
+    /// <summary>Normal uninstall is available only for manifest-managed packages.</summary>
+    public bool CanDelete => IsManaged;
+
+    /// <summary>Deleting the whole directory is a separate, explicit action.</summary>
+    public bool CanDeleteWhole { get; init; } = true;
 
     public bool IsEnabled => Plugins.Any(plugin => plugin.IsEnabled);
+
+    public bool HasMixedEnabledState =>
+        Plugins.Count > 0 && Plugins.Any(plugin => plugin.IsEnabled) && Plugins.Any(plugin => !plugin.IsEnabled);
+
+    public string ManagementLabel => ManifestState switch
+    {
+        PackageManifestState.Managed => "已托管",
+        PackageManifestState.Broken => "清单异常",
+        _ => "本地模组"
+    };
+
+    public PackageSource? Source => Manifest?.Source;
 
     public string Name =>
         Plugins.Select(plugin => plugin.Name)

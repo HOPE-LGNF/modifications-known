@@ -1,4 +1,5 @@
-using System.Text;
+using System.Security.Cryptography;
+using System.Text.Json;
 using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
@@ -13,11 +14,18 @@ namespace ModificationsKnown.Infrastructure.Installation;
 
 /// <summary>
 /// Installs a downloaded archive into BepInEx/plugins. Extraction is isolated
-/// in a temporary directory; package folders are staged first and only moved
-/// into place after validation.
+/// in a temporary directory; each package is staged outside the plugin loading
+/// directory on the same volume, gets an in-package manifest, and is moved into
+/// place as one commit.
 /// </summary>
 public sealed class ArchiveModInstaller : IModInstaller
 {
+    private static readonly JsonSerializerOptions ManifestJsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly IAppLogger? _logger;
 
     public ArchiveModInstaller(IAppLogger? logger = null)
@@ -29,11 +37,12 @@ public sealed class ArchiveModInstaller : IModInstaller
         GameInstallation installation,
         string archivePath,
         IProgress<double>? progress = null,
+        PackageSource? source = null,
         CancellationToken cancellationToken = default)
     {
         _logger?.Info($"Installing archive: {archivePath}");
         return Task.Run(
-            () => InstallCore(installation, archivePath, progress, cancellationToken),
+            () => InstallCore(installation, archivePath, progress, source, cancellationToken),
             cancellationToken);
     }
 
@@ -41,6 +50,7 @@ public sealed class ArchiveModInstaller : IModInstaller
         GameInstallation installation,
         string archivePath,
         IProgress<double>? progress,
+        PackageSource? source,
         CancellationToken cancellationToken)
     {
         if (!File.Exists(archivePath))
@@ -55,7 +65,13 @@ public sealed class ArchiveModInstaller : IModInstaller
 
         Directory.CreateDirectory(AppPaths.TempDirectory);
         var tempRoot = Path.Combine(AppPaths.TempDirectory, "install-" + Guid.NewGuid().ToString("N"));
+        var stagingRoot = Path.Combine(
+            installation.BepInExDirectory,
+            PackageManifest.DirectoryName,
+            "staging",
+            Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempRoot);
+        Directory.CreateDirectory(stagingRoot);
 
         try
         {
@@ -65,22 +81,64 @@ public sealed class ArchiveModInstaller : IModInstaller
 
             var pluginsRoot = FindBepInExPluginsDirectory(tempRoot);
             var packages = pluginsRoot is not null
-                ? CollectPackagesFromPluginsRoot(pluginsRoot, archivePath)
+                ? CollectPackagesFromPluginsRoot(pluginsRoot)
                 : CollectPackagesFromArchiveRoot(tempRoot, archivePath);
 
             if (packages.Count == 0)
                 return ModInstallResult.Failure("压缩包里没有找到可安装的 DLL。");
 
+            // Preflight every target before writing anything. Existing or
+            // duplicate package names are reported as failures, but other
+            // packages in the same archive may still be committed.
+            var planned = new List<PlannedPackage>();
+            var reservedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var results = new List<InstalledPackageResult>();
 
             foreach (var package in packages)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var result = InstallPackage(installation.PluginsDirectory, package.SourceDirectory, package.PackageName);
-                _logger?.Debug($"Install package result: {package.PackageName} -> {result.Message}");
-                results.Add(new InstalledPackageResult(package.PackageName, result.Success, result.Message));
+                var safeName = PathSafety.GetSafeFileName(package.PackageName);
+                var target = Path.Combine(installation.PluginsDirectory, safeName);
 
-                progress?.Report(0.45 + 0.5 * (results.Count / (double)packages.Count));
+                if (reservedNames.Contains(safeName) || Directory.Exists(target))
+                {
+                    var conflictMessage = Directory.Exists(target)
+                        ? $"「{safeName}」已存在，未覆盖现有版本。"
+                        : $"安装包内有重复的包名「{safeName}」。";
+                    results.Add(new InstalledPackageResult(safeName, false, conflictMessage));
+                    continue;
+                }
+
+                reservedNames.Add(safeName);
+                planned.Add(new PlannedPackage(package.SourceDirectory, safeName, target));
+            }
+
+            foreach (var package in planned)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                try
+                {
+                    var manifest = BuildManifest(package.SourceDirectory, package.PackageName, source, cancellationToken);
+                    var packageStaging = Path.Combine(stagingRoot, Guid.NewGuid().ToString("N"));
+                    Directory.CreateDirectory(packageStaging);
+                    CopyManagedFiles(package.SourceDirectory, packageStaging, manifest, cancellationToken);
+                    WriteManifest(packageStaging, manifest);
+                    Directory.Move(packageStaging, package.TargetDirectory);
+
+                    results.Add(new InstalledPackageResult(
+                        package.PackageName,
+                        true,
+                        $"已安装「{package.PackageName}」。",
+                        manifest.LocalId));
+                    _logger?.Debug($"Install package committed: {package.PackageName} -> {package.TargetDirectory}");
+                }
+                catch (Exception exception)
+                {
+                    _logger?.Warn($"Install package failed: {package.PackageName}: {exception.Message}");
+                    results.Add(new InstalledPackageResult(package.PackageName, false, $"安装「{package.PackageName}」失败：{exception.Message}"));
+                }
+
+                progress?.Report(0.45 + 0.5 * (results.Count / (double)Math.Max(1, packages.Count)));
             }
 
             var installed = results.Count(result => result.Success);
@@ -104,6 +162,7 @@ public sealed class ArchiveModInstaller : IModInstaller
         finally
         {
             TryDeleteDirectory(tempRoot);
+            TryDeleteDirectory(stagingRoot);
             progress?.Report(1);
         }
     }
@@ -135,95 +194,97 @@ public sealed class ArchiveModInstaller : IModInstaller
 
     private static string? FindBepInExPluginsDirectory(string root)
     {
-        foreach (var candidates in Directory.EnumerateDirectories(root, "plugins", SearchOption.AllDirectories))
+        foreach (var candidate in Directory.EnumerateDirectories(root, "plugins", SearchOption.AllDirectories))
         {
-            var parent = Directory.GetParent(candidates);
+            var parent = Directory.GetParent(candidate);
             if (parent is not null
                 && string.Equals(parent.Name, "BepInEx", StringComparison.OrdinalIgnoreCase))
-                return candidates;
+                return candidate;
         }
 
         return null;
     }
 
-    private static List<PackageCandidate> CollectPackagesFromPluginsRoot(string pluginsRoot, string archivePath)
+    private static List<PackageCandidate> CollectPackagesFromPluginsRoot(string pluginsRoot)
     {
-        var packages = new List<PackageCandidate>();
+        // A package owns a directory. Loose files directly in BepInEx/plugins
+        // have no unambiguous ownership, so a strict installer refuses them.
+        if (Directory.EnumerateFiles(pluginsRoot, "*", SearchOption.TopDirectoryOnly).Any())
+            throw new InvalidDataException("BepInEx/plugins 根目录存在散放文件，无法确定它们属于哪个模组；已拒绝安装。");
 
+        var packages = new List<PackageCandidate>();
         foreach (var directory in Directory.EnumerateDirectories(pluginsRoot))
         {
-            if (Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories).Any())
+            if (ContainsDll(directory))
+            {
                 packages.Add(new PackageCandidate(directory, Path.GetFileName(directory)));
+                continue;
+            }
+
+            if (Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Any())
+                throw new InvalidDataException($"目录「{Path.GetFileName(directory)}」没有 DLL，无法确定包归属；已拒绝安装。");
         }
 
-        var looseDlls = Directory.EnumerateFiles(pluginsRoot, "*.dll", SearchOption.TopDirectoryOnly).ToList();
-        if (looseDlls.Count == 0) return packages;
+        if (packages.Count == 0)
+            throw new InvalidDataException("压缩包的 BepInEx/plugins 下没有可安装的模组目录。");
 
-        var name = ReadPackageName(looseDlls[0])
-                   ?? Path.GetFileNameWithoutExtension(archivePath)
-                   ?? "ImportedMod";
-
-        // Copy loose DLLs into one staging package. This is intentionally a
-        // separate package from subdirectories so multiple root plugins remain
-        // distinguishable where possible.
-        var staging = Path.Combine(pluginsRoot, ".mk-loose-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(staging);
-        foreach (var file in Directory.EnumerateFiles(pluginsRoot, "*", SearchOption.TopDirectoryOnly))
-        {
-            var destination = Path.Combine(staging, Path.GetFileName(file));
-            File.Copy(file, destination, overwrite: true);
-        }
-
-        packages.Add(new PackageCandidate(staging, name));
         return packages;
     }
 
     private static List<PackageCandidate> CollectPackagesFromArchiveRoot(string root, string archivePath)
     {
-        var packages = new List<PackageCandidate>();
-        var directories = Directory.EnumerateDirectories(root).ToList();
+        var rootFiles = Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly).ToList();
         var rootDlls = Directory.EnumerateFiles(root, "*.dll", SearchOption.TopDirectoryOnly).ToList();
+        var directories = Directory.EnumerateDirectories(root).ToList();
 
         if (rootDlls.Count > 0)
         {
-            var name = ReadPackageName(rootDlls[0])
-                       ?? Path.GetFileNameWithoutExtension(archivePath)
-                       ?? "ImportedMod";
-            packages.Add(new PackageCandidate(root, name));
-            return packages;
+            if (directories.Any(ContainsDll))
+                throw new InvalidDataException("压缩包同时包含根目录 DLL 和子目录 DLL，无法确定包边界；已拒绝安装。");
+
+            return [new PackageCandidate(root, ResolvePackageName(root, archivePath))];
         }
+
+        if (rootFiles.Count > 0)
+            throw new InvalidDataException("压缩包根目录存在散放文件但没有 DLL，无法确定包归属；已拒绝安装。");
+        if (directories.Count == 0)
+            throw new InvalidDataException("压缩包为空；已拒绝安装。");
 
         if (directories.Count == 1)
         {
-            var directory = directories[0];
-            var name = FindFirstPluginName(directory) ?? Path.GetFileName(directory);
-            if (Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories).Any())
-                packages.Add(new PackageCandidate(directory, name));
-            return packages;
+            if (!ContainsDll(directories[0]))
+                throw new InvalidDataException("压缩包内没有 DLL；已拒绝安装。");
+
+            return [new PackageCandidate(directories[0], ResolvePackageName(directories[0], archivePath))];
         }
 
+        var packages = new List<PackageCandidate>();
         foreach (var directory in directories)
         {
-            var name = FindFirstPluginName(directory) ?? Path.GetFileName(directory);
-            if (Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories).Any())
-                packages.Add(new PackageCandidate(directory, name));
+            if (!ContainsDll(directory))
+            {
+                if (Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Any())
+                    throw new InvalidDataException($"目录「{Path.GetFileName(directory)}」没有 DLL，无法确定包归属；已拒绝安装。");
+                continue;
+            }
+
+            packages.Add(new PackageCandidate(directory, ResolvePackageName(directory, archivePath)));
         }
+
+        if (packages.Count == 0)
+            throw new InvalidDataException("压缩包内没有可安装的 DLL；已拒绝安装。");
 
         return packages;
     }
 
-    private static string? FindFirstPluginName(string directory)
+    private static string ResolvePackageName(string directory, string archivePath)
     {
-        try
-        {
-            return Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories)
-                .Select(ReadPackageName)
-                .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));
-        }
-        catch
-        {
-            return null;
-        }
+        var pluginName = Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories)
+            .Select(ReadPackageName)
+            .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));
+
+        return PathSafety.GetSafeFileName(
+            pluginName ?? Path.GetFileName(directory) ?? Path.GetFileNameWithoutExtension(archivePath));
     }
 
     private static string? ReadPackageName(string dllPath)
@@ -232,63 +293,89 @@ public sealed class ArchiveModInstaller : IModInstaller
         return string.IsNullOrWhiteSpace(metadata.Name) ? null : metadata.Name;
     }
 
-    private static OperationResult InstallPackage(string pluginsRoot, string sourceDirectory, string packageName)
+    private static bool ContainsDll(string directory) =>
+        Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories).Any();
+
+    private static PackageManifest BuildManifest(
+        string sourceDirectory,
+        string packageName,
+        PackageSource? source,
+        CancellationToken cancellationToken)
     {
-        if (!Directory.Exists(sourceDirectory))
-            return OperationResult.Fail("安装源目录不存在。");
+        var files = new List<PackageFile>();
+        var root = Path.GetFullPath(sourceDirectory);
 
-        var safeName = PathSafety.GetSafeFileName(packageName);
-        var target = Path.Combine(pluginsRoot, safeName);
-        if (Directory.Exists(target))
-            return OperationResult.Fail($"「{safeName}」已存在，未覆盖现有版本。");
-
-        var staging = Path.Combine(pluginsRoot, ".mk-staging-" + Guid.NewGuid().ToString("N"));
-        var moved = false;
-
-        try
+        foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         {
-            CopyDirectory(sourceDirectory, staging);
-            if (!Directory.EnumerateFileSystemEntries(staging).Any())
-                return OperationResult.Fail("安装包为空。");
+            cancellationToken.ThrowIfCancellationRequested();
 
-            Directory.Move(staging, target);
-            moved = true;
-            return OperationResult.Ok($"已安装「{safeName}」。");
+            var relative = Path.GetRelativePath(root, file);
+            var normalized = relative.Replace('\\', '/');
+            if (normalized.StartsWith(PackageManifest.DirectoryName + "/", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!PackageManifestReader.IsSafeRelativePath(normalized))
+                throw new InvalidDataException($"安装包包含不安全路径：{relative}");
+
+            var info = new FileInfo(file);
+            files.Add(new PackageFile(normalized, info.Length, HashFile(file)));
         }
-        catch (Exception exception)
+
+        if (!files.Any(file => file.RelativePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidDataException("安装包没有可加载的 DLL。");
+
+        return new PackageManifest
         {
-            return OperationResult.Fail($"安装「{safeName}」失败：{exception.Message}");
-        }
-        finally
+            LocalId = Guid.NewGuid().ToString("N"),
+            PackageName = packageName,
+            InstalledAt = DateTimeOffset.UtcNow,
+            Source = source ?? PackageSource.Local,
+            Files = files
+        };
+    }
+
+    private static void CopyManagedFiles(
+        string sourceDirectory,
+        string destinationDirectory,
+        PackageManifest manifest,
+        CancellationToken cancellationToken)
+    {
+        var sourceRoot = Path.GetFullPath(sourceDirectory);
+
+        foreach (var file in manifest.Files)
         {
-            if (!moved) TryDeleteDirectory(staging);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!PackageManifestReader.IsSafeRelativePath(file.RelativePath))
+                throw new InvalidDataException($"清单包含不安全路径：{file.RelativePath}");
+
+            var source = Path.GetFullPath(Path.Combine(sourceRoot, file.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            if (!PathSafety.IsWithinDirectory(source, sourceRoot) || !File.Exists(source))
+                throw new InvalidDataException($"安装包文件不存在：{file.RelativePath}");
+
+            var destination = Path.GetFullPath(Path.Combine(
+                destinationDirectory,
+                file.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            if (!PathSafety.IsWithinDirectory(destination, destinationDirectory))
+                throw new InvalidDataException($"安装包文件越界：{file.RelativePath}");
+
+            var parent = Path.GetDirectoryName(destination);
+            if (parent is not null) Directory.CreateDirectory(parent);
+            File.Copy(source, destination, overwrite: false);
         }
     }
 
-    private static void CopyDirectory(string source, string destination)
+    private static void WriteManifest(string packageStaging, PackageManifest manifest)
     {
-        Directory.CreateDirectory(destination);
+        var directory = Path.Combine(packageStaging, PackageManifest.DirectoryName);
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, PackageManifest.FileName);
+        File.WriteAllText(path, JsonSerializer.Serialize(manifest, ManifestJsonOptions));
+    }
 
-        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
-        {
-            var relative = Path.GetRelativePath(source, directory);
-            var target = Path.Combine(destination, relative);
-            if (!PathSafety.IsWithinDirectory(target, destination))
-                throw new InvalidDataException("安装包目录越界。");
-            Directory.CreateDirectory(target);
-        }
-
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
-        {
-            var relative = Path.GetRelativePath(source, file);
-            var target = Path.Combine(destination, relative);
-            if (!PathSafety.IsWithinDirectory(target, destination))
-                throw new InvalidDataException("安装包文件越界。");
-
-            var parent = Path.GetDirectoryName(target);
-            if (parent is not null) Directory.CreateDirectory(parent);
-            File.Copy(file, target, overwrite: true);
-        }
+    private static string HashFile(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
     private static void TryDeleteDirectory(string directory)
@@ -304,4 +391,6 @@ public sealed class ArchiveModInstaller : IModInstaller
     }
 
     private sealed record PackageCandidate(string SourceDirectory, string PackageName);
+
+    private sealed record PlannedPackage(string SourceDirectory, string PackageName, string TargetDirectory);
 }

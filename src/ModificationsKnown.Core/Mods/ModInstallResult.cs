@@ -4,7 +4,11 @@ namespace ModificationsKnown.Core.Mods;
 /// Outcome of installing one archive. An archive may contain several packages,
 /// so success is reported per package rather than as a single boolean.
 /// </summary>
-public sealed record InstalledPackageResult(string PackageName, bool Success, string Message);
+public sealed record InstalledPackageResult(
+    string PackageName,
+    bool Success,
+    string Message,
+    string? LocalId = null);
 
 public sealed record ModInstallResult(
     bool Success,

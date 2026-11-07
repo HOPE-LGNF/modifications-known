@@ -26,7 +26,9 @@ public sealed class BepInExModManagerTests
         var mod = Assert.Single(mods);
         Assert.Equal("TestPack", mod.PackageId);
         Assert.Equal(2, mod.PluginCount);
-        Assert.True(mod.CanDelete);
+        Assert.False(mod.CanDelete);
+        Assert.True(mod.CanDeleteWhole);
+        Assert.Equal("本地模组", mod.ManagementLabel);
     }
 
     [Fact]
@@ -40,7 +42,7 @@ public sealed class BepInExModManagerTests
         var manager = new BepInExModManager();
         var mod = Assert.Single(await manager.ScanAsync(CreateInstallation(temp.Path)));
 
-        var disabled = await manager.SetEnabledAsync(mod, false);
+        var disabled = await manager.SetEnabledAsync(CreateInstallation(temp.Path), mod, false);
         Assert.True(disabled.Success);
         Assert.False(File.Exists(first));
         Assert.False(File.Exists(second));
@@ -50,7 +52,7 @@ public sealed class BepInExModManagerTests
         var rescanned = Assert.Single(await manager.ScanAsync(CreateInstallation(temp.Path)));
         Assert.False(rescanned.IsEnabled);
 
-        var enabled = await manager.SetEnabledAsync(rescanned, true);
+        var enabled = await manager.SetEnabledAsync(CreateInstallation(temp.Path), rescanned, true);
         Assert.True(enabled.Success);
         Assert.True(File.Exists(first));
         Assert.True(File.Exists(second));
@@ -70,9 +72,11 @@ public sealed class BepInExModManagerTests
         var looseMod = Assert.Single(mods, mod => mod.PackageId == "Loose");
 
         Assert.False(looseMod.CanDelete);
-        Assert.False((await manager.DeleteAsync(looseMod)).Success);
+        Assert.False(looseMod.CanDeleteWhole);
+        Assert.False((await manager.UninstallManagedAsync(CreateInstallation(temp.Path), looseMod)).Success);
+        Assert.False((await manager.DeleteWholePackageAsync(CreateInstallation(temp.Path), looseMod)).Success);
 
-        Assert.True((await manager.DeleteAsync(package)).Success);
+        Assert.True((await manager.DeleteWholePackageAsync(CreateInstallation(temp.Path), package)).Success);
         Assert.False(Directory.Exists(pack));
         Assert.True(File.Exists(loose));
     }

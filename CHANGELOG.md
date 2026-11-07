@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.2.0] - 2026-11-07
+
+### Added
+
+- In-package manifest at `.modifications-known/manifest.json` with schema
+  version, local id, package name, files, sizes, SHA-256 hashes and optional
+  Nexus source.
+- Strict install plan: ambiguous archive layouts are rejected; packages are
+  preflighted before writes; per-package results report success, failure and
+  partial completion.
+- Staging now lives under `BepInEx/.modifications-known/staging`, outside the
+  plugin loading directory but on the same volume, and the manifest is written
+  before the final `Directory.Move`.
+- Recursive DLL discovery inside a package, so nested plugin DLLs are scanned
+  and toggled together.
+- Managed vs unmanaged packages. Manually placed packages are visible but
+  unmanaged; only manifest-managed packages can use “卸载”.
+- Managed uninstall deletes only unchanged files listed in the manifest and
+  preserves user-added/modified files. “删除整个目录” remains a separate,
+  explicitly confirmed action.
+- `InstalledMod` exposes mixed enabled state, missing/modified/unexpected files,
+  management label and source.
+- App-level `ModOperationService` serializes writes per game installation;
+  manager operations now require an explicit `GameInstallation`.
+- Installed list refreshes use generation tokens so switching game editions
+  cannot paint an old scan over the new selection.
+- Normal Nexus download inputs are pinned when the command starts.
+
+### Changed
+
+- `IModInstaller.InstallArchiveAsync` returns per-package results.
+- `IModManager` has explicit `UninstallManagedAsync` and
+  `DeleteWholePackageAsync`.
+- The old sidecar source record remains as a compatibility fallback; manifest
+  source is authoritative.
+
+
 ## [0.1.4] - 2026-11-07
 
 ### Fixed

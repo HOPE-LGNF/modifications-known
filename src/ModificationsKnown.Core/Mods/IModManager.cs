@@ -10,11 +10,20 @@ public interface IModManager
         CancellationToken cancellationToken = default);
 
     Task<OperationResult> SetEnabledAsync(
+        GameInstallation installation,
         InstalledMod mod,
         bool enabled,
         CancellationToken cancellationToken = default);
 
-    Task<OperationResult> DeleteAsync(
+    /// <summary>Deletes only manifest-listed, unchanged files; user files are preserved.</summary>
+    Task<OperationResult> UninstallManagedAsync(
+        GameInstallation installation,
+        InstalledMod mod,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Dangerous explicit action: removes the whole package directory.</summary>
+    Task<OperationResult> DeleteWholePackageAsync(
+        GameInstallation installation,
         InstalledMod mod,
         CancellationToken cancellationToken = default);
 }
@@ -29,5 +38,6 @@ public interface IModInstaller
         GameInstallation installation,
         string archivePath,
         IProgress<double>? progress = null,
+        PackageSource? source = null,
         CancellationToken cancellationToken = default);
 }
