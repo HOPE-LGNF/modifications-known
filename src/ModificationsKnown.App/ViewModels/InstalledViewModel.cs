@@ -95,6 +95,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly IUserDialogService _dialogs;
     private readonly IAppSettingsService _settings;
     private readonly NexusMatchService _nexusMatch;
+    private readonly IInstalledSourceStore _sources;
 
     [ObservableProperty]
     private bool _isBusy;
@@ -138,13 +139,15 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         IModManager modManager,
         IUserDialogService dialogs,
         IAppSettingsService settings,
-        NexusMatchService nexusMatch)
+        NexusMatchService nexusMatch,
+        IInstalledSourceStore sources)
     {
         _shell = shell;
         _modManager = modManager;
         _dialogs = dialogs;
         _settings = settings;
         _nexusMatch = nexusMatch;
+        _sources = sources;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
     }
 
@@ -281,11 +284,21 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         }
     }
 
-    private InstalledModItemViewModel CreateItem(InstalledMod mod) => new(mod, ToggleAsync, DeleteAsync)
+    private InstalledModItemViewModel CreateItem(InstalledMod mod)
     {
-        IsDetailed = IsDetailedView,
-        NexusDomain = _settings.Current.NexusGameDomain
-    };
+        var installation = _shell.Game.Selected;
+        var source = installation is null ? null : _sources.Get(installation.GameDirectory, mod.PackageId);
+        var match = source is null
+            ? null
+            : new NexusMatch(source.NexusName, source.GameScopedId, source.ModUid);
+
+        return new InstalledModItemViewModel(mod, ToggleAsync, DeleteAsync)
+        {
+            IsDetailed = IsDetailedView,
+            NexusDomain = _settings.Current.NexusGameDomain,
+            NexusMatch = match
+        };
+    }
 
     private async Task RefreshCoreAsync()
     {
@@ -311,6 +324,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     {
         foreach (var item in Mods.ToList())
         {
+            if (item.IsNexusMatched) continue;
+
             var match = await _nexusMatch.ResolveAsync(
                 item.Mod.PackageId,
                 item.Name,

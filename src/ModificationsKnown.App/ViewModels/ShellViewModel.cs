@@ -10,6 +10,7 @@ using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Storage;
 
 namespace ModificationsKnown.App.ViewModels;
 
@@ -84,11 +85,12 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         ];
 
         var nexusMatch = new NexusMatchService(nexus, settings, logger);
+        var sources = new JsonInstalledSourceStore(logger);
         _pages = new Dictionary<string, object>
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings),
-            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, installer, thumbnails, filePicker),
-            ["installed"] = new InstalledViewModel(this, modManager, dialogs, settings, nexusMatch),
+            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, installer, thumbnails, filePicker, sources),
+            ["installed"] = new InstalledViewModel(this, modManager, dialogs, settings, nexusMatch, sources),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger)

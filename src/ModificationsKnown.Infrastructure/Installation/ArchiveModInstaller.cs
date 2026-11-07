@@ -25,7 +25,7 @@ public sealed class ArchiveModInstaller : IModInstaller
         _logger = logger;
     }
 
-    public Task<OperationResult> InstallArchiveAsync(
+    public Task<ModInstallResult> InstallArchiveAsync(
         GameInstallation installation,
         string archivePath,
         IProgress<double>? progress = null,
@@ -37,21 +37,21 @@ public sealed class ArchiveModInstaller : IModInstaller
             cancellationToken);
     }
 
-    private OperationResult InstallCore(
+    private ModInstallResult InstallCore(
         GameInstallation installation,
         string archivePath,
         IProgress<double>? progress,
         CancellationToken cancellationToken)
     {
         if (!File.Exists(archivePath))
-            return OperationResult.Fail("安装包不存在。");
+            return ModInstallResult.Failure("安装包不存在。");
 
         if (!Directory.Exists(installation.PluginsDirectory))
-            return OperationResult.Fail("找不到 BepInEx/plugins 目录。请先安装 BepInEx。");
+            return ModInstallResult.Failure("找不到 BepInEx/plugins 目录。请先安装 BepInEx。");
 
         var extension = Path.GetExtension(archivePath).ToLowerInvariant();
         if (extension is not (".zip" or ".7z" or ".rar" or ".tar" or ".gz" or ".bz2"))
-            return OperationResult.Fail($"不支持的压缩格式：{extension}");
+            return ModInstallResult.Failure($"不支持的压缩格式：{extension}");
 
         Directory.CreateDirectory(AppPaths.TempDirectory);
         var tempRoot = Path.Combine(AppPaths.TempDirectory, "install-" + Guid.NewGuid().ToString("N"));
@@ -69,29 +69,29 @@ public sealed class ArchiveModInstaller : IModInstaller
                 : CollectPackagesFromArchiveRoot(tempRoot, archivePath);
 
             if (packages.Count == 0)
-                return OperationResult.Fail("压缩包里没有找到可安装的 DLL。");
+                return ModInstallResult.Failure("压缩包里没有找到可安装的 DLL。");
 
-            var installed = 0;
-            var messages = new List<string>();
+            var results = new List<InstalledPackageResult>();
 
             foreach (var package in packages)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var result = InstallPackage(installation.PluginsDirectory, package.SourceDirectory, package.PackageName);
                 _logger?.Debug($"Install package result: {package.PackageName} -> {result.Message}");
-                if (result.Success)
-                    installed++;
-                else
-                    messages.Add(result.Message);
+                results.Add(new InstalledPackageResult(package.PackageName, result.Success, result.Message));
 
-                progress?.Report(0.45 + 0.5 * ((installed + messages.Count) / (double)packages.Count));
+                progress?.Report(0.45 + 0.5 * (results.Count / (double)packages.Count));
             }
 
-            return installed > 0
-                ? OperationResult.Ok(messages.Count == 0
+            var installed = results.Count(result => result.Success);
+            var failed = results.Count - installed;
+            var message = installed == 0
+                ? results.FirstOrDefault(result => !result.Success)?.Message ?? "安装失败。"
+                : failed == 0
                     ? $"已安装 {installed} 个模组包。"
-                    : $"已安装 {installed} 个，{messages.Count} 个失败：{string.Join("；", messages)}")
-                : OperationResult.Fail(messages.FirstOrDefault() ?? "安装失败。");
+                    : $"已安装 {installed} 个，{failed} 个失败：{string.Join("；", results.Where(result => !result.Success).Select(result => result.Message))}";
+
+            return new ModInstallResult(installed > 0, message, results);
         }
         catch (OperationCanceledException)
         {
@@ -99,7 +99,7 @@ public sealed class ArchiveModInstaller : IModInstaller
         }
         catch (Exception exception)
         {
-            return OperationResult.Fail($"安装失败：{exception.Message}");
+            return ModInstallResult.Failure($"安装失败：{exception.Message}");
         }
         finally
         {

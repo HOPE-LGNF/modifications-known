@@ -108,3 +108,16 @@ Known limits of the first stage:
 - free-account NXM behavior still needs validation with a real free account
 - if the CDN TLS handshake fails, the NXM panel exposes a “浏览器打开下载直链”
   fallback; the signed URL is not logged
+
+
+## Installed source records (0.1.4 interim)
+
+After a successful Nexus/NXM install, the launcher records the package folder,
+Nexus name, game-scoped id and file id in
+`%APPDATA%\ModificationsKnown\installed-sources.json`. The installed list reads
+this before attempting the name-only Nexus Match fallback.
+
+This is intentionally a sidecar file, not the final package manifest. It lets the
+current release distinguish “installed by the launcher” from “manually placed”
+without pretending that ownership/hash tracking is already complete. Packages
+installed before 0.1.4 have no record and still show `本地模组` until reinstalled.

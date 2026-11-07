@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Common;
+using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
@@ -51,6 +52,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private readonly IModInstaller _installer;
     private readonly ThumbnailService _thumbnails;
     private readonly IFilePickerService _filePicker;
+    private readonly IInstalledSourceStore _sources;
 
     private bool _suppressFileSelection;
     private int _loadVersion;
@@ -121,7 +123,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         IFileDownloader downloader,
         IModInstaller installer,
         ThumbnailService thumbnails,
-        IFilePickerService filePicker)
+        IFilePickerService filePicker,
+        IInstalledSourceStore sources)
     {
         _shell = shell;
         _nexus = nexus;
@@ -130,6 +133,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         _installer = installer;
         _thumbnails = thumbnails;
         _filePicker = filePicker;
+        _sources = sources;
         ApiKeyMissing = string.IsNullOrWhiteSpace(settings.Current.NexusApiKey);
         _shell.Game.Changed += (_, _) => OnPropertyChanged(nameof(CanInstall));
     }
@@ -267,6 +271,13 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             return;
         }
 
+        // Pin the operation inputs. The user may change the selection while a
+        // long download is running; the installation must still belong to the
+        // mod/file that was chosen when the command started.
+        var card = SelectedCard;
+        var version = SelectedVersion;
+        var file = SelectedFile;
+
         IsDownloading = true;
         DownloadStatus = "正在获取下载链接…";
         DownloadProgress = 0;
@@ -274,7 +285,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         {
             var links = await _nexus.GetDownloadLinksAsync(
                 _settings.Current.NexusGameDomain,
-                SelectedVersion.GameScopedId);
+                version.GameScopedId);
 
             var link = links.FirstOrDefault(candidate => Uri.TryCreate(candidate.Url, UriKind.Absolute, out _));
             if (link is null)
@@ -285,7 +296,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
             DownloadStatus = "正在下载…";
             var extension = GetExtension(link.Url);
-            var fileName = $"{PathSafety.GetSafeFileName(SelectedCard.Summary.Name)}-{PathSafety.GetSafeFileName(SelectedVersion.Version)}{extension}";
+            var fileName = $"{PathSafety.GetSafeFileName(card.Summary.Name)}-{PathSafety.GetSafeFileName(version.Version)}{extension}";
             var destination = Path.Combine(AppPaths.DownloadsDirectory, fileName);
 
             var progress = new Progress<double>(value => DownloadProgress = value);
@@ -300,7 +311,16 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             var installed = await _installer.InstallArchiveAsync(installation, destination);
             if (installed.Success)
             {
-                _shell.SetStatus($"「{SelectedCard.Name}」安装完成。", StatusKind.Success);
+                await RecordSourceAsync(
+                    installation,
+                    installed,
+                    card.Summary.Name,
+                    _settings.Current.NexusGameDomain,
+                    card.Summary.GameScopedId,
+                    card.Summary.Id,
+                    card.Summary.Version,
+                    file?.Id);
+                _shell.SetStatus($"「{card.Name}」安装完成。", StatusKind.Success);
                 DownloadStatus = "安装完成。";
             }
             else
@@ -480,6 +500,34 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
             DownloadStatus = "正在安装 NXM 文件…";
             var installed = await _installer.InstallArchiveAsync(installation, destination);
+            if (installed.Success)
+            {
+                var nexusName = $"Nexus 模组 #{nxm.ModId}";
+                string? nexusVersion = null;
+                string modUid = string.Empty;
+                try
+                {
+                    var details = await _nexus.GetModAsync(nxm.GameDomain, nxm.ModId.ToString());
+                    nexusName = details.Summary.Name;
+                    nexusVersion = details.Summary.Version;
+                    modUid = details.Summary.Id;
+                }
+                catch (Exception exception)
+                {
+                    _shell.SetStatus($"安装完成，但读取 Nexus 名称失败：{exception.Message}", StatusKind.Warning);
+                }
+
+                await RecordSourceAsync(
+                    installation,
+                    installed,
+                    nexusName,
+                    nxm.GameDomain,
+                    nxm.ModId.ToString(),
+                    modUid,
+                    nexusVersion,
+                    nxm.FileId.ToString());
+            }
+
             _shell.SetStatus(installed.Message, installed.Success ? StatusKind.Success : StatusKind.Error);
             DownloadStatus = installed.Message;
         }
@@ -498,6 +546,33 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             IsDownloading = false;
             NxmLinkText = string.Empty;
         }
+    }
+
+    private async Task RecordSourceAsync(
+        GameInstallation installation,
+        ModInstallResult result,
+        string nexusName,
+        string gameDomain,
+        string gameScopedId,
+        string modUid,
+        string? version,
+        string? fileId)
+    {
+        var sources = result.Packages
+            .Where(package => package.Success)
+            .Select(package => new InstalledSource(
+                installation.GameDirectory,
+                package.PackageName,
+                nexusName,
+                gameDomain,
+                gameScopedId,
+                modUid,
+                version,
+                fileId,
+                DateTimeOffset.UtcNow))
+            .ToList();
+
+        await _sources.RecordAsync(sources);
     }
 
     [RelayCommand]

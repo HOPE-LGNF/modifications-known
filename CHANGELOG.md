@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.4] - 2026-11-07
+
+### Fixed
+
+- Installed packages downloaded through Nexus/NXM are now recorded with their
+  source and shown as “Nexus 模组” instead of falling back to “本地模组”.
+- Source matching is no longer only a name search: the installer result carries
+  the actual package names, and those are recorded after install.
+- Normal Nexus download inputs (mod/file/version) are pinned at command start so
+  changing selection during a long download cannot attach the wrong source.
+
+### Notes
+
+- Existing installs made before this version have no source record; reinstall
+  once to populate it.
+- This is a sidecar record, not the final in-package manifest. The full manifest
+  and managed/unmanaged split are the next architecture step.
+
+
 ## [0.1.3] - 2026-11-07
 
 ### Fixed

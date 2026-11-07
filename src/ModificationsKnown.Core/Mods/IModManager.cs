@@ -25,7 +25,7 @@ public interface IModInstaller
     /// Installs a downloaded archive into BepInEx/plugins. Implementations must
     /// reject path traversal and must not leave a half-installed package behind.
     /// </summary>
-    Task<OperationResult> InstallArchiveAsync(
+    Task<ModInstallResult> InstallArchiveAsync(
         GameInstallation installation,
         string archivePath,
         IProgress<double>? progress = null,
