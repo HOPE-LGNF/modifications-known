@@ -28,6 +28,7 @@ public sealed class NexusAccountStatusTests
 
         var status = await client.GetAccountStatusAsync();
 
+        Assert.Equal(42, status.UserId);
         Assert.True(status.IsPremium);
         Assert.False(status.IsSupporter);
         Assert.Equal(88, status.HourlyRemaining);

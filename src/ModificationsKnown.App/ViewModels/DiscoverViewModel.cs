@@ -123,6 +123,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private string _nxmRegistrationHint = "尚未注册 NXM 链接。";
 
     private string? _nxmFallbackUrl;
+    private PendingFreeDownload? _pendingFreeDownload;
 
     public DiscoverViewModel(
         IAppShell shell,
@@ -347,10 +348,25 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         }
         catch (NexusApiException exception)
         {
+            if (exception.StatusCode == 403)
+            {
+                _pendingFreeDownload = new PendingFreeDownload(
+                    installation,
+                    _settings.Current.NexusGameDomain,
+                    long.TryParse(card.Summary.GameScopedId, out var mg) ? mg : 0,
+                    long.TryParse(file?.Id, out var fi) ? fi : 0,
+                    card.Name,
+                    card.Summary.Version,
+                    card.Summary.Id,
+                    file?.Id);
+                DownloadStatus = "普通 API Key 无法获取直链。已打开 Nexus 文件页，请完成 Slow download / Mod manager download，MK 会继续。";
+                OpenNexusFilePage();
+                _shell.SetStatus(DownloadStatus, StatusKind.Warning);
+                return;
+            }
+
             _shell.SetStatus(exception.Message, StatusKind.Error);
-            DownloadStatus = exception.StatusCode == 403
-                ? "普通 API Key 无法获取直链：请点“浏览器下载”，下载完成后点“安装本地文件”。"
-                : "下载链接不可用；请使用“在 Nexus 打开”。";
+            DownloadStatus = "下载链接不可用；请使用“在 Nexus 打开”。";
         }
         catch (Exception exception)
         {
@@ -436,7 +452,35 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             return;
         }
 
-        if (_shell.Game.Selected is not { } installation)
+        if (nxm.UserId is { } nxmUserId)
+        {
+            try
+            {
+                var account = await _nexus.GetAccountStatusAsync();
+                if (account.UserId is { } accountUserId && accountUserId != nxmUserId)
+                {
+                    const string message = "这个 NXM 链接属于另一个 Nexus 账号，已拒绝。请用当前账号重新获取链接。";
+                    _shell.SetStatus(message, StatusKind.Error);
+                    DownloadStatus = message;
+                    return;
+                }
+            }
+            catch (NexusApiException exception)
+            {
+                _shell.SetStatus(exception.Message, StatusKind.Error);
+                DownloadStatus = exception.Message;
+                return;
+            }
+        }
+
+        var pending = _pendingFreeDownload;
+        var matchesPending = pending is not null
+            && pending.GameDomain.Equals(nxm.GameDomain, StringComparison.OrdinalIgnoreCase)
+            && pending.ModId == nxm.ModId
+            && pending.FileId == nxm.FileId;
+
+        GameInstallation? installation = matchesPending ? pending!.Installation : _shell.Game.Selected;
+        if (installation is null)
         {
             _shell.SetStatus("请先选择游戏安装。", StatusKind.Warning);
             return;
@@ -447,6 +491,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             _shell.SetStatus("当前游戏没有安装 BepInEx，无法安装模组。", StatusKind.Warning);
             return;
         }
+
+        if (matchesPending) _pendingFreeDownload = null;
 
         IsDownloading = true;
         HasNxmFallback = false;
@@ -489,19 +535,22 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             _nxmFallbackUrl = null;
 
             DownloadStatus = "正在读取 Nexus 元数据…";
-            var nexusName = $"Nexus 模组 #{nxm.ModId}";
-            string? nexusVersion = null;
-            var modUid = string.Empty;
-            try
+            var nexusName = matchesPending ? pending!.NexusName : $"Nexus 模组 #{nxm.ModId}";
+            var nexusVersion = matchesPending ? pending!.Version : null;
+            var modUid = matchesPending ? pending!.ModUid : string.Empty;
+            if (!matchesPending)
             {
-                var details = await _nexus.GetModAsync(nxm.GameDomain, nxm.ModId.ToString());
-                nexusName = details.Summary.Name;
-                nexusVersion = details.Summary.Version;
-                modUid = details.Summary.Id;
-            }
-            catch (Exception exception)
-            {
-                _shell.SetStatus($"读取 Nexus 名称失败：{exception.Message}", StatusKind.Warning);
+                try
+                {
+                    var details = await _nexus.GetModAsync(nxm.GameDomain, nxm.ModId.ToString());
+                    nexusName = details.Summary.Name;
+                    nexusVersion = details.Summary.Version;
+                    modUid = details.Summary.Id;
+                }
+                catch (Exception exception)
+                {
+                    _shell.SetStatus($"读取 Nexus 名称失败：{exception.Message}", StatusKind.Warning);
+                }
             }
 
             DownloadStatus = "正在安装 NXM 文件…";
@@ -714,6 +763,16 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             _shell.SetStatus($"读取文件版本失败：{exception.Message}", StatusKind.Error);
         }
     }
+
+    private sealed record PendingFreeDownload(
+        GameInstallation Installation,
+        string GameDomain,
+        long ModId,
+        long FileId,
+        string NexusName,
+        string? Version,
+        string ModUid,
+        string? FileIdString);
 
     private static string GetExtension(string url)
     {

@@ -18,6 +18,7 @@ public sealed class NxmLinkParserTests
         Assert.Equal(123456, link.FileId);
         Assert.Equal("abc+def/ghi", link.Key);
         Assert.Equal(1893456000, link.Expires);
+        Assert.Equal(42, link.UserId);
         Assert.True(link.HasKey);
     }
 

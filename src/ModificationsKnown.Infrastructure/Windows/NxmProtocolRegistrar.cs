@@ -33,7 +33,7 @@ public sealed class NxmProtocolRegistrar
             command);
     }
 
-    public OperationResult Register()
+    public OperationResult Register(bool overwriteExisting = false)
     {
         if (!OperatingSystem.IsWindows()) return OperationResult.Fail("NXM 协议注册只支持 Windows。");
 
@@ -45,17 +45,37 @@ public sealed class NxmProtocolRegistrar
 
         var expected = ExpectedCommand();
         var existing = ReadCommand();
+        var existingIsOwnShape = !string.IsNullOrWhiteSpace(existing)
+                                 && existing.EndsWith(ExpectedArguments, StringComparison.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(existing)
             && !string.Equals(existing, expected, StringComparison.OrdinalIgnoreCase))
         {
-            return OperationResult.Fail(
-                $"nxm:// 已被其他程序占用：{existing}。请先在系统中移除该关联，再重试。");
+            if (!overwriteExisting)
+            {
+                return OperationResult.Fail(
+                    $"nxm:// 已被占用：{existing}。确认后可以覆盖；其他程序的关联会先备份。");
+            }
         }
 
         try
         {
             using var key = Registry.CurrentUser.CreateSubKey(ProtocolKey)
                             ?? throw new InvalidOperationException("无法创建 HKCU nxm 注册表项。");
+
+            if (!string.IsNullOrWhiteSpace(existing)
+                && !existingIsOwnShape
+                && !string.Equals(existing, expected, StringComparison.OrdinalIgnoreCase))
+            {
+                key.SetValue("MKPreviousCommand", existing);
+                var previousIcon = ReadIcon();
+                if (!string.IsNullOrWhiteSpace(previousIcon))
+                    key.SetValue("MKPreviousIcon", previousIcon);
+            }
+            else
+            {
+                key.DeleteValue("MKPreviousCommand", throwOnMissingValue: false);
+                key.DeleteValue("MKPreviousIcon", throwOnMissingValue: false);
+            }
             key.SetValue(string.Empty, "URL:NXM Protocol");
             key.SetValue("URL Protocol", string.Empty);
 
@@ -87,6 +107,26 @@ public sealed class NxmProtocolRegistrar
 
         try
         {
+            using var key = Registry.CurrentUser.OpenSubKey(ProtocolKey, writable: true);
+            var previousCommand = key?.GetValue("MKPreviousCommand")?.ToString();
+            if (!string.IsNullOrWhiteSpace(previousCommand))
+            {
+                using (var command = key!.CreateSubKey(@"shell\open\command"))
+                    command.SetValue(string.Empty, previousCommand);
+
+                var previousIcon = key.GetValue("MKPreviousIcon")?.ToString();
+                if (!string.IsNullOrWhiteSpace(previousIcon))
+                {
+                    using var icon = key.CreateSubKey("DefaultIcon");
+                    icon.SetValue(string.Empty, previousIcon);
+                }
+
+                key.DeleteValue("MKPreviousCommand", throwOnMissingValue: false);
+                key.DeleteValue("MKPreviousIcon", throwOnMissingValue: false);
+                NotifyShell();
+                return OperationResult.Ok("已取消当前关联，并恢复之前的 NXM handler。");
+            }
+
             Registry.CurrentUser.DeleteSubKeyTree(ProtocolKey, throwOnMissingSubKey: false);
             NotifyShell();
             return OperationResult.Ok("已取消 nxm:// 关联。");
@@ -101,6 +141,21 @@ public sealed class NxmProtocolRegistrar
         $"\"{ExecutablePath()}\" {ExpectedArguments}";
 
     private static string? ExecutablePath() => Environment.ProcessPath;
+
+    private static string? ReadIcon()
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(ProtocolKey + @"\DefaultIcon");
+            return key?.GetValue(string.Empty)?.ToString();
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private static string? ReadCommand()
     {

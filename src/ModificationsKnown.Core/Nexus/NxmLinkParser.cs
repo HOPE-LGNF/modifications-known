@@ -64,6 +64,7 @@ public static class NxmLinkParser
 
         string? key = null;
         long? expires = null;
+        long? userId = null;
 
         foreach (var part in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
@@ -85,6 +86,11 @@ public static class NxmLinkParser
 
                 expires = parsedExpiry;
             }
+            else if (string.Equals(name, "user_id", StringComparison.OrdinalIgnoreCase))
+            {
+                if (long.TryParse(queryValue, out var parsedUser) && parsedUser > 0)
+                    userId = parsedUser;
+            }
         }
 
         if (key is not null && expires is null)
@@ -99,7 +105,7 @@ public static class NxmLinkParser
             return false;
         }
 
-        link = new NxmLink(uri.Host.ToLowerInvariant(), modId, fileId, key, expires);
+        link = new NxmLink(uri.Host.ToLowerInvariant(), modId, fileId, key, expires, userId);
         return true;
     }
 }

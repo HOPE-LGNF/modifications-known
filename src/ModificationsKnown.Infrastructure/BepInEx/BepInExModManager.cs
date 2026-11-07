@@ -126,9 +126,10 @@ public sealed class BepInExModManager : IModManager
         }
 
         _logger?.Debug($"Scanned {mods.Count} package(s), {mods.Count(mod => mod.IsEnabled)} enabled, {mods.Count(mod => mod.IsManaged)} managed");
+        // Keep the list order stable when the user toggles a package. Sorting by
+        // enabled state would make the row jump to the bottom after every click.
         return mods
-            .OrderByDescending(mod => mod.IsEnabled)
-            .ThenBy(mod => mod.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(mod => mod.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 

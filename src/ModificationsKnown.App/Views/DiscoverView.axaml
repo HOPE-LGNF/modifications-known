@@ -54,6 +54,7 @@
         <Grid Grid.Row="2" ColumnDefinitions="380,*" ColumnSpacing="14">
             <Grid RowDefinitions="*,Auto">
                 <ListBox Name="ModList"
+                         Classes="mod-list"
                          ItemsSource="{Binding Mods}"
                          SelectedItem="{Binding SelectedCard, Mode=TwoWay}"
                          SelectionChanged="OnModSelectionChanged"

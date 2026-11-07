@@ -131,6 +131,7 @@ public sealed record NexusDownloadLink(string Name, string Url);
 
 public sealed record NexusAccountStatus(
     string? Name,
+    long? UserId,
     bool IsPremium,
     bool IsSupporter,
     long? DailyRemaining,

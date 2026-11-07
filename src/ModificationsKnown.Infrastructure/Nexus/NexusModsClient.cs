@@ -340,6 +340,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
                       ?? throw new NexusApiException("Nexus 返回了空的账号信息。");
             return new NexusAccountStatus(
                 dto.Name,
+                dto.UserId,
                 dto.IsPremium,
                 dto.IsSupporter,
                 ReadHeader(response, "x-rl-daily-remaining"),
@@ -678,6 +679,9 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
 
     private sealed class ValidationDto
     {
+        [JsonPropertyName("user_id")]
+        public long UserId { get; init; }
+
         [JsonPropertyName("name")]
         public string? Name { get; init; }
 

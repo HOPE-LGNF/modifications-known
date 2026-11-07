@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.3] - 2026-11-08
+
+### Added
+
+- Vortex-style free-download handoff: a 403 from the direct download-link API
+  now parks the selected mod/file as a pending download, opens the Nexus file
+  page, and resumes when the NXM link arrives through the registered protocol.
+- NXM `user_id` is parsed and compared with the validated Nexus account; links
+  issued for another account are rejected.
+- NXM registration now supports confirmed overwrite. A foreign handler's
+  command/icon is backed up and restored on unregister; an old MK handler is
+  simply replaced.
+- Turning off “删除确认” now asks for confirmation and reverts to enabled if the
+  user cancels.
+
+### Fixed
+
+- Installed-package ordering no longer moves disabled mods to the bottom after a
+  toggle; order is stable by package name.
+- Discover result cards now stretch inside the ListBox item, removing the empty
+  selection-container gap shown in the screenshot.
+
+
 ## [0.2.2] - 2026-11-08
 
 ### Added

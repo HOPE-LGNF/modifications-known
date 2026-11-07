@@ -10,7 +10,8 @@ public sealed record NxmLink(
     long ModId,
     long FileId,
     string? Key,
-    long? Expires)
+    long? Expires,
+    long? UserId = null)
 {
     public bool HasKey => !string.IsNullOrWhiteSpace(Key) && Expires is not null;
 

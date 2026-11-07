@@ -141,6 +141,17 @@
             <Setter Property="BorderThickness" Value="0" />
         </Style>
 
+        <Style Selector="ListBox.mod-list ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+
+        <Style Selector="ListBox.mod-list ListBoxItem:selected">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
         <Style Selector="ListBox.nav ListBoxItem">
             <Setter Property="Padding" Value="0" />
             <Setter Property="Margin" Value="0,2" />

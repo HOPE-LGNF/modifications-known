@@ -19,6 +19,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private readonly IFilePickerService _filePicker;
     private readonly IAppLogger _logger;
     private readonly NxmProtocolRegistrar _nxmRegistrar;
+    private readonly IUserDialogService _dialogs;
+    private bool _loadingSettings;
 
     [ObservableProperty]
     private string _gamePath = string.Empty;
@@ -56,6 +58,12 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private string _accountStatus = "尚未检查账号类型。";
 
+    partial void OnConfirmBeforeDeleteChanged(bool value)
+    {
+        if (_loadingSettings || value) return;
+        _ = WarnAboutDisablingDeleteConfirmationAsync();
+    }
+
     public SettingsViewModel(
         IAppShell shell,
         IAppSettingsService settings,
@@ -63,7 +71,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         INexusModsClient nexus,
         IFilePickerService filePicker,
         IAppLogger logger,
-        NxmProtocolRegistrar nxmRegistrar)
+        NxmProtocolRegistrar nxmRegistrar,
+        IUserDialogService dialogs)
     {
         _shell = shell;
         _settings = settings;
@@ -72,6 +81,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         _filePicker = filePicker;
         _logger = logger;
         _nxmRegistrar = nxmRegistrar;
+        _dialogs = dialogs;
         LoadFromSettings();
         RefreshNxmStatus();
     }
@@ -227,11 +237,39 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     }
 
     [RelayCommand]
-    private void RegisterNxmProtocol()
+    private async Task RegisterNxmProtocolAsync()
     {
-        var result = _nxmRegistrar.Register();
+        var status = _nxmRegistrar.GetStatus();
+        var hasOtherHandler = !status.RegisteredForCurrentExecutable
+                              && !string.IsNullOrWhiteSpace(status.CurrentCommand);
+
+        if (hasOtherHandler)
+        {
+            var confirmed = await _dialogs.ConfirmAsync(
+                "覆盖 NXM 关联",
+                $"当前 nxm:// 由以下程序处理：\n{status.CurrentCommand}\n\n是否让 MK 覆盖它？其他程序的关联会先备份，取消注册时尝试恢复。",
+                "覆盖",
+                "取消");
+            if (!confirmed) return;
+        }
+
+        var result = _nxmRegistrar.Register(overwriteExisting: hasOtherHandler);
         _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
         RefreshNxmStatus();
+    }
+
+    private async Task WarnAboutDisablingDeleteConfirmationAsync()
+    {
+        var proceed = await _dialogs.ConfirmAsync(
+            "关闭删除确认",
+            "关闭后，删除模组将不再弹出二次确认，误删无法从 MK 内恢复。\n\n建议保持开启。",
+            "仍然关闭",
+            "保持开启");
+        if (proceed) return;
+
+        _loadingSettings = true;
+        ConfirmBeforeDelete = true;
+        _loadingSettings = false;
     }
 
     [RelayCommand]
@@ -276,11 +314,20 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
 
     private void LoadFromSettings()
     {
-        GamePath = _settings.Current.GamePath ?? string.Empty;
-        NexusApiKey = _settings.Current.NexusApiKey;
-        NexusDomain = _settings.Current.NexusGameDomain;
-        PageSize = _settings.Current.PageSize;
-        IncludeAdultMods = _settings.Current.IncludeAdultMods;
-        ConfirmBeforeDelete = _settings.Current.ConfirmBeforeDelete;
+        _loadingSettings = true;
+        try
+        {
+            GamePath = _settings.Current.GamePath ?? string.Empty;
+            NexusApiKey = _settings.Current.NexusApiKey;
+            NexusDomain = _settings.Current.NexusGameDomain;
+            PageSize = _settings.Current.PageSize;
+            IncludeAdultMods = _settings.Current.IncludeAdultMods;
+            ConfirmBeforeDelete = _settings.Current.ConfirmBeforeDelete;
+        }
+        finally
+        {
+            _loadingSettings = false;
+        }
     }
+
 }
