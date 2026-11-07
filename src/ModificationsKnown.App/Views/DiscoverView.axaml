@@ -45,41 +45,6 @@
                             Command="{Binding OpenSettingsCommand}" />
                 </Grid>
             </Border>
-            <Border Background="{DynamicResource SurfaceBrush}"
-                    BorderBrush="{DynamicResource BorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="12,10">
-                <StackPanel Spacing="7">
-                    <TextBlock Text="NXM 链接测试（第一阶段）"
-                               FontSize="12"
-                               FontWeight="SemiBold" />
-                    <TextBlock Text="从 Nexus 文件页点击“Mod manager download”后，把浏览器生成的 nxm:// 链接粘贴到下面。当前版本不注册系统协议，只验证解析和下载。"
-                               Classes="caption"
-                               TextWrapping="Wrap" />
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBox Text="{Binding NxmLinkText, Mode=TwoWay}"
-                                 Watermark="nxm://scavprototype/mods/.../files/...?key=...&amp;expires=..." />
-                        <Button Grid.Column="1"
-                                Classes="Primary"
-                                Content="处理 NXM"
-                                Command="{Binding ProcessNxmCommand}" />
-                    </Grid>
-                    <Button Classes="Ghost"
-                            Content="浏览器打开下载直链"
-                            IsVisible="{Binding HasNxmFallback}"
-                            Command="{Binding OpenNxmDownloadInBrowserCommand}"
-                            HorizontalAlignment="Left" />
-                    <ProgressBar IsVisible="{Binding IsDownloading}"
-                                 Minimum="0"
-                                 Maximum="100"
-                                 Value="{Binding DownloadProgress}"
-                                 Height="5" />
-                    <TextBlock Text="{Binding DownloadStatus}"
-                               Classes="caption"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
             <TextBlock Text="{Binding ResultSummary}"
                        Classes="muted"
                        FontSize="12" />
@@ -268,15 +233,27 @@
                                             Content="在 Nexus 打开"
                                             Command="{Binding OpenNexusCommand}" />
                                 </Grid>
-                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                     <Button Classes="Ghost"
-                                            Content="浏览器下载（免费账号）"
+                                            Content="通过浏览器 NXM 下载"
+                                            IsEnabled="{Binding NxmRegistered}"
+                                            ToolTip.Tip="{Binding NxmRegistrationHint}"
+                                            ToolTip.ShowOnDisabled="True"
                                             Command="{Binding OpenNexusFilePageCommand}" />
                                     <Button Grid.Column="1"
                                             Classes="Ghost"
-                                            Content="安装已下载文件"
-                                            Command="{Binding InstallLocalArchiveCommand}" />
+                                            Content="注册 NXM"
+                                            IsVisible="{Binding NxmNotRegistered}"
+                                            Command="{Binding OpenSettingsCommand}" />
                                 </Grid>
+                                <TextBlock Text="{Binding NxmRegistrationHint}"
+                                           Classes="caption"
+                                           TextWrapping="Wrap" />
+                                <Button Classes="Ghost"
+                                        Content="浏览器打开下载直链"
+                                        IsVisible="{Binding HasNxmFallback}"
+                                        Command="{Binding OpenNxmDownloadInBrowserCommand}"
+                                        HorizontalAlignment="Left" />
                                 <ProgressBar IsVisible="{Binding IsDownloading}"
                                              Minimum="0"
                                              Maximum="100"

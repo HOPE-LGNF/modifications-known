@@ -33,12 +33,27 @@
                                Classes="muted"
                                FontSize="12"
                                TextWrapping="Wrap" />
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                        <TextBlock Text="API Key" Classes="muted" VerticalAlignment="Center" />
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                            <TextBlock Text="API Key" Classes="muted" />
+                            <Border Width="16" Height="16"
+                                    CornerRadius="8"
+                                    Background="{DynamicResource SurfaceAltBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    ToolTip.Tip="MK 用 API Key 读取 Nexus 的模组、文件和下载授权；只保存在本机，不会发送给第三方。">
+                                <TextBlock Text="?"
+                                           FontSize="10"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                            </Border>
+                        </StackPanel>
                         <TextBox Grid.Column="1"
                                  Text="{Binding NexusApiKey, Mode=TwoWay}"
                                  PasswordChar="●"
                                  Watermark="粘贴 Nexus 个人 API Key" />
+                        <Button Grid.Column="2" Classes="Ghost" Content="获取 API Key" Command="{Binding OpenApiKeyPageCommand}" />
                     </Grid>
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                         <TextBlock Text="游戏域" Classes="muted" VerticalAlignment="Center" />
@@ -78,7 +93,22 @@
 
             <Border Classes="card">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="浏览器集成（NXM）" Classes="h2" />
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <TextBlock Text="浏览器集成（NXM）" Classes="h2" />
+                        <Border Width="16" Height="16"
+                                CornerRadius="8"
+                                Background="{DynamicResource SurfaceAltBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="注册后，浏览器里的 Mod manager download 会把 nxm:// 链接交给 MK；免费账号靠它获取下载授权，而不是仅凭 API Key。">
+                            <TextBlock Text="?"
+                                       FontSize="10"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                        </Border>
+                    </StackPanel>
                     <TextBlock Text="注册后，Nexus 页面点击“Mod manager download”会通过 nxm:// 回到启动器。只写入当前用户 HKCU，不需要管理员权限；已存在其他 handler 时会拒绝覆盖。"
                                Classes="muted"
                                FontSize="12"

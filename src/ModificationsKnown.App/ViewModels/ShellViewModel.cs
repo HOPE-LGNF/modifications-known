@@ -92,8 +92,8 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _pages = new Dictionary<string, object>
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings),
-            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, filePicker, sources),
-            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources),
+            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar),
+            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar)

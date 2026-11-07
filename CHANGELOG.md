@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.2.2] - 2026-11-08
+
+### Added
+
+- API Key row now has a “获取 API Key” shortcut and a help tooltip explaining MK's use of the key.
+- NXM section has a help tooltip and explicit “注册 NXM 链接” guidance.
+- Installed page: bulk enable/disable, search, and “安装已下载文件” moved here.
+- NXM browser-download button is disabled until the protocol is registered and
+  links to Settings when it is not.
+- Installed page now uses a checkbox labelled “启用” instead of a toggle button;
+  disabled mod names are rendered in the secondary color.
+
+### Changed
+
+- Removed the first-stage NXM paste/test box from the Discover page; NXM now
+  enters only through the registered protocol, `--nxm`, or forwarded single-instance.
+- Renamed the browser download action to “通过浏览器 NXM 下载”.
+- Removed the green/yellow enabled/disabled badges.
+
+### Docs
+
+- Added `docs/AUTO_UPDATE.md` with automatic-update feasibility and sequencing.
+
+
 ## [0.2.1] - 2026-11-08
 
 ### Added

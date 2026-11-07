@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ModificationsKnown.App.Views.InstalledView">
-    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
+    <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12">
 
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10">
             <StackPanel Spacing="3">
@@ -23,12 +23,20 @@
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <Button Classes="Ghost" Content="{Binding ViewModeButtonText}" Command="{Binding ToggleViewModeCommand}" />
+                <Button Classes="Ghost" Content="全部启用" Command="{Binding EnableAllCommand}" />
+                <Button Classes="Ghost" Content="全部禁用" Command="{Binding DisableAllCommand}" />
+                <Button Classes="Ghost" Content="安装已下载文件" Command="{Binding InstallLocalArchiveCommand}" />
                 <Button Classes="Ghost" Content="打开插件目录" Command="{Binding OpenPluginsFolderCommand}" />
                 <Button Content="重新扫描" Command="{Binding RefreshCommand}" />
             </StackPanel>
         </Grid>
 
-        <Border Grid.Row="1"
+        <TextBox Grid.Row="1"
+                 Text="{Binding SearchText, Mode=TwoWay}"
+                 Watermark="搜索已安装模组…"
+                 Margin="0,2,0,0" />
+
+        <Border Grid.Row="2"
                 IsVisible="{Binding BepInExMissing}"
                 Background="{DynamicResource AccentSoftBrush}"
                 BorderBrush="{DynamicResource WarningBrush}"
@@ -40,7 +48,7 @@
                        TextWrapping="Wrap" />
         </Border>
 
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="8">
                     <ProgressBar IsIndeterminate="True"
@@ -66,7 +74,14 @@
                                                 <TextBlock Text="{Binding Name}"
                                                            FontSize="14"
                                                            FontWeight="SemiBold"
-                                                           TextTrimming="CharacterEllipsis" />
+                                                           TextTrimming="CharacterEllipsis"
+                                                           IsVisible="{Binding IsEnabled}" />
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="14"
+                                                           FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           IsVisible="{Binding IsDisabled}" />
                                                 <TextBlock Text="{Binding Version}" Classes="caption" VerticalAlignment="Center" />
                                                 <Border Background="{DynamicResource SurfaceAltBrush}"
                                                         BorderBrush="{DynamicResource BorderBrush}"
@@ -81,22 +96,6 @@
                                                         CornerRadius="4"
                                                         Padding="5,2">
                                                     <TextBlock Text="{Binding ManagementLabel}" FontSize="9" Classes="muted" />
-                                                </Border>
-                                                <Border IsVisible="{Binding Mod.IsEnabled}"
-                                                        Background="{DynamicResource AccentSoftBrush}"
-                                                        BorderBrush="{DynamicResource AccentBrush}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="4"
-                                                        Padding="5,2">
-                                                    <TextBlock Text="已启用" FontSize="9" Foreground="{DynamicResource AccentBrush}" />
-                                                </Border>
-                                                <Border IsVisible="{Binding IsDisabled}"
-                                                        Background="{DynamicResource SurfaceAltBrush}"
-                                                        BorderBrush="{DynamicResource BorderBrush}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="4"
-                                                        Padding="5,2">
-                                                    <TextBlock Text="已禁用" FontSize="9" Foreground="{DynamicResource WarningBrush}" />
                                                 </Border>
                                             </StackPanel>
                                             <StackPanel IsVisible="{Binding IsDetailed}" Spacing="3">
@@ -113,6 +112,9 @@
                                             </StackPanel>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <CheckBox Content="启用"
+                                                      IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                      VerticalAlignment="Center" />
                                             <Button Classes="Ghost"
                                                     Content="接管"
                                                     IsVisible="{Binding CanAdopt}"
@@ -121,9 +123,6 @@
                                                     Content="Nexus"
                                                     IsVisible="{Binding IsNexusMatched}"
                                                     Command="{Binding OpenNexusCommand}" />
-                                            <Button Classes="Ghost"
-                                                    Content="{Binding ToggleText}"
-                                                    Command="{Binding ToggleCommand}" />
                                             <Button Classes="Danger"
                                                     Content="卸载"
                                                     IsVisible="{Binding CanDelete}"

@@ -11,6 +11,7 @@ using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
 using ModificationsKnown.Infrastructure.Storage;
+using ModificationsKnown.Infrastructure.Windows;
 
 namespace ModificationsKnown.App.ViewModels;
 
@@ -51,8 +52,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private readonly IFileDownloader _downloader;
     private readonly ModOperationService _operations;
     private readonly ThumbnailService _thumbnails;
-    private readonly IFilePickerService _filePicker;
     private readonly IInstalledSourceStore _sources;
+    private readonly NxmProtocolRegistrar _nxmRegistrar;
 
     private bool _suppressFileSelection;
     private int _loadVersion;
@@ -109,10 +110,17 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private string _downloadStatus = string.Empty;
 
     [ObservableProperty]
-    private string _nxmLinkText = string.Empty;
+    private bool _hasNxmFallback;
 
     [ObservableProperty]
-    private bool _hasNxmFallback;
+    private bool _nxmRegistered;
+
+    public bool NxmNotRegistered => !NxmRegistered;
+
+    partial void OnNxmRegisteredChanged(bool value) => OnPropertyChanged(nameof(NxmNotRegistered));
+
+    [ObservableProperty]
+    private string _nxmRegistrationHint = "尚未注册 NXM 链接。";
 
     private string? _nxmFallbackUrl;
 
@@ -123,8 +131,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         IFileDownloader downloader,
         ModOperationService operations,
         ThumbnailService thumbnails,
-        IFilePickerService filePicker,
-        IInstalledSourceStore sources)
+        IInstalledSourceStore sources,
+        NxmProtocolRegistrar nxmRegistrar)
     {
         _shell = shell;
         _nexus = nexus;
@@ -132,8 +140,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         _downloader = downloader;
         _operations = operations;
         _thumbnails = thumbnails;
-        _filePicker = filePicker;
         _sources = sources;
+        _nxmRegistrar = nxmRegistrar;
         ApiKeyMissing = string.IsNullOrWhiteSpace(settings.Current.NexusApiKey);
         _shell.Game.Changed += (_, _) => OnPropertyChanged(nameof(CanInstall));
     }
@@ -165,6 +173,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     public Task OnActivatedAsync()
     {
         ApiKeyMissing = !HasApiKey;
+        RefreshNxmStatus();
         return Mods.Count > 0 ? Task.CompletedTask : LoadPageAsync();
     }
 
@@ -354,48 +363,28 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         }
     }
 
-    [RelayCommand]
-    private async Task InstallLocalArchiveAsync()
+    private void RefreshNxmStatus()
     {
-        if (_shell.Game.Selected is not { } installation)
-        {
-            _shell.SetStatus("请先选择游戏安装。", StatusKind.Warning);
-            return;
-        }
-
-        if (!installation.HasBepInEx)
-        {
-            _shell.SetStatus("当前游戏没有安装 BepInEx，无法安装模组。", StatusKind.Warning);
-            return;
-        }
-
-        var path = await _filePicker.PickArchiveAsync();
-        if (string.IsNullOrWhiteSpace(path)) return;
-
-        IsDownloading = true;
-        DownloadStatus = "正在安装本地压缩包…";
-        DownloadProgress = 0;
-        try
-        {
-            var result = await _operations.InstallArchiveAsync(installation, path);
-            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
-            DownloadStatus = result.Message;
-        }
-        catch (Exception exception)
-        {
-            _shell.SetStatus($"安装失败：{exception.Message}", StatusKind.Error);
-            DownloadStatus = "安装失败。";
-        }
-        finally
-        {
-            IsDownloading = false;
-        }
+        var status = _nxmRegistrar.GetStatus();
+        NxmRegistered = status.RegisteredForCurrentExecutable;
+        NxmRegistrationHint = !status.Supported
+            ? "当前平台不支持 NXM 协议注册。"
+            : status.RegisteredForCurrentExecutable
+                ? "NXM 已注册，可以打开浏览器文件页并使用 Mod manager download。"
+                : string.IsNullOrWhiteSpace(status.CurrentCommand)
+                    ? "还未注册 NXM 链接。请到设置 → 浏览器集成（NXM）注册。"
+                    : $"nxm:// 当前由其他程序处理：{status.CurrentCommand}";
     }
 
     [RelayCommand]
     private void OpenNexusFilePage()
     {
         if (SelectedCard is null) return;
+        if (!NxmRegistered)
+        {
+            _shell.SetStatus("还未注册 NXM 链接。请到设置 → 浏览器集成（NXM）注册。", StatusKind.Warning);
+            return;
+        }
 
         var domain = _settings.Current.NexusGameDomain;
         var url = $"https://www.nexusmods.com/{domain}/mods/{SelectedCard.Summary.GameScopedId}?tab=files";
@@ -410,12 +399,6 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         {
             _shell.SetStatus($"打开浏览器失败：{exception.Message}", StatusKind.Error);
         }
-    }
-
-    [RelayCommand]
-    private async Task ProcessNxmAsync()
-    {
-        await HandleNxmLinkAsync(NxmLinkText);
     }
 
     public async Task HandleNxmLinkAsync(string raw)
@@ -559,7 +542,6 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         finally
         {
             IsDownloading = false;
-            NxmLinkText = string.Empty;
         }
     }
 

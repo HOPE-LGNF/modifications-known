@@ -36,6 +36,8 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
         OnPropertyChanged(nameof(NexusUrl));
     }
 
+    private readonly Func<InstalledMod, Task> _toggle;
+
     public InstalledModItemViewModel(
         InstalledMod mod,
         Func<InstalledMod, Task> toggle,
@@ -44,6 +46,7 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
         Func<InstalledMod, Task> adopt)
     {
         Mod = mod;
+        _toggle = toggle;
         ToggleCommand = new AsyncRelayCommand(() => toggle(Mod));
         UninstallCommand = new AsyncRelayCommand(() => uninstall(Mod));
         DeleteWholeCommand = new AsyncRelayCommand(() => deleteWhole(Mod));
@@ -58,9 +61,17 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
 
     public string State => Mod.StateLabel;
 
-    public bool IsDisabled => !Mod.IsEnabled;
+    public bool IsEnabled
+    {
+        get => Mod.IsEnabled;
+        set
+        {
+            if (value != Mod.IsEnabled)
+                _ = _toggle(Mod);
+        }
+    }
 
-    public string ToggleText => Mod.IsEnabled ? "禁用" : "启用";
+    public bool IsDisabled => !Mod.IsEnabled;
 
     public string PackagePath => Mod.DirectoryPath;
 
@@ -129,6 +140,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly IAppSettingsService _settings;
     private readonly NexusMatchService _nexusMatch;
     private readonly IInstalledSourceStore _sources;
+    private readonly IFilePickerService _filePicker;
+    private readonly List<InstalledModItemViewModel> _allItems = [];
     private int _refreshGeneration;
 
     [ObservableProperty]
@@ -155,6 +168,11 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private bool _isCompactView;
 
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    partial void OnSearchTextChanged(string value) => ApplyFilter();
+
     public bool IsDetailedView => !IsCompactView;
 
     public string ViewModeButtonText => IsCompactView ? "详细列表" : "紧凑列表";
@@ -164,7 +182,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         OnPropertyChanged(nameof(IsDetailedView));
         OnPropertyChanged(nameof(ViewModeButtonText));
 
-        foreach (var item in Mods)
+        foreach (var item in _allItems)
             item.IsDetailed = !value;
     }
 
@@ -174,7 +192,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         IUserDialogService dialogs,
         IAppSettingsService settings,
         NexusMatchService nexusMatch,
-        IInstalledSourceStore sources)
+        IInstalledSourceStore sources,
+        IFilePickerService filePicker)
     {
         _shell = shell;
         _operations = operations;
@@ -182,6 +201,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         _settings = settings;
         _nexusMatch = nexusMatch;
         _sources = sources;
+        _filePicker = filePicker;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
     }
 
@@ -205,7 +225,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             if (installation is null)
             {
                 if (generation != _refreshGeneration) return;
-                Mods.Clear();
+                _allItems.Clear();
+                ApplyFilter();
                 HasGame = false;
                 BepInExMissing = false;
                 EmptyMessage = "尚未选择游戏安装。请先在设置中检测游戏。";
@@ -222,7 +243,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             if (!installation.HasPluginsDirectory)
             {
                 if (generation != _refreshGeneration) return;
-                Mods.Clear();
+                _allItems.Clear();
+                ApplyFilter();
                 EmptyMessage = "没有找到 BepInEx/plugins。请先安装 BepInEx。";
                 CountLabel = "0";
                 EnabledLabel = "0";
@@ -236,10 +258,11 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 || !PathEquals(_shell.Game.Selected?.GameDirectory, installation.GameDirectory))
                 return;
 
-            Mods.Clear();
+            _allItems.Clear();
             foreach (var mod in mods)
-                Mods.Add(CreateItem(mod));
+                _allItems.Add(CreateItem(mod));
 
+            ApplyFilter();
             CountLabel = mods.Count.ToString();
             EnabledLabel = mods.Count(mod => mod.IsEnabled).ToString();
             EmptyMessage = mods.Count == 0
@@ -432,9 +455,98 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         };
     }
 
+    private void ApplyFilter()
+    {
+        var query = SearchText.Trim();
+        var filtered = string.IsNullOrWhiteSpace(query)
+            ? _allItems
+            : _allItems.Where(item =>
+                    item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                    || item.PackagePath.Contains(query, StringComparison.OrdinalIgnoreCase)
+                    || item.SourceLabel.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+        Mods.Clear();
+        foreach (var item in filtered)
+            Mods.Add(item);
+
+        if (_allItems.Count > 0 && filtered.Count == 0)
+            EmptyMessage = "没有匹配当前搜索的模组。";
+        else if (_allItems.Count > 0)
+            EmptyMessage = string.Empty;
+    }
+
+    [RelayCommand]
+    private async Task InstallLocalArchiveAsync()
+    {
+        if (IsBusy) return;
+        if (_shell.Game.Selected is not { } installation || !installation.HasPluginsDirectory)
+        {
+            _shell.SetStatus("请先选择已安装 BepInEx 的游戏。", StatusKind.Warning);
+            return;
+        }
+
+        var path = await _filePicker.PickArchiveAsync();
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        IsBusy = true;
+        try
+        {
+            var result = await _operations.InstallArchiveAsync(installation, path);
+            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            await RefreshCoreAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task EnableAllAsync()
+    {
+        await SetAllEnabledAsync(true);
+    }
+
+    [RelayCommand]
+    private async Task DisableAllAsync()
+    {
+        await SetAllEnabledAsync(false);
+    }
+
+    private async Task SetAllEnabledAsync(bool enabled)
+    {
+        if (IsBusy) return;
+        var installation = _shell.Game.Selected;
+        if (installation is null) return;
+
+        IsBusy = true;
+        try
+        {
+            var failures = new List<string>();
+            foreach (var item in _allItems.ToList())
+            {
+                if (item.Mod.IsEnabled == enabled) continue;
+                var result = await _operations.SetEnabledAsync(installation, item.Mod, enabled);
+                if (!result.Success) failures.Add($"{item.Name}: {result.Message}");
+            }
+
+            _shell.SetStatus(
+                failures.Count == 0
+                    ? (enabled ? "已启用全部模组。" : "已禁用全部模组。")
+                    : $"部分操作失败：{string.Join("；", failures)}",
+                failures.Count == 0 ? StatusKind.Success : StatusKind.Warning);
+            await RefreshCoreAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     private async Task MatchNexusAsync(int generation)
     {
-        foreach (var item in Mods.ToList())
+        foreach (var item in _allItems.ToList())
         {
             if (generation != _refreshGeneration) return;
             if (item.IsNexusMatched) continue;
