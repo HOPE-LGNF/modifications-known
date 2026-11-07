@@ -1,0 +1,104 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ModificationsKnown.App.Views.SettingsView">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="14" MaxWidth="860" HorizontalAlignment="Left">
+
+            <Border Classes="card">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="游戏与安装" Classes="h2" />
+                    <TextBlock Text="启动器会优先读取 Steam 的 appmanifest；也可以手动指定 .exe 或游戏目录。正式版与试玩版可以同时存在。"
+                               Classes="muted"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                        <TextBox Text="{Binding GamePath, Mode=TwoWay}"
+                                 Watermark="例如 D:\SteamLibrary\steamapps\common\Casualties Unknown" />
+                        <Button Grid.Column="1" Content="选文件" Command="{Binding BrowseGameCommand}" />
+                        <Button Grid.Column="2" Content="选目录" Command="{Binding BrowseGameFolderCommand}" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="Primary" Content="检测此路径" Command="{Binding DetectGameCommand}" />
+                        <TextBlock Text="检测成功后会更新上方的游戏选择。"
+                                   Classes="caption"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Nexus Mods" Classes="h2" />
+                    <TextBlock Text="API Key 只保存在本机 AppData 的 settings.json 中，不会写入日志。免费账号可能无法直接生成下载链接，此时请使用“在 Nexus 打开”。"
+                               Classes="muted"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                        <TextBlock Text="API Key" Classes="muted" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding NexusApiKey, Mode=TwoWay}"
+                                 PasswordChar="●"
+                                 Watermark="粘贴 Nexus 个人 API Key" />
+                    </Grid>
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <TextBlock Text="游戏域" Classes="muted" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding NexusDomain, Mode=TwoWay}"
+                                 Watermark="scavprototype" />
+                        <Button Grid.Column="2" Content="测试连接" Command="{Binding TestNexusCommand}" />
+                    </Grid>
+                    <TextBlock Text="{Binding ConnectionStatus}"
+                               Classes="caption"
+                               TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="Auto,160,Auto,120,Auto,*" ColumnSpacing="10">
+                        <TextBlock Text="每页数量" Classes="muted" VerticalAlignment="Center" />
+                        <NumericUpDown Grid.Column="1"
+                                       Value="{Binding PageSize, Mode=TwoWay}"
+                                       Minimum="1"
+                                       Maximum="100"
+                                       Increment="1" />
+                        <TextBlock Grid.Column="2" Text="包含成人内容" Classes="muted" VerticalAlignment="Center" />
+                        <ToggleSwitch Grid.Column="3"
+                                      IsChecked="{Binding IncludeAdultMods, Mode=TwoWay}"
+                                      OnContent="是"
+                                      OffContent="否" />
+                        <TextBlock Grid.Column="4"
+                                   Text="默认关闭；开启后搜索结果会包含成人模组。"
+                                   Classes="caption"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="行为与日志" Classes="h2" />
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                        <TextBlock Text="删除确认" Classes="muted" VerticalAlignment="Center" />
+                        <ToggleSwitch Grid.Column="1"
+                                      IsChecked="{Binding ConfirmBeforeDelete, Mode=TwoWay}"
+                                      OnContent="开启"
+                                      OffContent="关闭" />
+                        <Button Grid.Column="2" Classes="Ghost" Content="打开日志目录" Command="{Binding OpenLogsCommand}" />
+                    </Grid>
+                    <TextBlock Text="{Binding SettingsPath}"
+                               Classes="caption"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding LogDirectory}"
+                               Classes="mono"
+                               FontSize="10"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                <Button Classes="Primary" Content="保存设置" Command="{Binding SaveCommand}" />
+                <TextBlock Text="修改后需要保存；API Key 测试会先使用当前输入。"
+                           Classes="caption"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

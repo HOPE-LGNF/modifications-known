@@ -1,0 +1,14 @@
+bin/
+obj/
+publish/
+artifacts/
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+*.log
+*.tmp
+*.part
+TestResults/
+coverage/

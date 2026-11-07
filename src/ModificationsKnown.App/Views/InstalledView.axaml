@@ -1,0 +1,102 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ModificationsKnown.App.Views.InstalledView">
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
+
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <StackPanel Spacing="3">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="已安装模组" Classes="h2" />
+                    <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="5" Padding="7,2">
+                        <TextBlock Text="{Binding CountLabel, StringFormat='{}{0} 个包'}"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource AccentBrush}" />
+                    </Border>
+                    <TextBlock Text="{Binding EnabledLabel, StringFormat='已启用 {0}'}"
+                               Classes="caption"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Text="{Binding PluginsPath}"
+                           Classes="mono"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button Classes="Ghost" Content="打开插件目录" Command="{Binding OpenPluginsFolderCommand}" />
+                <Button Content="重新扫描" Command="{Binding RefreshCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="1"
+                IsVisible="{Binding BepInExMissing}"
+                Background="{DynamicResource AccentSoftBrush}"
+                BorderBrush="{DynamicResource WarningBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="12,9">
+            <TextBlock Text="当前游戏没有 BepInEx/plugins。模组发现可以浏览，但安装按钮不会工作。"
+                       FontSize="12"
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <Grid Grid.Row="2">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="8">
+                    <ProgressBar IsIndeterminate="True"
+                                 Height="3"
+                                 IsVisible="{Binding IsBusy}"
+                                 Margin="0,0,0,4" />
+                    <TextBlock Text="{Binding EmptyMessage}"
+                               Classes="muted"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding EmptyMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <ItemsControl ItemsSource="{Binding Mods}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="10"
+                                        Padding="14,12"
+                                        Margin="0,0,0,7">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                        <StackPanel Spacing="3">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="14"
+                                                           FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Version}" Classes="caption" VerticalAlignment="Center" />
+                                                <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="4" Padding="5,2">
+                                                    <TextBlock Text="{Binding State}" FontSize="9" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding PackagePath}"
+                                                       Classes="mono"
+                                                       FontSize="10"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <TextBlock Text="{Binding PluginLabel}" Classes="caption" />
+                                                <TextBlock Text="{Binding DependencyLabel}" Classes="caption" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Button Classes="Ghost"
+                                                    Content="{Binding ToggleText}"
+                                                    Command="{Binding ToggleCommand}" />
+                                            <Button Classes="Danger"
+                                                    Content="删除"
+                                                    IsVisible="{Binding CanDelete}"
+                                                    Command="{Binding DeleteCommand}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

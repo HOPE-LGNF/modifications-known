@@ -1,0 +1,251 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ModificationsKnown.App.Views.DiscoverView">
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
+
+        <!-- Search / sort / refresh -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+            <TextBox Name="SearchBox"
+                     Text="{Binding SearchText, Mode=TwoWay}"
+                     Watermark="搜索模组名称"
+                     KeyDown="OnSearchKeyDown" />
+            <ComboBox Grid.Column="1"
+                      Width="130"
+                      SelectedIndex="{Binding SortIndex, Mode=TwoWay}">
+                <ComboBoxItem>推荐</ComboBoxItem>
+                <ComboBoxItem>下载量</ComboBoxItem>
+                <ComboBoxItem>最新</ComboBoxItem>
+                <ComboBoxItem>最近更新</ComboBoxItem>
+            </ComboBox>
+            <Button Grid.Column="2"
+                    Content="搜索"
+                    Command="{Binding SearchCommand}" />
+            <Button Grid.Column="3"
+                    Classes="Ghost"
+                    Content="刷新"
+                    Command="{Binding RefreshCommand}" />
+        </Grid>
+
+        <!-- API key / result summary -->
+        <StackPanel Grid.Row="1" Spacing="8">
+            <Border IsVisible="{Binding ApiKeyMissing}"
+                    Background="{DynamicResource AccentSoftBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12,9">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="尚未配置 Nexus API Key。公开列表可以匿名浏览；文件列表和下载链接需要 API Key。"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="1"
+                            Classes="Ghost"
+                            Content="去设置"
+                            Command="{Binding OpenSettingsCommand}" />
+                </Grid>
+            </Border>
+            <TextBlock Text="{Binding ResultSummary}"
+                       Classes="muted"
+                       FontSize="12" />
+        </StackPanel>
+
+        <!-- Result list + detail -->
+        <Grid Grid.Row="2" ColumnDefinitions="380,*" ColumnSpacing="14">
+            <Grid RowDefinitions="*,Auto">
+                <ListBox Name="ModList"
+                         ItemsSource="{Binding Mods}"
+                         SelectedItem="{Binding SelectedCard, Mode=TwoWay}"
+                         SelectionChanged="OnModSelectionChanged"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource SurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    Padding="10"
+                                    Margin="0,0,0,8">
+                                <Grid ColumnDefinitions="64,*" ColumnSpacing="10">
+                                    <Border Width="64" Height="64"
+                                            CornerRadius="7"
+                                            Background="{DynamicResource SurfaceAltBrush}"
+                                            ClipToBounds="True">
+                                        <Image Source="{Binding Thumbnail}"
+                                               Stretch="UniformToFill" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Spacing="3">
+                                        <TextBlock Text="{Binding Name}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="13"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Author}"
+                                                   Classes="muted"
+                                                   FontSize="10" />
+                                        <TextBlock Text="{Binding SummaryText}"
+                                                   Classes="muted"
+                                                   FontSize="10"
+                                                   MaxHeight="28"
+                                                   TextWrapping="Wrap"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Orientation="Horizontal" Spacing="7">
+                                            <TextBlock Text="{Binding Version}"
+                                                       FontSize="10"
+                                                       Foreground="{DynamicResource AccentBrush}" />
+                                            <TextBlock Text="{Binding Category}"
+                                                       FontSize="10"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Text="{Binding Downloads}"
+                                                       FontSize="10"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,8,0,0">
+                    <Button Classes="Ghost" Content="‹ 上一页" Command="{Binding PreviousPageCommand}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding PageLabel}"
+                               Classes="caption"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                    <Button Grid.Column="2" Classes="Ghost" Content="下一页 ›" Command="{Binding NextPageCommand}" />
+                </Grid>
+            </Grid>
+
+            <!-- Detail -->
+            <Border Grid.Column="1"
+                    Classes="card"
+                    Padding="0"
+                    ClipToBounds="True">
+                <Grid>
+                    <StackPanel IsVisible="{Binding HasNoSelection}"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="8"
+                                Margin="30">
+                        <TextBlock Text="⌕" FontSize="36" Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Center" />
+                        <TextBlock Text="选择一个模组查看详情"
+                                   Classes="h2"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="搜索结果来自 Nexus Mods；下载和安装会先经过本地校验。"
+                                   Classes="muted"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   MaxWidth="360" />
+                    </StackPanel>
+
+                    <ScrollViewer IsVisible="{Binding HasSelection}" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="14">
+                            <Border Height="210"
+                                    Background="{DynamicResource SurfaceAltBrush}"
+                                    ClipToBounds="True">
+                                <Image Source="{Binding DetailImage}" Stretch="UniformToFill" />
+                            </Border>
+
+                            <StackPanel Margin="18,0,18,0" Spacing="8">
+                                <TextBlock Text="{Binding SelectedCard.Name}"
+                                           FontSize="22"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding SelectedCard.Author}"
+                                           Classes="muted" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="5" Padding="7,3">
+                                        <TextBlock Text="{Binding SelectedCard.Category}" FontSize="10" Foreground="{DynamicResource AccentBrush}" />
+                                    </Border>
+                                    <TextBlock Text="{Binding SelectedCard.Version}" Classes="caption" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding SelectedCard.Downloads}" Classes="caption" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding SelectedCard.FileSize}" Classes="caption" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding Details.DescriptionText}"
+                                           Classes="muted"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           MaxHeight="150"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="18,0" />
+
+                            <StackPanel Margin="18,0,18,0" Spacing="8">
+                                <TextBlock Text="文件" Classes="h2" />
+                                <TextBlock Text="{Binding InstallHint}" Classes="caption" />
+                                <ListBox ItemsSource="{Binding Files}"
+                                         SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         MaxHeight="160">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid ColumnDefinitions="*,Auto" Margin="4,4">
+                                                <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding UploadedLabel}"
+                                                           Classes="caption"
+                                                           Margin="8,0,0,0" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <TextBlock Text="版本" Classes="h2" Margin="0,4,0,0" />
+                                <ListBox ItemsSource="{Binding Versions}"
+                                         SelectedItem="{Binding SelectedVersion, Mode=TwoWay}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         MaxHeight="180">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid ColumnDefinitions="*,Auto" Margin="4,4">
+                                                <StackPanel Spacing="1">
+                                                    <TextBlock Text="{Binding VersionLabel}" FontSize="12" />
+                                                    <TextBlock Text="{Binding Name}" Classes="caption" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <Border Grid.Column="1"
+                                                        Background="{DynamicResource SurfaceAltBrush}"
+                                                        CornerRadius="4"
+                                                        Padding="5,2"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding CategoryLabel}" FontSize="9" Classes="muted" />
+                                                </Border>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
+
+                            <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="18,0" />
+
+                            <StackPanel Margin="18,0,18,18" Spacing="9">
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <Button Classes="Primary"
+                                            Content="下载并安装"
+                                            Command="{Binding DownloadCommand}" />
+                                    <Button Grid.Column="1"
+                                            Classes="Ghost"
+                                            Content="在 Nexus 打开"
+                                            Command="{Binding OpenNexusCommand}" />
+                                </Grid>
+                                <ProgressBar IsVisible="{Binding IsDownloading}"
+                                             Minimum="0"
+                                             Maximum="100"
+                                             Value="{Binding DownloadProgress}"
+                                             Height="6" />
+                                <TextBlock Text="{Binding DownloadStatus}"
+                                           Classes="caption"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,11 @@
+已知改装 / Modifications Known
+Copyright 2026 Modifications Known contributors
+
+This product includes software developed by third parties:
+
+- Avalonia UI — MIT License — https://avaloniaui.net/
+- CommunityToolkit.Mvvm — MIT License — https://github.com/CommunityToolkit/dotnet
+- SharpCompress — MIT License — https://github.com/adamhathcock/sharpcompress
+- .NET — MIT License — https://dotnet.microsoft.com/
+
+The project is licensed under the Apache License, Version 2.0. See LICENSE.

@@ -1,0 +1,119 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ModificationsKnown.App.Views.HomeView">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="18">
+
+            <Border Classes="hero">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="本地模组工作台"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding GameTitle}"
+                                   FontSize="30"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding GameSubtitle}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <TextBlock Text="{Binding GamePath}"
+                                   Classes="mono"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   Margin="0,8,0,0"
+                                   TextTrimming="CharacterEllipsis" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,18,0,0">
+                            <Button Classes="Primary" Content="启动游戏" Command="{Binding LaunchCommand}" />
+                            <Button Classes="Ghost" Content="打开游戏目录" Command="{Binding OpenFolderCommand}" />
+                            <Button Classes="Ghost" Content="重新检测" Command="{Binding RefreshGameCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Spacing="8">
+                        <Border Background="{DynamicResource AccentSoftBrush}"
+                                CornerRadius="8"
+                                Padding="12,7">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="当前版本"
+                                           FontSize="10"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" />
+                                <TextBlock Text="{Binding EditionLabel}"
+                                           FontSize="14"
+                                           Foreground="{DynamicResource AccentBrush}"
+                                           FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="{Binding BepInExLabel}"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Right" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid ColumnDefinitions="*,*,*" Margin="0,2,0,0">
+                <Border Classes="card" Margin="0,0,12,0">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="已安装模组" Classes="muted" FontSize="12" />
+                        <TextBlock Text="{Binding ModCountLabel}" FontSize="36" FontWeight="SemiBold" />
+                        <TextBlock Text="BepInEx/plugins 中的包" Classes="caption" />
+                    </StackPanel>
+                </Border>
+                <Border Classes="card" Margin="0,0,12,0">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="启用中" Classes="muted" FontSize="12" />
+                        <TextBlock Text="{Binding EnabledCountLabel}"
+                                   FontSize="36"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource SuccessBrush}" />
+                        <TextBlock Text="当前会随游戏加载" Classes="caption" />
+                    </StackPanel>
+                </Border>
+                <Border Classes="card">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Nexus 状态" Classes="muted" FontSize="12" />
+                        <TextBlock Text="{Binding NexusLabel}"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Margin="0,8,0,0" />
+                        <TextBlock Text="在设置中配置 API Key" Classes="caption" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <Grid ColumnDefinitions="2*,*">
+                <Border Classes="card" Margin="0,0,12,0">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="当前安装" Classes="h2" />
+                        <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto">
+                            <TextBlock Text="游戏目录" Classes="muted" FontSize="12" />
+                            <TextBlock Grid.Column="1" Text="{Binding GamePath}" Classes="mono" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Row="1" Text="BepInEx" Classes="muted" FontSize="12" Margin="0,7,0,0" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding BepInExLabel}" FontSize="12" Margin="0,7,0,0" />
+                            <TextBlock Grid.Row="2" Text="版本" Classes="muted" FontSize="12" Margin="0,7,0,0" />
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding EditionLabel}" FontSize="12" Margin="0,7,0,0" />
+                        </Grid>
+                        <TextBlock Text="安装或启用模组前，建议先关闭游戏。BepInEx 只会在启动时扫描 DLL。"
+                                   Classes="caption"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="从这里开始" Classes="h2" />
+                        <TextBlock Text="1. 在设置里确认游戏路径和 Nexus API Key。" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                        <TextBlock Text="2. 到「模组发现」浏览并安装模组。" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                        <TextBlock Text="3. 在「已安装」里启用、停用或清理。" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                        <TextBlock Text="所有安装操作都会先校验压缩包路径；删除前默认二次确认。"
+                                   Classes="caption"
+                                   TextWrapping="Wrap"
+                                   Margin="0,4,0,0" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

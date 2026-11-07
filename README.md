@@ -1,0 +1,115 @@
+# 已知改装 / Modifications Known
+
+> 为《未知伤亡》（Casualties Unknown）做一个安静、可靠、本地优先的模组管理器。
+
+**当前版本：0.1.0（基础可用版）**  
+**状态：** 模组浏览、安装、启停、删除、主题与设置已可用；依赖图、版本回滚、崩溃归因和游戏内皮肤仍在路线图中。
+
+## 它是什么
+
+“已知改装”是一个 Windows 桌面启动器，目标是把 CU 的 BepInEx 模组管理做得像成熟游戏启动器一样顺手，但**不替用户隐藏文件系统**：
+
+- 通过 Steam `appmanifest` 识别正式版与试玩版，两个版本可以同时存在。
+- 扫描 `BepInEx/plugins`，把一个文件夹视为一个模组包，多 DLL 模组会整体启停。
+- 支持从 Nexus Mods 浏览、查看文件版本、下载并安装。
+- 安装前校验压缩包路径，拒绝 `..` 和绝对路径；先解压到临时目录，再移动到插件目录。
+- 删除模组前默认二次确认；根目录 DLL 不会被误删。
+- 启动器颜色、背景、强调色全部通过 `DynamicResource` 变量提供，支持基础主题切换。
+- 游戏内皮肤入口保留，但明确标记为“开发中”，当前版本不会修改游戏皮肤目录。
+
+## 截图 / 界面
+
+当前界面包含：
+
+- **概览**：游戏版本、BepInEx 状态、模组数量、快捷启动。
+- **模组发现**：Nexus 搜索、排序、分页、详情、文件与版本选择。
+- **已安装**：本地包扫描、启用/禁用、删除、打开插件目录。
+- **启动器外观**：苔原 / 余烬 / 夜航三套主题变量。
+- **游戏皮肤**：占位页，标注开发中。
+- **设置**：游戏路径、Nexus API Key、游戏域、分页、成人内容过滤、日志目录。
+
+## 环境要求
+
+- Windows 10/11（当前主要目标；代码保留了跨平台结构）
+- .NET 8 SDK
+- 已安装《未知伤亡》与 BepInEx 5（模组功能需要）
+- Nexus Mods 个人 API Key（可选；浏览公开数据可匿名，但下载通常需要）
+
+## 构建
+
+```bash
+dotnet restore
+dotnet build
+dotnet run --project src/ModificationsKnown.App
+```
+
+测试：
+
+```bash
+dotnet test
+```
+
+发布单文件（win-x64）：
+
+```bash
+dotnet publish src/ModificationsKnown.App -c Release \
+  -r win-x64 --self-contained true \
+  -p:PublishSingleFile=true
+```
+
+## Nexus Mods API
+
+本项目使用 Nexus Mods **v3 REST API**（`https://api.nexusmods.com/v3`），使用 `apikey` 请求头认证。API 文档：<https://api-docs.nexusmods.com/>。
+
+在应用内：
+
+1. 打开“设置”。
+2. 粘贴个人 API Key。
+3. 确认游戏域为 `scavprototype`（正式版发布后如域名变化，可在此修改）。
+4. 点击“测试连接”。
+
+安全约定：
+
+- API Key 只保存在本机 `%APPDATA%\ModificationsKnown\settings.json`，不会写入日志。
+- 不要把 API Key 提交到仓库或发给他人。
+- 免费账号可能无法直接生成下载链接；此时使用“在 Nexus 打开”，或配置 Premium 账号。应用会把 403 转成可读提示，不会崩溃。
+
+API v3 目前仍被 Nexus 标注为实验性；所有 DTO 和端点集中在 `Infrastructure/Nexus/NexusModsClient.cs`，后续变更不会扩散到 UI。
+
+## 目录结构
+
+```text
+src/
+  ModificationsKnown.Core/          领域模型、接口、路径安全
+  ModificationsKnown.Infrastructure/ Nexus、Steam、BepInEx、安装器、存储
+  ModificationsKnown.App/            Avalonia UI、ViewModel、主题
+tests/
+  ModificationsKnown.Tests/          路径安全、安装器、扫描器、API 模型测试
+docs/
+  ARCHITECTURE.md                    分层与关键决策
+  NEXUS_API.md                       API 契约与限制
+  ROADMAP.md                         下一阶段计划
+```
+
+## 已知限制
+
+- 搜索使用 Nexus GraphQL 的名称过滤；如果该接口变化，会回退到 v3 当前页过滤。
+- 免费 Nexus 账号的下载链接可能返回 403；这不是应用可以绕过的限制。
+- 尚未实现依赖解析、冲突图、版本回滚、备份和崩溃归因。
+- 游戏内皮肤功能未实现，入口仅作占位。
+- 未实现自动更新；发布流程先由 GitHub Releases 手动完成。
+
+## 设计原则
+
+1. **本地优先**：配置、日志、缓存都在用户目录，不依赖后端服务。
+2. **路径安全**：所有压缩包路径、安装目标、删除目标都做 canonical path 校验。
+3. **不静默覆盖**：安装不会覆盖已有包；失败不会留下半安装目录。
+4. **可解释状态**：每个失败都尽量给出可操作的提示，而不是只显示异常。
+5. **变量化外观**：页面不写死颜色；主题只替换资源。
+6. **先做正确，再做丰富**：先把扫描、启停、安装、删除做可靠，再扩展依赖和版本。
+
+## 许可证
+
+Apache License 2.0。见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+
+第三方依赖保留各自许可证：Avalonia、CommunityToolkit.Mvvm、SharpCompress。
