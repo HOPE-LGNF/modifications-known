@@ -21,6 +21,11 @@ public static class NxmLinkParser
         }
 
         var value = raw.Trim().Trim('"');
+
+        // Links copied from page HTML often contain &amp; instead of &. Treat
+        // the copied attribute as a link, not as XML text.
+        value = value.Replace("&amp;", "&", StringComparison.OrdinalIgnoreCase);
+
         if (value.Length > MaximumLength)
         {
             error = "NXM 链接过长，已拒绝。";

@@ -1,5 +1,7 @@
 using System.Net;
+using System.Security.Authentication;
 using ModificationsKnown.Core.Common;
+using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Network;
 
 namespace ModificationsKnown.Infrastructure.Network;
@@ -9,12 +11,14 @@ public sealed class HttpFileDownloader : IFileDownloader, IDisposable
     private const long MaximumDownloadBytes = 4L * 1024 * 1024 * 1024;
 
     private readonly HttpClient _httpClient;
+    private readonly IAppLogger? _logger;
 
-    public HttpFileDownloader(HttpClient? httpClient = null)
+    public HttpFileDownloader(IAppLogger? logger = null, HttpClient? httpClient = null)
     {
-        _httpClient = httpClient ?? new HttpClient();
+        _logger = logger;
+        _httpClient = httpClient ?? CreateCompatibilityClient();
         _httpClient.Timeout = TimeSpan.FromMinutes(30);
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("ModificationsKnown/0.1.0");
+        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("ModificationsKnown/0.1.3");
     }
 
     public async Task<OperationResult> DownloadAsync(
@@ -36,6 +40,7 @@ public sealed class HttpFileDownloader : IFileDownloader, IDisposable
 
         try
         {
+            _logger?.Info($"Downloading from {uri.Host} (https={uri.Scheme == Uri.UriSchemeHttps})");
             using var response = await _httpClient.GetAsync(
                 uri,
                 HttpCompletionOption.ResponseHeadersRead,
@@ -49,33 +54,38 @@ public sealed class HttpFileDownloader : IFileDownloader, IDisposable
                 return OperationResult.Fail("文件超过 4 GB 上限，已拒绝下载。");
 
             await using var input = await response.Content.ReadAsStreamAsync(cancellationToken);
-            await using var output = new FileStream(
-                temporaryPath,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 128 * 1024,
-                useAsync: true);
-
-            var buffer = new byte[128 * 1024];
             long written = 0;
 
-            while (true)
+            // The output stream MUST be disposed before File.Move. Windows does
+            // not allow renaming a file while a FileShare.None handle is open.
+            await using (var output = new FileStream(
+                             temporaryPath,
+                             FileMode.Create,
+                             FileAccess.Write,
+                             FileShare.None,
+                             bufferSize: 128 * 1024,
+                             useAsync: true))
             {
-                var read = await input.ReadAsync(buffer, cancellationToken);
-                if (read == 0) break;
+                var buffer = new byte[128 * 1024];
 
-                written += read;
-                if (written > MaximumDownloadBytes)
-                    return OperationResult.Fail("文件超过 4 GB 上限，已中止下载。");
+                while (true)
+                {
+                    var read = await input.ReadAsync(buffer, cancellationToken);
+                    if (read == 0) break;
 
-                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                    written += read;
+                    if (written > MaximumDownloadBytes)
+                        return OperationResult.Fail("文件超过 4 GB 上限，已中止下载。");
 
-                if (total is > 0)
-                    progress?.Report(written / (double)total.Value * 100);
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+
+                    if (total is > 0)
+                        progress?.Report(written / (double)total.Value * 100);
+                }
+
+                await output.FlushAsync(cancellationToken);
             }
 
-            await output.FlushAsync(cancellationToken);
             File.Move(temporaryPath, destinationPath, overwrite: true);
             progress?.Report(100);
             return OperationResult.Ok($"已下载 {written / 1024.0 / 1024.0:F1} MB。");
@@ -86,6 +96,13 @@ public sealed class HttpFileDownloader : IFileDownloader, IDisposable
         }
         catch (Exception exception)
         {
+            _logger?.Error($"Download failed from {uri.Host}", exception);
+            if (exception is HttpRequestException { InnerException: AuthenticationException })
+            {
+                return OperationResult.Fail(
+                    $"下载失败：CDN TLS 握手失败（{uri.Host}）。已写入详细日志；若持续出现，请先使用浏览器下载，或检查代理/杀毒软件的 HTTPS 扫描。");
+            }
+
             return OperationResult.Fail($"下载失败：{exception.Message}");
         }
         finally
@@ -102,4 +119,26 @@ public sealed class HttpFileDownloader : IFileDownloader, IDisposable
     }
 
     public void Dispose() => _httpClient.Dispose();
+
+    private static HttpClient CreateCompatibilityClient()
+    {
+        var handler = new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.All,
+            SslOptions =
+            {
+                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13
+            }
+        };
+
+        var client = new HttpClient(handler)
+        {
+            // Some CDN edges behave badly with opportunistic HTTP/2; HTTP/1.1
+            // is enough for archive downloads and is more compatible.
+            DefaultRequestVersion = HttpVersion.Version11,
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
+        };
+
+        return client;
+    }
 }

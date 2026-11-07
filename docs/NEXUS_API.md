@@ -85,6 +85,10 @@ the link through the Discover page or `--nxm`:
 The link is parsed by `NxmLinkParser`. If it contains a `key`, it must also contain
 `expires`; both are treated as short-lived secrets and are never logged.
 
+Links copied from the HTML source may contain `&amp;` instead of `&`; the parser
+normalizes that before reading the query string. The “Start download manually”
+anchor on the website is the easiest link to copy.
+
 For the actual download, the client uses the legacy v1 endpoint:
 
 ```text
@@ -102,3 +106,5 @@ Known limits of the first stage:
 - no single-instance forwarding; launching a second `--nxm` process opens a second
   window
 - free-account NXM behavior still needs validation with a real free account
+- if the CDN TLS handshake fails, the NXM panel exposes a “浏览器打开下载直链”
+  fallback; the signed URL is not logged

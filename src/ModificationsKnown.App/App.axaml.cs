@@ -50,7 +50,7 @@ public class App : Application
         logger.Info("Settings loaded; creating shell");
 
         _nexusClient = new NexusModsClient(() => settings.Current.NexusApiKey, logger);
-        _downloader = new HttpFileDownloader();
+        _downloader = new HttpFileDownloader(logger);
         _thumbnails = new ThumbnailService(logger);
 
         var locator = new SteamGameLocator(settings, logger);

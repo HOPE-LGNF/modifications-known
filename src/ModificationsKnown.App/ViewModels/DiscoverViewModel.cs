@@ -109,6 +109,11 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private string _nxmLinkText = string.Empty;
 
+    [ObservableProperty]
+    private bool _hasNxmFallback;
+
+    private string? _nxmFallbackUrl;
+
     public DiscoverViewModel(
         IAppShell shell,
         INexusModsClient nexus,
@@ -434,6 +439,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         }
 
         IsDownloading = true;
+        HasNxmFallback = false;
+        _nxmFallbackUrl = null;
         DownloadStatus = "正在通过 NXM 获取下载链接…";
         DownloadProgress = 0;
         try
@@ -453,6 +460,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             }
 
             DownloadStatus = "正在下载 NXM 文件…";
+            _nxmFallbackUrl = link.Url;
+            HasNxmFallback = true;
             var extension = GetExtension(link.Url);
             var fileName = $"nxm-{nxm.ModId}-{nxm.FileId}{extension}";
             var destination = Path.Combine(AppPaths.DownloadsDirectory, fileName);
@@ -462,9 +471,12 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             if (!download.Success)
             {
                 _shell.SetStatus(download.Message, StatusKind.Error);
-                DownloadStatus = download.Message;
+                DownloadStatus = download.Message + " 可点“浏览器打开直链”重试。";
                 return;
             }
+
+            HasNxmFallback = false;
+            _nxmFallbackUrl = null;
 
             DownloadStatus = "正在安装 NXM 文件…";
             var installed = await _installer.InstallArchiveAsync(installation, destination);
@@ -485,6 +497,21 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         {
             IsDownloading = false;
             NxmLinkText = string.Empty;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenNxmDownloadInBrowser()
+    {
+        if (string.IsNullOrWhiteSpace(_nxmFallbackUrl)) return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(_nxmFallbackUrl) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            _shell.SetStatus($"打开下载直链失败：{exception.Message}", StatusKind.Error);
         }
     }
 

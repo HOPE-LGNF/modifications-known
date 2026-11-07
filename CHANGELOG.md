@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.3] - 2026-11-07
+
+### Fixed
+
+- Fixed the downloader moving the `.part` file while its `FileStream` was still
+  open; this blocked downloads on Windows. Added a regression test.
+- Fixed NXM parsing of links copied from page HTML: `&amp;` is now normalized to
+  `&`, so `expires` is no longer reported as missing.
+- Added TLS compatibility settings (TLS 1.2/1.3, HTTP/1.1) and detailed inner
+  exception logging for CDN download failures.
+- Added a “浏览器打开下载直链” fallback when a signed CDN URL cannot be fetched by
+  the desktop HTTP stack.
+
+
 ## [0.1.2] - 2026-11-07
 
 ### Added

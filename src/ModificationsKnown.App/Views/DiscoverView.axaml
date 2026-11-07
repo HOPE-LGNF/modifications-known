@@ -65,6 +65,11 @@
                                 Content="处理 NXM"
                                 Command="{Binding ProcessNxmCommand}" />
                     </Grid>
+                    <Button Classes="Ghost"
+                            Content="浏览器打开下载直链"
+                            IsVisible="{Binding HasNxmFallback}"
+                            Command="{Binding OpenNxmDownloadInBrowserCommand}"
+                            HorizontalAlignment="Left" />
                     <ProgressBar IsVisible="{Binding IsDownloading}"
                                  Minimum="0"
                                  Maximum="100"

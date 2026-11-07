@@ -22,6 +22,17 @@ public sealed class NxmLinkParserTests
     }
 
     [Fact]
+    public void AcceptsHtmlEscapedAmpersandsFromCopiedAttribute()
+    {
+        var raw = "nxm://scavprototype/mods/69/files/2797?key=abc&amp;expires=1790000068&amp;user_id=2";
+
+        Assert.True(NxmLinkParser.TryParse(raw, out var link, out var error), error);
+        Assert.NotNull(link);
+        Assert.Equal("abc", link!.Key);
+        Assert.Equal(1790000068, link.Expires);
+    }
+
+    [Fact]
     public void AcceptsPremiumLinkWithoutKey()
     {
         var raw = "nxm://scavprototype/mods/67/files/123456";
