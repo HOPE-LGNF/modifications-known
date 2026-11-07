@@ -114,6 +114,10 @@
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                             <Button Classes="Ghost"
+                                                    Content="接管"
+                                                    IsVisible="{Binding CanAdopt}"
+                                                    Command="{Binding AdoptCommand}" />
+                                            <Button Classes="Ghost"
                                                     Content="Nexus"
                                                     IsVisible="{Binding IsNexusMatched}"
                                                     Command="{Binding OpenNexusCommand}" />

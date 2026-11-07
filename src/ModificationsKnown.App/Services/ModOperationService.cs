@@ -69,6 +69,24 @@ public sealed class ModOperationService
         }
     }
 
+    public async Task<OperationResult> AdoptAsync(
+        GameInstallation installation,
+        InstalledMod mod,
+        PackageSource? source = null,
+        CancellationToken cancellationToken = default)
+    {
+        var gate = GetGate(installation);
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            return await _manager.AdoptAsync(installation, mod, source, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     public async Task<OperationResult> UninstallManagedAsync(
         GameInstallation installation,
         InstalledMod mod,

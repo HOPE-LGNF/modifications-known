@@ -9,7 +9,19 @@ internal static class Program
     public static void Main(string[] args)
     {
         ConsoleSupport.Initialize(args);
-        App.StartupNxmLink = FindNxmArgument(args);
+        var nxm = FindNxmArgument(args);
+
+        using var singleInstance = new SingleInstanceService();
+        if (!singleInstance.IsFirstInstance)
+        {
+            if (!string.IsNullOrWhiteSpace(nxm))
+                singleInstance.TryForward(nxm, TimeSpan.FromSeconds(5));
+            return;
+        }
+
+        singleInstance.StartServer();
+        App.SingleInstance = singleInstance;
+        App.StartupNxmLink = nxm;
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 

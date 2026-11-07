@@ -33,6 +33,9 @@ public sealed class InstalledMod
     /// <summary>Deleting the whole directory is a separate, explicit action.</summary>
     public bool CanDeleteWhole { get; init; } = true;
 
+    /// <summary>An unmanaged package can be converted into a managed package by writing a baseline manifest.</summary>
+    public bool CanAdopt { get; init; }
+
     public bool IsEnabled => Plugins.Any(plugin => plugin.IsEnabled);
 
     public bool HasMixedEnabledState =>

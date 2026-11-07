@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.App.Theming;
 using ModificationsKnown.App.ViewModels;
@@ -19,6 +20,8 @@ namespace ModificationsKnown.App;
 public class App : Application
 {
     public static string? StartupNxmLink { get; set; }
+
+    public static SingleInstanceService? SingleInstance { get; set; }
 
     private NexusModsClient? _nexusClient;
     private HttpFileDownloader? _downloader;
@@ -72,6 +75,21 @@ public class App : Application
             dialogs,
             filePicker,
             _thumbnails);
+
+        SingleInstance?.SetHandler(url =>
+        {
+            Dispatcher.UIThread.Post(async () =>
+            {
+                try
+                {
+                    await shell.HandleNxmLinkAsync(url);
+                }
+                catch (Exception exception)
+                {
+                    logger.Error("Forwarded NXM handling failed", exception);
+                }
+            });
+        });
 
         var window = new MainWindow
         {

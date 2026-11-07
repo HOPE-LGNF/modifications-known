@@ -127,3 +127,28 @@ as a compatibility fallback for packages installed by older builds.
 The manifest is written in staging and moved with the package, so a package and
 its ownership/source record commit together. Manually placed packages have no
 manifest and are treated as unmanaged; they are not removed by “卸载”.
+
+
+## NXM protocol registration (0.2.1)
+
+The launcher can register itself as the `nxm://` handler for the current user:
+
+```text
+HKCU\Software\Classes\nxm
+  (Default)        = URL:NXM Protocol
+  URL Protocol     = (empty)
+  DefaultIcon      = "<exe>",0
+  shell\open\command = "<exe>" --nxm "%1"
+```
+
+Rules:
+
+- registry writes are per-user (`HKCU`), never machine-wide;
+- the launcher refuses to replace an existing handler from another program;
+- unregister only removes the `nxm` key when the command matches this executable;
+- registration is an explicit action in Settings, not a silent first-run default.
+
+When the launcher is already running, the new process forwards the URL over the
+named pipe `ModificationsKnown.Nxm.Pipe` and exits; the first instance dispatches
+it on the UI thread. The pipe payload is the NXM URL (including its short-lived
+key), so it is never written to disk or logs.

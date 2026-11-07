@@ -40,12 +40,14 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
         InstalledMod mod,
         Func<InstalledMod, Task> toggle,
         Func<InstalledMod, Task> uninstall,
-        Func<InstalledMod, Task> deleteWhole)
+        Func<InstalledMod, Task> deleteWhole,
+        Func<InstalledMod, Task> adopt)
     {
         Mod = mod;
         ToggleCommand = new AsyncRelayCommand(() => toggle(Mod));
         UninstallCommand = new AsyncRelayCommand(() => uninstall(Mod));
         DeleteWholeCommand = new AsyncRelayCommand(() => deleteWhole(Mod));
+        AdoptCommand = new AsyncRelayCommand(() => adopt(Mod));
     }
 
     public InstalledMod Mod { get; }
@@ -90,6 +92,8 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
 
     public bool CanDeleteWhole => Mod.CanDeleteWhole;
 
+    public bool CanAdopt => Mod.CanAdopt;
+
     public bool IsManaged => Mod.IsManaged;
 
     public string ManagementLabel => Mod.ManagementLabel;
@@ -113,6 +117,8 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
     public IAsyncRelayCommand UninstallCommand { get; }
 
     public IAsyncRelayCommand DeleteWholeCommand { get; }
+
+    public IAsyncRelayCommand AdoptCommand { get; }
 }
 
 public partial class InstalledViewModel : ObservableObject, IAsyncPage
@@ -300,6 +306,48 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         }
     }
 
+    private async Task AdoptAsync(InstalledMod mod)
+    {
+        if (IsBusy) return;
+        if (!mod.CanAdopt)
+        {
+            _shell.SetStatus("这个包不能接管；只有未托管的普通目录可以生成基线清单。", StatusKind.Warning);
+            return;
+        }
+
+        var confirmed = await _dialogs.ConfirmAsync(
+            "接管为托管模组",
+            $"会把「{mod.Name}」当前目录中的所有文件写入托管清单。\n之后“卸载”会按清单删除未修改文件；用户新增/修改的文件仍会保留。\n\n{mod.DirectoryPath}",
+            "接管",
+            "取消");
+        if (!confirmed) return;
+
+        IsBusy = true;
+        try
+        {
+            var installation = _shell.Game.Selected
+                ?? throw new InvalidOperationException("尚未选择游戏安装。");
+            var sidecar = _sources.Get(installation.GameDirectory, mod.PackageId);
+            var source = sidecar is null
+                ? null
+                : PackageSource.Nexus(
+                    sidecar.NexusName,
+                    sidecar.GameDomain,
+                    sidecar.GameScopedId,
+                    sidecar.ModUid,
+                    sidecar.FileId,
+                    sidecar.Version);
+
+            var result = await _operations.AdoptAsync(installation, mod, source);
+            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            await RefreshCoreAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     private async Task UninstallAsync(InstalledMod mod)
     {
         if (IsBusy) return;
@@ -376,7 +424,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 ? null
                 : new NexusMatch(sidecar.NexusName, sidecar.GameScopedId, sidecar.ModUid);
 
-        return new InstalledModItemViewModel(mod, ToggleAsync, UninstallAsync, DeleteWholeAsync)
+        return new InstalledModItemViewModel(mod, ToggleAsync, UninstallAsync, DeleteWholeAsync, AdoptAsync)
         {
             IsDetailed = IsDetailedView,
             NexusDomain = _settings.Current.NexusGameDomain,

@@ -315,6 +315,48 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
             .ToList() ?? [];
     }
 
+    public async Task<NexusAccountStatus> GetAccountStatusAsync(CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            LegacyBaseAddress + "users/validate.json");
+
+        var apiKey = _apiKeyProvider();
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new NexusApiException("未配置 Nexus API Key。", 401);
+
+        request.Headers.TryAddWithoutValidation("apikey", apiKey.Trim());
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger?.Debug($"Nexus account validate: HTTP {(int)response.StatusCode}");
+
+        if (!response.IsSuccessStatusCode)
+            throw CreateException(response.StatusCode, body);
+
+        try
+        {
+            var dto = JsonSerializer.Deserialize<ValidationDto>(body, JsonOptions)
+                      ?? throw new NexusApiException("Nexus 返回了空的账号信息。");
+            return new NexusAccountStatus(
+                dto.Name,
+                dto.IsPremium,
+                dto.IsSupporter,
+                ReadHeader(response, "x-rl-daily-remaining"),
+                ReadHeader(response, "x-rl-hourly-remaining"));
+        }
+        catch (JsonException exception)
+        {
+            throw new NexusApiException("Nexus 账号信息无法解析。", (int)response.StatusCode, body, exception);
+        }
+    }
+
+    private static long? ReadHeader(HttpResponseMessage response, string name) =>
+        response.Headers.TryGetValues(name, out var values)
+        && long.TryParse(values.FirstOrDefault(), out var value)
+            ? value
+            : null;
+
     public async Task<IReadOnlyList<NexusDownloadLink>> GetNxmDownloadLinksAsync(
         string gameDomain,
         long modId,
@@ -632,6 +674,18 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
 
         [JsonPropertyName("url")]
         public string Url { get; init; } = string.Empty;
+    }
+
+    private sealed class ValidationDto
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; init; }
+
+        [JsonPropertyName("is_premium")]
+        public bool IsPremium { get; init; }
+
+        [JsonPropertyName("is_supporter")]
+        public bool IsSupporter { get; init; }
     }
 
     private sealed class LegacyDownloadLinkDto

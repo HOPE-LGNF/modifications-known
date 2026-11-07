@@ -11,6 +11,7 @@ using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
 using ModificationsKnown.Infrastructure.Storage;
+using ModificationsKnown.Infrastructure.Windows;
 
 namespace ModificationsKnown.App.ViewModels;
 
@@ -87,6 +88,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         var nexusMatch = new NexusMatchService(nexus, settings, logger);
         var sources = new JsonInstalledSourceStore(logger);
         var operations = new ModOperationService(modManager, installer);
+        var nxmRegistrar = new NxmProtocolRegistrar();
         _pages = new Dictionary<string, object>
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings),
@@ -94,7 +96,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
-            ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger)
+            ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar)
         };
 
         SelectedNavigation = NavigationItems[0];

@@ -129,6 +129,25 @@ public sealed record NexusFileVersion(
 
 public sealed record NexusDownloadLink(string Name, string Url);
 
+public sealed record NexusAccountStatus(
+    string? Name,
+    bool IsPremium,
+    bool IsSupporter,
+    long? DailyRemaining,
+    long? HourlyRemaining)
+{
+    public string TierLabel => IsPremium ? "Premium" : "免费账号";
+
+    public string QuotaLabel
+    {
+        get
+        {
+            if (DailyRemaining is null && HourlyRemaining is null) return "配额未知";
+            return $"剩余：{HourlyRemaining?.ToString() ?? "?"}/小时，{DailyRemaining?.ToString() ?? "?"}/天";
+        }
+    }
+}
+
 public sealed record NexusSearchResult(
     IReadOnlyList<NexusModSummary> Items,
     int Page,

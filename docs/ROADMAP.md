@@ -12,6 +12,8 @@
 - [x] Settings, logging and path pickers
 - [x] Unit tests for path safety, archive install, scanner and game detection
 - [x] Game skin entry (placeholder, explicitly marked 开发中)
+- [x] Adopt unmanaged package with a baseline manifest
+- [x] Windows NXM protocol registration and single-instance forwarding
 - [x] Browser-download + local-archive fallback for free Nexus accounts
 - [x] Detailed `--console` logging
 - [x] Nexus source matching for installed packages

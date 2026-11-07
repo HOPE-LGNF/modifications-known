@@ -59,6 +59,12 @@ public interface INexusModsClient
     /// Legacy v1 download-link lookup used by NXM links. The NXM link supplies
     /// mod/file ids and, for free accounts, a short-lived key/expires pair.
     /// </summary>
+    /// <summary>
+    /// v1 /users/validate.json. Used to show the account tier explicitly instead
+    /// of inferring it from a 403.
+    /// </summary>
+    Task<NexusAccountStatus> GetAccountStatusAsync(CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<NexusDownloadLink>> GetNxmDownloadLinksAsync(
         string gameDomain,
         long modId,

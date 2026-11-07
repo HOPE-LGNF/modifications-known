@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
@@ -8,6 +9,12 @@ namespace ModificationsKnown.Infrastructure.BepInEx;
 
 public sealed class BepInExModManager : IModManager
 {
+    private static readonly JsonSerializerOptions ManifestJsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly IAppLogger? _logger;
 
     public BepInExModManager(IAppLogger? logger = null)
@@ -29,6 +36,15 @@ public sealed class BepInExModManager : IModManager
         CancellationToken cancellationToken = default)
     {
         return Task.Run(() => SetEnabledCore(installation, mod, enabled, cancellationToken), cancellationToken);
+    }
+
+    public Task<OperationResult> AdoptAsync(
+        GameInstallation installation,
+        InstalledMod mod,
+        PackageSource? source = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() => AdoptCore(installation, mod, source, cancellationToken), cancellationToken);
     }
 
     public Task<OperationResult> UninstallManagedAsync(
@@ -82,6 +98,7 @@ public sealed class BepInExModManager : IModManager
                 Manifest = manifest.Manifest,
                 ManifestState = manifest.State,
                 ManifestError = manifest.Error,
+                CanAdopt = manifest.State == PackageManifestState.Unmanaged,
                 MissingFiles = comparison.Missing,
                 ModifiedFiles = comparison.Modified,
                 UnexpectedFiles = comparison.Unexpected,
@@ -103,7 +120,8 @@ public sealed class BepInExModManager : IModManager
                 DirectoryPath = pluginsDirectory,
                 Plugins = [ReadPlugin(file)],
                 ManifestState = PackageManifestState.Unmanaged,
-                CanDeleteWhole = false
+                CanDeleteWhole = false,
+                CanAdopt = false
             });
         }
 
@@ -272,6 +290,61 @@ public sealed class BepInExModManager : IModManager
             }
 
             return OperationResult.Fail($"切换失败：{exception.Message}");
+        }
+    }
+
+    private OperationResult AdoptCore(
+        GameInstallation installation,
+        InstalledMod mod,
+        PackageSource? source,
+        CancellationToken cancellationToken)
+    {
+        if (!IsSafePackage(installation, mod, allowRoot: false, out var error))
+            return OperationResult.Fail(error);
+
+        if (mod.ManifestState != PackageManifestState.Unmanaged)
+            return OperationResult.Fail("只有未托管包可以接管；已托管或清单异常的包不能重复接管。");
+
+        try
+        {
+            var files = new List<PackageFile>();
+            foreach (var file in EnumeratePackageFiles(mod.DirectoryPath)
+                         .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var relative = Path.GetRelativePath(mod.DirectoryPath, file).Replace('\\', '/');
+                if (!PackageManifestReader.IsSafeRelativePath(relative))
+                    return OperationResult.Fail($"拒绝接管：发现不安全路径 {relative}");
+
+                files.Add(new PackageFile(relative, new FileInfo(file).Length, HashFile(file)));
+            }
+
+            if (!files.Any(file => file.RelativePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+                return OperationResult.Fail("这个目录没有 DLL，不能接管为模组包。");
+
+            var manifest = new PackageManifest
+            {
+                LocalId = Guid.NewGuid().ToString("N"),
+                PackageName = mod.PackageId,
+                InstalledAt = DateTimeOffset.UtcNow,
+                Source = source ?? PackageSource.Local,
+                Files = files
+            };
+
+            var manifestDirectory = Path.Combine(mod.DirectoryPath, PackageManifest.DirectoryName);
+            Directory.CreateDirectory(manifestDirectory);
+            var manifestPath = Path.Combine(manifestDirectory, PackageManifest.FileName);
+            var temporaryPath = manifestPath + ".tmp";
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(manifest, ManifestJsonOptions));
+            File.Move(temporaryPath, manifestPath, overwrite: true);
+
+            _logger?.Info($"Adopted unmanaged package: {mod.PackageId} ({files.Count} files)");
+            return OperationResult.Ok($"已接管「{mod.PackageId}」，记录 {files.Count} 个文件。");
+        }
+        catch (Exception exception)
+        {
+            _logger?.Warn($"Adopt failed for {mod.PackageId}: {exception.Message}");
+            return OperationResult.Fail($"接管失败：{exception.Message}");
         }
     }
 

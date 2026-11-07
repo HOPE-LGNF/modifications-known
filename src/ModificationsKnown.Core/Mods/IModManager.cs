@@ -16,6 +16,13 @@ public interface IModManager
         CancellationToken cancellationToken = default);
 
     /// <summary>Deletes only manifest-listed, unchanged files; user files are preserved.</summary>
+    /// <summary>Creates a baseline manifest for an existing unmanaged directory.</summary>
+    Task<OperationResult> AdoptAsync(
+        GameInstallation installation,
+        InstalledMod mod,
+        PackageSource? source = null,
+        CancellationToken cancellationToken = default);
+
     Task<OperationResult> UninstallManagedAsync(
         GameInstallation installation,
         InstalledMod mod,

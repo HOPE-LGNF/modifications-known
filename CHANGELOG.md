@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.1] - 2026-11-08
+
+### Added
+
+- “接管”：为未托管目录生成基线清单，记录文件大小与 SHA-256；接管后可正常按清单卸载。接管前会二次确认，并明确只记录当前文件，不追溯历史。
+- NXM protocol registration on Windows (`HKCU\Software\Classes\nxm`), with strict command shape `"<exe>" --nxm "%1"`. Refuses to overwrite another handler, and unregister only removes our own.
+- Single-instance handling: a second launch with `--nxm` forwards the URL over a named pipe to the running window and exits.
+- Settings page section for NXM integration with status and explicit register/unregister buttons.
+- Nexus account check (`/v1/users/validate.json`) showing tier (Premium/free) and
+  remaining rate-limit quota. This makes the free-account question directly
+  observable instead of inferred from a 403.
+
+### Fixed
+
+- Single-instance detection now uses an exclusive lock file instead of a mutex, which behaves consistently across Windows and the Linux test environment.
+- Forwarded NXM is dispatched to the UI thread and routed to the Discover page.
+
+
 ## [0.2.0] - 2026-11-07
 
 ### Added
