@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.6] - 2026-11-08
+
+### Fixed
+
+- The v1 files endpoint returns `{ files: [...] }`, not a bare array. The
+  legacy-file-id resolver now accepts both shapes, which restores the missing
+  `file_id=905` in browser NXM links. Regression test updated.
+- Category changes now clear stale detail state when the selected card is no
+  longer in the filtered list, instead of leaving an image/description without
+  title/tags.
+- Disabled packages no longer show “缺失 N · 新增 N”: `.dll.disabled` is
+  compared as the same logical file for manifest diagnostics. Added regression
+  test.
+- Discover hover now changes the card background itself; ListBox item
+  selection/pointerover backgrounds and focus adorners are transparent.
+
+### Added
+
+- Manual Nexus association dialog with search, candidate list and confirmation;
+  associations persist in `nexus-manual-matches.json`.
+- File/version selection moved into a Flyout (`选择版本`), removing the nested
+  scroll area that stole page scrolling.
+- Manager download flags are shown in the file list.
+
+
 ## [0.2.5] - 2026-11-08
 
 ### Added

@@ -60,7 +60,7 @@ public class App : Application
         var modManager = new BepInExModManager(logger);
         var installer = new ArchiveModInstaller(logger);
         var launcher = new GameLauncher(logger);
-        var dialogs = new UserDialogService(() => desktop.MainWindow);
+        var dialogs = new UserDialogService(() => desktop.MainWindow, _nexusClient);
         var filePicker = new FilePickerService(() => desktop.MainWindow);
 
         var shell = new ShellViewModel(

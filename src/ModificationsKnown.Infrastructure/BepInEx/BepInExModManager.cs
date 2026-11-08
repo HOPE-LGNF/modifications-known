@@ -150,17 +150,31 @@ public sealed class BepInExModManager : IModManager
             .GroupBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
+        // Disabling a BepInEx plugin renames foo.dll to foo.dll.disabled.
+        // That is a state change, not a missing/extra file. Compare logical
+        // paths with the .disabled suffix stripped so the file-state badges do
+        // not turn into "missing N / extra N" after every disable.
         var actual = EnumeratePackageFiles(directory)
-            .Select(path => Path.GetRelativePath(directory, path).Replace('\\', '/'))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Select(path =>
+            {
+                var relative = Path.GetRelativePath(directory, path).Replace('\\', '/');
+                var logical = relative.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+                    ? relative[..^".disabled".Length]
+                    : relative;
+                return new ActualPackageFile(relative, logical, path);
+            })
+            .ToList();
+
+        var actualByLogical = actual
+            .GroupBy(file => file.LogicalRelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
         var missing = new List<string>();
         var modified = new List<string>();
 
         foreach (var file in expected.Values)
         {
-            var fullPath = Path.Combine(directory, file.RelativePath.Replace('/', Path.DirectorySeparatorChar));
-            if (!File.Exists(fullPath))
+            if (!actualByLogical.TryGetValue(file.RelativePath, out var actualFile))
             {
                 missing.Add(file.RelativePath);
                 continue;
@@ -168,8 +182,8 @@ public sealed class BepInExModManager : IModManager
 
             try
             {
-                if (new FileInfo(fullPath).Length != file.Size
-                    || !string.Equals(HashFile(fullPath), file.Sha256, StringComparison.OrdinalIgnoreCase))
+                if (new FileInfo(actualFile.FullPath).Length != file.Size
+                    || !string.Equals(HashFile(actualFile.FullPath), file.Sha256, StringComparison.OrdinalIgnoreCase))
                     modified.Add(file.RelativePath);
             }
             catch
@@ -179,7 +193,8 @@ public sealed class BepInExModManager : IModManager
         }
 
         var unexpected = actual
-            .Where(path => !expected.ContainsKey(path))
+            .Where(file => !expected.ContainsKey(file.LogicalRelativePath))
+            .Select(file => file.RelativePath)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -205,6 +220,8 @@ public sealed class BepInExModManager : IModManager
     private static bool IsDllFile(string path) =>
         path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
         || path.EndsWith(".dll.disabled", StringComparison.OrdinalIgnoreCase);
+
+    private sealed record ActualPackageFile(string RelativePath, string LogicalRelativePath, string FullPath);
 
     private static InstalledPlugin ReadPlugin(string filePath)
     {

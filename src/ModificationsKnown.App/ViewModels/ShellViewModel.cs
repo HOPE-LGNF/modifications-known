@@ -86,6 +86,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         ];
 
         var nexusMatch = new NexusMatchService(nexus, settings, logger);
+        var manualMatches = new NexusManualMatchStore();
         var sources = new JsonInstalledSourceStore(logger);
         var operations = new ModOperationService(modManager, installer);
         var nxmRegistrar = new NxmProtocolRegistrar();
@@ -93,7 +94,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar),
-            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker),
+            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs)

@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using ModificationsKnown.App.Views;
+using ModificationsKnown.Core.Nexus;
 
 namespace ModificationsKnown.App.Services;
 
@@ -9,15 +10,19 @@ public interface IUserDialogService
     Task<bool> ConfirmAsync(string title, string message, string confirmText = "确认", string cancelText = "取消");
 
     Task AlertAsync(string title, string message, string closeText = "知道了");
+
+    Task<NexusMatch?> PickNexusMatchAsync(string gameDomain, string suggestedName);
 }
 
 public sealed class UserDialogService : IUserDialogService
 {
     private readonly Func<Window?> _ownerProvider;
+    private readonly INexusModsClient _nexus;
 
-    public UserDialogService(Func<Window?> ownerProvider)
+    public UserDialogService(Func<Window?> ownerProvider, INexusModsClient nexus)
     {
         _ownerProvider = ownerProvider;
+        _nexus = nexus;
     }
 
     public async Task<bool> ConfirmAsync(
@@ -40,6 +45,15 @@ public sealed class UserDialogService : IUserDialogService
 
         var dialog = new ConfirmDialog(title, message, closeText, string.Empty, showCancel: false);
         await dialog.ShowDialog<bool>(owner);
+    }
+
+    public async Task<NexusMatch?> PickNexusMatchAsync(string gameDomain, string suggestedName)
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var dialog = new LinkNexusDialog(_nexus, gameDomain, suggestedName);
+        return await dialog.ShowDialog<NexusMatch?>(owner);
     }
 }
 

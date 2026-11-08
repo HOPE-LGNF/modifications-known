@@ -326,7 +326,18 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         List<LegacyFileDto> files;
         try
         {
-            files = JsonSerializer.Deserialize<List<LegacyFileDto>>(body, JsonOptions) ?? [];
+            // /v1/.../files.json returns an object with a "files" array, not a
+            // bare array. Accept both shapes so older fixtures/clients keep
+            // working.
+            var envelope = JsonSerializer.Deserialize<LegacyFilesResponse>(body, JsonOptions);
+            if (envelope?.Files is { Count: > 0 })
+            {
+                files = envelope.Files;
+            }
+            else
+            {
+                files = JsonSerializer.Deserialize<List<LegacyFileDto>>(body, JsonOptions) ?? [];
+            }
         }
         catch (JsonException)
         {
@@ -336,15 +347,21 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         static string Normalize(string? value) =>
             string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToLowerInvariant();
 
+        static string NormalizeVersion(string? value)
+        {
+            var normalized = Normalize(value);
+            return normalized.StartsWith('v') ? normalized[1..] : normalized;
+        }
+
         var wantedName = Normalize(name);
-        var wantedVersion = Normalize(version);
+        var wantedVersion = NormalizeVersion(version);
         var candidates = files
             .Where(file => Normalize(file.Name) == wantedName)
             .ToList();
 
         var exact = candidates.FirstOrDefault(file =>
-            Normalize(file.Version) == wantedVersion
-            || Normalize(file.ModVersion) == wantedVersion);
+            NormalizeVersion(file.Version) == wantedVersion
+            || NormalizeVersion(file.ModVersion) == wantedVersion);
         if (exact is not null) return exact.FileId;
 
         if (uploadedAt is { } uploaded)
@@ -364,9 +381,21 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         }
 
         var byVersion = files.FirstOrDefault(file =>
-            Normalize(file.Version) == wantedVersion
-            || Normalize(file.ModVersion) == wantedVersion);
-        return byVersion?.FileId;
+            NormalizeVersion(file.Version) == wantedVersion
+            || NormalizeVersion(file.ModVersion) == wantedVersion);
+        if (byVersion is not null) return byVersion.FileId;
+
+        // Last resort for single-file mods or a unique primary file. Never
+        // guess when several files are equally plausible.
+        if (files.Count == 1) return files[0].FileId;
+        var primaries = files.Where(file => file.IsPrimary).ToList();
+        return primaries.Count == 1 ? primaries[0].FileId : null;
+    }
+
+    private sealed class LegacyFilesResponse
+    {
+        [JsonPropertyName("files")]
+        public List<LegacyFileDto> Files { get; init; } = [];
     }
 
     private sealed class LegacyFileDto

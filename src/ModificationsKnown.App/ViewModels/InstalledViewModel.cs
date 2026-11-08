@@ -43,7 +43,8 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
         Func<InstalledMod, Task> toggle,
         Func<InstalledMod, Task> uninstall,
         Func<InstalledMod, Task> deleteWhole,
-        Func<InstalledMod, Task> adopt)
+        Func<InstalledMod, Task> adopt,
+        Func<InstalledMod, Task> linkNexus)
     {
         Mod = mod;
         _toggle = toggle;
@@ -51,6 +52,7 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
         UninstallCommand = new AsyncRelayCommand(() => uninstall(Mod));
         DeleteWholeCommand = new AsyncRelayCommand(() => deleteWhole(Mod));
         AdoptCommand = new AsyncRelayCommand(() => adopt(Mod));
+        LinkNexusCommand = new AsyncRelayCommand(() => linkNexus(Mod));
     }
 
     public InstalledMod Mod { get; }
@@ -123,6 +125,10 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
         }
     }
 
+    public string FileStateTooltip => !Mod.IsManaged
+        ? "未托管：没有安装清单，不进行文件完整性比对。"
+        : "缺失：清单记录了但磁盘上找不到；修改：大小或 SHA-256 与清单不符；新增：磁盘上有但清单没有。禁用时 DLL 会改名为 .dll.disabled，这不算缺失或新增。";
+
     public IAsyncRelayCommand ToggleCommand { get; }
 
     public IAsyncRelayCommand UninstallCommand { get; }
@@ -130,6 +136,8 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
     public IAsyncRelayCommand DeleteWholeCommand { get; }
 
     public IAsyncRelayCommand AdoptCommand { get; }
+
+    public IAsyncRelayCommand LinkNexusCommand { get; }
 }
 
 public partial class InstalledViewModel : ObservableObject, IAsyncPage
@@ -141,6 +149,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly NexusMatchService _nexusMatch;
     private readonly IInstalledSourceStore _sources;
     private readonly IFilePickerService _filePicker;
+    private readonly NexusManualMatchStore _manualMatches;
     private readonly List<InstalledModItemViewModel> _allItems = [];
     private int _refreshGeneration;
 
@@ -193,7 +202,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         IAppSettingsService settings,
         NexusMatchService nexusMatch,
         IInstalledSourceStore sources,
-        IFilePickerService filePicker)
+        IFilePickerService filePicker,
+        NexusManualMatchStore manualMatches)
     {
         _shell = shell;
         _operations = operations;
@@ -202,6 +212,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         _nexusMatch = nexusMatch;
         _sources = sources;
         _filePicker = filePicker;
+        _manualMatches = manualMatches;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
     }
 
@@ -332,6 +343,28 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         }
     }
 
+    private async Task LinkNexusAsync(InstalledMod mod)
+    {
+        if (IsBusy) return;
+        var installation = _shell.Game.Selected;
+        if (installation is null) return;
+
+        var match = await _dialogs.PickNexusMatchAsync(_settings.Current.NexusGameDomain, mod.Name);
+        if (match is null) return;
+
+        _manualMatches.Set(installation.GameDirectory, mod.PackageId, match);
+        var item = _allItems.FirstOrDefault(candidate =>
+            string.Equals(candidate.Mod.PackageId, mod.PackageId, StringComparison.OrdinalIgnoreCase)
+            && PathEquals(candidate.Mod.DirectoryPath, mod.DirectoryPath));
+        if (item is not null)
+        {
+            item.NexusDomain = _settings.Current.NexusGameDomain;
+            item.NexusMatch = match;
+        }
+
+        _shell.SetStatus($"已关联「{mod.Name}」→ {match.Name}。", StatusKind.Success);
+    }
+
     private async Task AdoptAsync(InstalledMod mod)
     {
         if (IsBusy) return;
@@ -443,14 +476,16 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     {
         var installation = _shell.Game.Selected;
         var sidecar = installation is null ? null : _sources.Get(installation.GameDirectory, mod.PackageId);
+        var manual = installation is null ? null : _manualMatches.Get(installation.GameDirectory, mod.PackageId);
         var source = mod.Source;
-        var match = source is { Provider: "nexus", GameScopedId: not null }
-            ? new NexusMatch(source.NexusName ?? $"Nexus 模组 #{source.GameScopedId}", source.GameScopedId, source.ModUid ?? string.Empty)
-            : sidecar is null
-                ? null
-                : new NexusMatch(sidecar.NexusName, sidecar.GameScopedId, sidecar.ModUid);
+        var match = manual
+            ?? (source is { Provider: "nexus", GameScopedId: not null }
+                ? new NexusMatch(source.NexusName ?? $"Nexus 模组 #{source.GameScopedId}", source.GameScopedId, source.ModUid ?? string.Empty)
+                : sidecar is null
+                    ? null
+                    : new NexusMatch(sidecar.NexusName, sidecar.GameScopedId, sidecar.ModUid));
 
-        return new InstalledModItemViewModel(mod, ToggleAsync, UninstallAsync, DeleteWholeAsync, AdoptAsync)
+        return new InstalledModItemViewModel(mod, ToggleAsync, UninstallAsync, DeleteWholeAsync, AdoptAsync, LinkNexusAsync)
         {
             IsDetailed = IsDetailedView,
             NexusDomain = _settings.Current.NexusGameDomain,

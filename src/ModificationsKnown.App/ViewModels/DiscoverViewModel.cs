@@ -459,18 +459,36 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         var url = $"https://www.nexusmods.com/{domain}/mods/{SelectedCard.Summary.GameScopedId}?tab=files";
 
         // v3 file ids are not the legacy ids the website expects. Resolve the
-        // v1 file id by name/version; if that fails, omit the parameter rather
-        // than opening an unrelated file.
+        // v1 file id by version name first, then by the file name. If neither
+        // matches, omit the parameter rather than opening an unrelated file.
+        long? legacyFileId = null;
         if (SelectedVersion is { } version)
         {
-            var legacyFileId = await _nexus.GetLegacyFileIdAsync(
+            legacyFileId = await _nexus.GetLegacyFileIdAsync(
                 domain,
                 SelectedCard.Summary.GameScopedId,
                 version.Name,
                 version.Version,
                 version.UploadedAt);
-            if (legacyFileId is not null)
-                url += $"&file_id={legacyFileId.Value}";
+        }
+
+        if (legacyFileId is null && SelectedFile is { } file)
+        {
+            legacyFileId = await _nexus.GetLegacyFileIdAsync(
+                domain,
+                SelectedCard.Summary.GameScopedId,
+                file.Name,
+                SelectedVersion?.Version ?? string.Empty,
+                file.LastUploadedAt);
+        }
+
+        if (legacyFileId is not null)
+        {
+            url += $"&file_id={legacyFileId.Value}";
+        }
+        else
+        {
+            _shell.SetStatus("未能解析这个文件的网站 file_id，已打开模组文件页；请手动选择文件。", StatusKind.Warning);
         }
 
         url += "&nmm=1";
@@ -730,10 +748,22 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         return Task.CompletedTask;
     }
 
+    public string SelectedFileLabel => SelectedFile?.Name ?? "尚未选择文件";
+
+    public string SelectedVersionLabel => SelectedVersion is null
+        ? "尚未选择版本"
+        : $"{SelectedVersion.VersionLabel} · {SelectedVersion.CategoryLabel}";
+
     partial void OnSelectedFileChanged(NexusModFile? value)
     {
+        OnPropertyChanged(nameof(SelectedFileLabel));
         if (value is null || _suppressFileSelection) return;
         _ = LoadVersionsAsync(value, ++_loadVersion);
+    }
+
+    partial void OnSelectedVersionChanged(NexusFileVersion? value)
+    {
+        OnPropertyChanged(nameof(SelectedVersionLabel));
     }
 
     partial void OnSortIndexChanged(int value)
@@ -818,10 +848,36 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         var filtered = SelectedCategory == AllCategories
             ? _allCards
             : _allCards.Where(card =>
-                string.Equals(card.Summary.Category, SelectedCategory, StringComparison.OrdinalIgnoreCase));
+                string.Equals(card.Summary.Category, SelectedCategory, StringComparison.OrdinalIgnoreCase)).ToList();
 
+        var previous = SelectedCard;
         Mods.Clear();
         foreach (var card in filtered) Mods.Add(card);
+
+        if (previous is not null && filtered.Contains(previous))
+        {
+            // Re-selecting the same card keeps the detail panel in sync after
+            // the ListBox collection was cleared.
+            SelectedCard = previous;
+            return;
+        }
+
+        if (previous is not null || Details is not null)
+        {
+            SelectedCard = null;
+            Details = null;
+            DetailImage = null;
+            IsDescriptionExpanded = false;
+            HasLongDescription = false;
+            IsImageExpanded = false;
+            Files.Clear();
+            Versions.Clear();
+            SelectedFile = null;
+            SelectedVersion = null;
+            OnPropertyChanged(nameof(HasSelection));
+            OnPropertyChanged(nameof(HasNoSelection));
+            OnPropertyChanged(nameof(NexusPageUrl));
+        }
     }
 
     private async Task LoadCardThumbnailAsync(ModCardViewModel card)

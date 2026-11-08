@@ -56,6 +56,28 @@ public sealed class ManagedPackageLifecycleTests
     }
 
     [Fact]
+    public async Task DisabledManagedPackageKeepsFileStateClean()
+    {
+        using var temp = new TempDirectory();
+        var installation = CreateInstallation(temp.Path);
+        Directory.CreateDirectory(installation.PluginsDirectory);
+        var archive = CreateArchive(temp);
+
+        var installer = new ArchiveModInstaller();
+        await installer.InstallArchiveAsync(installation, archive);
+
+        var manager = new BepInExModManager();
+        var scanned = Assert.Single(await manager.ScanAsync(installation));
+        var disabled = await manager.SetEnabledAsync(installation, scanned, false);
+        Assert.True(disabled.Success, disabled.Message);
+
+        var after = Assert.Single(await manager.ScanAsync(installation));
+        Assert.False(after.IsEnabled);
+        Assert.Empty(after.MissingFiles);
+        Assert.Empty(after.UnexpectedFiles);
+    }
+
+    [Fact]
     public async Task UninstallRemovesOnlyUnchangedManagedFiles()
     {
         using var temp = new TempDirectory();

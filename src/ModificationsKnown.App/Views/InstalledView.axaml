@@ -103,7 +103,9 @@
                                                     <StackPanel Orientation="Horizontal" Spacing="12">
                                                     <TextBlock Text="{Binding PluginLabel}" Classes="caption" />
                                                     <TextBlock Text="{Binding DependencyLabel}" Classes="caption" />
-                                                    <TextBlock Text="{Binding FileStateLabel}" Classes="caption" />
+                                                    <TextBlock Text="{Binding FileStateLabel}"
+                                                               Classes="caption"
+                                                               ToolTip.Tip="{Binding FileStateTooltip}" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </StackPanel>
@@ -116,6 +118,9 @@
                                                     Content="Nexus"
                                                     IsVisible="{Binding IsNexusMatched}"
                                                     Command="{Binding OpenNexusCommand}" />
+                                            <Button Classes="Ghost"
+                                                    Content="关联 Nexus"
+                                                    Command="{Binding LinkNexusCommand}" />
                                             <Button Classes="Danger"
                                                     Content="卸载"
                                                     IsVisible="{Binding CanDelete}"
