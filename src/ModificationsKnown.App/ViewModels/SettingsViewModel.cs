@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -6,6 +7,7 @@ using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Installation;
 using ModificationsKnown.Infrastructure.Windows;
 
 namespace ModificationsKnown.App.ViewModels;
@@ -20,6 +22,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private readonly IAppLogger _logger;
     private readonly NxmProtocolRegistrar _nxmRegistrar;
     private readonly IUserDialogService _dialogs;
+    private readonly GameInstanceStore _instances;
+    private readonly BepInExInstaller _bepInExInstaller;
     private bool _loadingSettings;
 
     [ObservableProperty]
@@ -58,6 +62,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private string _accountStatus = "尚未检查账号类型。";
 
+    public ObservableCollection<GameVersionRow> GameVersions { get; } = [];
+
     partial void OnConfirmBeforeDeleteChanged(bool value)
     {
         if (_loadingSettings || value) return;
@@ -72,7 +78,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         IFilePickerService filePicker,
         IAppLogger logger,
         NxmProtocolRegistrar nxmRegistrar,
-        IUserDialogService dialogs)
+        IUserDialogService dialogs,
+        GameInstanceStore instances)
     {
         _shell = shell;
         _settings = settings;
@@ -82,8 +89,11 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         _logger = logger;
         _nxmRegistrar = nxmRegistrar;
         _dialogs = dialogs;
+        _instances = instances;
+        _bepInExInstaller = new BepInExInstaller(logger);
         LoadFromSettings();
         RefreshNxmStatus();
+        RefreshGameVersions();
     }
 
     public string SettingsPath => "设置保存在当前用户的 AppData 目录；API Key 不会写入日志。";
@@ -94,7 +104,105 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     {
         LoadFromSettings();
         RefreshNxmStatus();
+        RefreshGameVersions();
         return Task.CompletedTask;
+    }
+
+    private void RefreshGameVersions()
+    {
+        GameVersions.Clear();
+        foreach (var installation in _shell.Game.Installations
+                     .OrderByDescending(installation => installation.Profile.Edition)
+                     .ThenBy(installation => installation.DisplayLabel, StringComparer.OrdinalIgnoreCase))
+        {
+            GameVersions.Add(new GameVersionRow(
+                installation,
+                string.Equals(_shell.Game.Selected?.GameDirectory, installation.GameDirectory, StringComparison.OrdinalIgnoreCase),
+                SaveVersionAliasAsync,
+                SelectVersionAsync,
+                InstallLoaderAsync));
+        }
+    }
+
+    private async Task SaveVersionAliasAsync(GameVersionRow row)
+    {
+        var alias = row.Alias.Trim();
+        if (string.IsNullOrWhiteSpace(alias))
+        {
+            _shell.SetStatus("版本名称不能为空。", StatusKind.Warning);
+            return;
+        }
+
+        _shell.Game.Rename(row.Path, alias);
+        await _settings.SaveAsync();
+        RefreshGameVersions();
+        _shell.SetStatus($"版本已重命名为「{alias}」。", StatusKind.Success);
+    }
+
+    private async Task SelectVersionAsync(GameVersionRow row)
+    {
+        if (!_shell.Game.SelectByPath(row.Path))
+        {
+            _shell.SetStatus("这个版本当前不可用。", StatusKind.Warning);
+            return;
+        }
+
+        _shell.Settings.Current.PreferredGamePath = row.Path;
+        _shell.Settings.Current.PreferredInstallationId = row.Installation.Profile.Id;
+        await _shell.Settings.SaveAsync();
+        RefreshGameVersions();
+        _shell.SetStatus($"当前版本：{row.Installation.DisplayLabel}", StatusKind.Success);
+    }
+
+    private async Task InstallLoaderAsync(GameVersionRow row)
+    {
+        if (row.Installation.HasBepInEx)
+        {
+            _shell.SetStatus("这个版本已经安装了 BepInEx。", StatusKind.Info);
+            return;
+        }
+
+        var confirmed = await _dialogs.ConfirmAsync(
+            "安装 BepInEx",
+            $"将为「{row.Installation.DisplayLabel}」安装 BepInEx。\n\n请选择与本游戏版本匹配的 BepInEx 压缩包；MK 会先校验布局再复制到游戏目录。",
+            "选择压缩包",
+            "取消");
+        if (!confirmed) return;
+
+        var archive = await _filePicker.PickArchiveAsync();
+        if (string.IsNullOrWhiteSpace(archive)) return;
+
+        IsBusy = true;
+        try
+        {
+            var result = await _bepInExInstaller.InstallAsync(row.Path, archive);
+            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            if (result.Success)
+            {
+                await _shell.RefreshGameAsync();
+                RefreshGameVersions();
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenBepInExPage()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("https://github.com/BepInEx/BepInEx/releases")
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception exception)
+        {
+            _shell.SetStatus($"打开 BepInEx 页面失败：{exception.Message}", StatusKind.Error);
+        }
     }
 
     [RelayCommand]
@@ -149,6 +257,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
             GamePath = installation.GameDirectory;
             _settings.Current.GamePath = GamePath;
             await _shell.RefreshGameAsync();
+            RefreshGameVersions();
             _shell.SetStatus($"已识别到 {installation.Profile.EditionLabel}。", StatusKind.Success);
         }
         catch (Exception exception)

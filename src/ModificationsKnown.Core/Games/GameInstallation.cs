@@ -11,6 +11,8 @@ public sealed record GameInstallation(
     bool HasBepInEx,
     bool HasPluginsDirectory)
 {
+    public string Alias { get; init; } = string.Empty;
+
     public string BepInExDirectory => Path.Combine(GameDirectory, "BepInEx");
 
     public string PluginsDirectory => Path.Combine(GameDirectory, "BepInEx", "plugins");
@@ -19,7 +21,9 @@ public sealed record GameInstallation(
 
     public string DisplayPath => GameDirectory;
 
-    public string DisplayLabel => $"{Profile.DisplayName} · {Profile.EditionLabel}";
+    public string DisplayLabel => string.IsNullOrWhiteSpace(Alias)
+        ? $"{Profile.DisplayName} · {Profile.EditionLabel}"
+        : Alias;
 
     public string BepInExLabel => HasBepInEx ? "BepInEx 已安装" : "BepInEx 未安装";
 

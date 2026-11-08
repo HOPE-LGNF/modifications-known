@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0] - 2026-11-08
+
+### Added
+
+- Scheme A version management: per-installation aliases, current-version
+  switching, persisted `game-instances.json`, and a version list in Settings.
+- BepInEx installation from a user-supplied archive, validated before copying
+  into the selected game directory.
+- Mod Group snapshots per installation: save current enabled packages, apply a
+  group, delete a group; stored in `mod-groups.json` and isolated by game path.
+- `PreferredGamePath` and legacy `PreferredInstallationId` migration.
+
+### Changed
+
+- Game labels now use the user-defined version alias where available.
+- Installed page exposes the Mod Group bar above the list.
+
+### Notes
+
+- Mod Group application uses the existing enable/disable file operations; it is
+  intentionally slow and reports per-package failures.
+- Update detection for manually linked packages is stored but not yet executed.
+
+
 ## [0.2.9] - 2026-11-08
 
 ### Changed

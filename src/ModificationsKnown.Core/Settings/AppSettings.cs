@@ -17,6 +17,8 @@ public sealed class AppSettings
 
     public string? PreferredInstallationId { get; set; }
 
+    public string? PreferredGamePath { get; set; }
+
     public bool ConfirmBeforeDelete { get; set; } = true;
 
     public bool IncludeAdultMods { get; set; }

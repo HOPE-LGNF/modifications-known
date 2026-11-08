@@ -3,6 +3,7 @@ using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
+using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Settings;
 
@@ -167,6 +168,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly IInstalledSourceStore _sources;
     private readonly IFilePickerService _filePicker;
     private readonly NexusManualMatchStore _manualMatches;
+    private readonly ModGroupStore _groupStore;
     private readonly List<InstalledModItemViewModel> _allItems = [];
     private int _refreshGeneration;
 
@@ -197,6 +199,12 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private string _searchText = string.Empty;
 
+    [ObservableProperty]
+    private ModGroup? _selectedGroup;
+
+    [ObservableProperty]
+    private string _newGroupName = string.Empty;
+
     partial void OnSearchTextChanged(string value) => ApplyFilter();
 
     public bool IsDetailedView => !IsCompactView;
@@ -223,7 +231,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         NexusMatchService nexusMatch,
         IInstalledSourceStore sources,
         IFilePickerService filePicker,
-        NexusManualMatchStore manualMatches)
+        NexusManualMatchStore manualMatches,
+        ModGroupStore groupStore)
     {
         _shell = shell;
         _operations = operations;
@@ -233,10 +242,13 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         _sources = sources;
         _filePicker = filePicker;
         _manualMatches = manualMatches;
+        _groupStore = groupStore;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
     }
 
     public ObservableCollection<InstalledModItemViewModel> Mods { get; } = [];
+
+    public ObservableCollection<ModGroup> Groups { get; } = [];
 
     public Task OnActivatedAsync() => RefreshAsync();
 
@@ -258,6 +270,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 if (generation != _refreshGeneration) return;
                 _allItems.Clear();
                 ApplyFilter();
+                Groups.Clear();
                 HasGame = false;
                 BepInExMissing = false;
                 EmptyMessage = "尚未选择游戏安装。请先在设置中检测游戏。";
@@ -277,6 +290,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 _allItems.Clear();
                 ApplyFilter();
                 EmptyMessage = "没有找到 BepInEx/plugins。请先安装 BepInEx。";
+                Groups.Clear();
                 CountLabel = "0";
                 EnabledLabel = "0";
                 return;
@@ -294,6 +308,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 _allItems.Add(CreateItem(mod));
 
             ApplyFilter();
+            LoadGroups(installation);
             CountLabel = mods.Count.ToString();
             EnabledLabel = mods.Count(mod => mod.IsEnabled).ToString();
             EmptyMessage = mods.Count == 0
@@ -601,6 +616,94 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         {
             IsBusy = false;
         }
+    }
+
+    private void LoadGroups(GameInstallation installation)
+    {
+        var previousId = SelectedGroup?.Id;
+        Groups.Clear();
+        foreach (var group in _groupStore.Get(installation.GameDirectory))
+            Groups.Add(group);
+
+        SelectedGroup = Groups.FirstOrDefault(group => group.Id == previousId)
+                        ?? Groups.FirstOrDefault();
+    }
+
+    [RelayCommand]
+    private async Task CreateGroupAsync()
+    {
+        var installation = _shell.Game.Selected;
+        if (installation is null) return;
+
+        var name = NewGroupName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            name = $"组 {Groups.Count + 1}";
+
+        var enabled = _allItems
+            .Where(item => item.Mod.IsEnabled)
+            .Select(item => item.Mod.PackageId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var group = new ModGroup(Guid.NewGuid().ToString("N"), name, enabled, DateTimeOffset.UtcNow);
+        _groupStore.Add(installation.GameDirectory, group);
+        LoadGroups(installation);
+        SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id);
+        NewGroupName = string.Empty;
+        _shell.SetStatus($"已保存 Mod 组「{name}」（{enabled.Count} 个启用包）。", StatusKind.Success);
+        await Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private async Task ApplyGroupAsync()
+    {
+        if (IsBusy || SelectedGroup is not { } group) return;
+        var installation = _shell.Game.Selected;
+        if (installation is null) return;
+
+        var confirmed = await _dialogs.ConfirmAsync(
+            "应用 Mod 组",
+            $"将把启用状态切换为「{group.Name}」的快照。\n\n组内启用 {group.EnabledPackageIds.Count} 个包，其余包会被禁用。",
+            "应用",
+            "取消");
+        if (!confirmed) return;
+
+        IsBusy = true;
+        try
+        {
+            var enabledIds = group.EnabledPackageIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var failures = new List<string>();
+            foreach (var item in _allItems.ToList())
+            {
+                var desired = enabledIds.Contains(item.Mod.PackageId);
+                if (item.Mod.IsEnabled == desired) continue;
+                var result = await _operations.SetEnabledAsync(installation, item.Mod, desired);
+                if (!result.Success) failures.Add($"{item.Name}: {result.Message}");
+            }
+
+            _shell.SetStatus(
+                failures.Count == 0
+                    ? $"已应用 Mod 组「{group.Name}」。"
+                    : $"Mod 组应用部分失败：{string.Join("；", failures)}",
+                failures.Count == 0 ? StatusKind.Success : StatusKind.Warning);
+            await RefreshCoreAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void DeleteGroup()
+    {
+        if (SelectedGroup is not { } group) return;
+        var installation = _shell.Game.Selected;
+        if (installation is null) return;
+
+        _groupStore.Remove(installation.GameDirectory, group.Id);
+        LoadGroups(installation);
+        _shell.SetStatus($"已删除 Mod 组「{group.Name}」。", StatusKind.Success);
     }
 
     private async Task MatchNexusAsync(int generation)

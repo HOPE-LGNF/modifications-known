@@ -74,7 +74,8 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _launcher = launcher;
         _dialogs = dialogs;
 
-        Game = new GameContext();
+        var instanceStore = new GameInstanceStore();
+        Game = new GameContext(instanceStore);
         NavigationItems =
         [
             new("home", "概览", "游戏状态与快捷启动", "⌂"),
@@ -87,6 +88,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
         var nexusMatch = new NexusMatchService(nexus, settings, logger);
         var manualMatches = new NexusManualMatchStore();
+        var modGroups = new ModGroupStore();
         var sources = new JsonInstalledSourceStore(logger);
         var operations = new ModOperationService(modManager, installer);
         var nxmRegistrar = new NxmProtocolRegistrar();
@@ -94,10 +96,10 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar),
-            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches),
+            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
-            ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs)
+            ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore)
         };
 
         SelectedNavigation = NavigationItems[0];
@@ -113,7 +115,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
     public string CurrentGameLabel => Game.Selected is null
         ? "未检测到游戏"
-        : $"{Game.Selected.Profile.DisplayName} · {Game.Selected.Profile.EditionLabel}";
+        : Game.Selected.DisplayLabel;
 
     public string VersionText
     {
@@ -176,7 +178,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         IsBusy = true;
         try
         {
-            await Game.RefreshAsync(_locator, Settings.Current.PreferredInstallationId);
+            await Game.RefreshAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
             if (Game.Selected is null)
             {
                 SetStatus("没有检测到《未知伤亡》。请在设置中手动选择游戏目录。", StatusKind.Warning);
@@ -184,6 +186,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             }
 
             Settings.Current.PreferredInstallationId = Game.Selected.Profile.Id;
+            Settings.Current.PreferredGamePath = Game.Selected.GameDirectory;
             await Settings.SaveAsync();
             SetStatus($"已检测到 {Game.Selected.Profile.EditionLabel}：{Game.Selected.GameDirectory}", StatusKind.Success);
         }

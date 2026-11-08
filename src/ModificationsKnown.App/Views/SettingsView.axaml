@@ -27,6 +27,63 @@
             </Border>
 
             <Border Classes="card">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="版本管理" Classes="h2" />
+                    <TextBlock Text="每个检测到的游戏目录都是一个独立实例，拥有自己的 BepInEx/plugins。重命名只改显示名，不改目录；切换当前版本会影响首页、已安装页和 Mod 组。"
+                               Classes="muted"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+                    <ItemsControl ItemsSource="{Binding GameVersions}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SurfaceAltBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="10"
+                                        Margin="0,0,0,6">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                        <StackPanel Spacing="3">
+                                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                                <TextBox Text="{Binding Alias, Mode=TwoWay}"
+                                                         Width="170"
+                                                         Watermark="版本显示名" />
+                                                <TextBlock Text="{Binding EditionLabel}" Classes="caption" VerticalAlignment="Center" />
+                                                <Border Background="{DynamicResource AccentSoftBrush}"
+                                                        CornerRadius="4"
+                                                        Padding="5,2"
+                                                        IsVisible="{Binding IsCurrent}">
+                                                    <TextBlock Text="当前" FontSize="9" Foreground="{DynamicResource AccentBrush}" />
+                                                </Border>
+                                                <TextBlock Text="{Binding LoaderLabel}" Classes="caption" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Path}"
+                                                       Classes="mono"
+                                                       FontSize="10"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Button Classes="Ghost" Content="保存名称" Command="{Binding SaveAliasCommand}" />
+                                            <Button Classes="Ghost" Content="设为当前" Command="{Binding SelectCommand}" />
+                                            <Button Classes="Ghost"
+                                                    Content="安装 BepInEx"
+                                                    IsVisible="{Binding CanInstallLoader}"
+                                                    Command="{Binding InstallLoaderCommand}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Classes="Ghost"
+                            Content="打开 BepInEx 下载页"
+                            HorizontalAlignment="Left"
+                            Command="{Binding OpenBepInExPageCommand}" />
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card">
                 <StackPanel Spacing="12">
                     <TextBlock Text="Nexus Mods" Classes="h2" />
                     <TextBlock Text="API Key 只保存在本机 AppData 的 settings.json 中，不会写入日志。免费账号可能无法直接生成下载链接，此时请使用“在 Nexus 打开”。"

@@ -96,7 +96,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             }
 
             HasGame = true;
-            GameTitle = installation.Profile.DisplayName;
+            GameTitle = installation.DisplayLabel;
             GameSubtitle = $"{installation.Profile.EditionLabel} · {installation.Profile.SteamAppId}";
             EditionLabel = installation.Profile.EditionLabel;
             GamePath = installation.GameDirectory;
