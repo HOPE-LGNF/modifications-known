@@ -55,6 +55,16 @@ public sealed class BepInExInstaller
             if (!Directory.Exists(Path.Combine(sourceRoot, "BepInEx", "plugins")))
                 Directory.CreateDirectory(Path.Combine(sourceRoot, "BepInEx", "plugins"));
 
+            // Preflight every destination before copying. This keeps a
+            // collision from leaving a half-installed loader behind.
+            foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(sourceRoot, file);
+                var target = Path.Combine(gameDirectory, relative);
+                if (File.Exists(target))
+                    return OperationResult.Fail($"目标文件已存在，未覆盖：{relative}");
+            }
+
             CopyDirectory(sourceRoot, gameDirectory);
             _logger?.Info($"BepInEx installed into {gameDirectory}");
             return OperationResult.Ok("BepInEx 已安装；重新检测后即可安装模组。");

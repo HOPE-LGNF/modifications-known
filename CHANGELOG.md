@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1] - 2026-11-08
+
+### Fixed
+
+- BepInEx archive installation now preflights every destination file before
+  copying, so an existing file cannot leave a half-installed loader behind.
+
+
 ## [0.3.0] - 2026-11-08
 
 ### Added
