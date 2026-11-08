@@ -271,7 +271,9 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
                 file.Name,
                 file.IsActive,
                 file.LastFileUploadedAt,
-                file.VersionsCount))
+                file.VersionsCount,
+                file.AllowModManagerDownload,
+                file.PrimaryModManagerDownload))
             .ToList() ?? [];
     }
 
@@ -296,6 +298,96 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
                 version.UploadedAt,
                 version.IsPrimary))
             .ToList() ?? [];
+    }
+
+    public async Task<long?> GetLegacyFileIdAsync(
+        string gameDomain,
+        string modId,
+        string name,
+        string version,
+        DateTimeOffset? uploadedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var apiKey = _apiKeyProvider();
+        if (string.IsNullOrWhiteSpace(apiKey)) return null;
+
+        var url = $"{LegacyBaseAddress}games/{Uri.EscapeDataString(gameDomain)}/mods/{Uri.EscapeDataString(modId)}/files.json";
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.TryAddWithoutValidation("apikey", apiKey.Trim());
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger?.Debug($"Legacy file list failed: HTTP {(int)response.StatusCode}");
+            return null;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        List<LegacyFileDto> files;
+        try
+        {
+            files = JsonSerializer.Deserialize<List<LegacyFileDto>>(body, JsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        static string Normalize(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToLowerInvariant();
+
+        var wantedName = Normalize(name);
+        var wantedVersion = Normalize(version);
+        var candidates = files
+            .Where(file => Normalize(file.Name) == wantedName)
+            .ToList();
+
+        var exact = candidates.FirstOrDefault(file =>
+            Normalize(file.Version) == wantedVersion
+            || Normalize(file.ModVersion) == wantedVersion);
+        if (exact is not null) return exact.FileId;
+
+        if (uploadedAt is { } uploaded)
+        {
+            var target = uploaded.ToUnixTimeSeconds();
+            var nearest = files
+                .Select(file => new
+                {
+                    File = file,
+                    Distance = Math.Abs(file.UploadedTimestamp - target)
+                })
+                .Where(entry => entry.Distance <= 300)
+                .OrderBy(entry => entry.Distance)
+                .ThenByDescending(entry => entry.File.IsPrimary)
+                .FirstOrDefault();
+            if (nearest is not null) return nearest.File.FileId;
+        }
+
+        var byVersion = files.FirstOrDefault(file =>
+            Normalize(file.Version) == wantedVersion
+            || Normalize(file.ModVersion) == wantedVersion);
+        return byVersion?.FileId;
+    }
+
+    private sealed class LegacyFileDto
+    {
+        [JsonPropertyName("file_id")]
+        public long FileId { get; init; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; init; }
+
+        [JsonPropertyName("version")]
+        public string? Version { get; init; }
+
+        [JsonPropertyName("mod_version")]
+        public string? ModVersion { get; init; }
+
+        [JsonPropertyName("uploaded_timestamp")]
+        public long UploadedTimestamp { get; init; }
+
+        [JsonPropertyName("is_primary")]
+        public bool IsPrimary { get; init; }
     }
 
     public async Task<IReadOnlyList<NexusDownloadLink>> GetDownloadLinksAsync(
@@ -642,6 +734,12 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
 
         [JsonPropertyName("versions_count")]
         public int VersionsCount { get; init; }
+
+        [JsonPropertyName("allow_mod_manager_download")]
+        public bool AllowModManagerDownload { get; init; } = true;
+
+        [JsonPropertyName("primary_mod_manager_download")]
+        public bool PrimaryModManagerDownload { get; init; }
     }
 
     private sealed class FileVersionDto

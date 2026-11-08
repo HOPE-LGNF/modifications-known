@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.2.4] - 2026-11-08
+
+### Fixed
+
+- Restored the missing `OpenApiKeyPage` command; the “获取 API Key” button is
+  enabled again and opens the Nexus API key page.
+- Browser download URLs now resolve the legacy v1 `file_id` instead of using the
+  v3 file id. A v3 id such as 7439696 no longer replaces the website id (905).
+- Home’s Nexus card hides “在设置中配置 API Key” once a key is configured.
+- Scan progress is now an overlay outside the scroll content, so the list no
+  longer jumps when it appears.
+- Install failures are reported in the global status area instead of echoing the
+  same text under a single mod’s detail pane.
+- Toggling enable/disable no longer reorders the installed list by state.
+- Discover cards use a transparent, stretched ListBox item with no focus
+  adorner, removing the square hover/selection edge and bottom gap.
+- Enable/disable log messages include the mod name.
+- “删除确认” disable confirmation no longer fires while settings are loading.
+
+### Added
+
+- Expand/collapse for long mod descriptions.
+- Click-to-enlarge detail image (click again to restore).
+- `&nmm=1` on browser NXM links.
+- File manager-download flags are surfaced (“支持管理器” / “仅手动下载”).
+- Settings page widens and centers on large screens.
+- Installed action row places the enable checkbox at the trailing edge so
+  managed and unmanaged rows align.
+
+
 ## [0.2.3] - 2026-11-08
 
 ### Added

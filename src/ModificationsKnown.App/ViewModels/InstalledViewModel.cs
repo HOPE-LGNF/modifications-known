@@ -319,8 +319,11 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         {
             var installation = _shell.Game.Selected
                 ?? throw new InvalidOperationException("尚未选择游戏安装。");
+            var action = mod.IsEnabled ? "禁用" : "启用";
             var result = await _operations.SetEnabledAsync(installation, mod, !mod.IsEnabled);
-            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            _shell.SetStatus(
+                result.Success ? $"已{action}「{mod.Name}」。" : $"{action}「{mod.Name}」失败：{result.Message}",
+                result.Success ? StatusKind.Success : StatusKind.Error);
             await RefreshCoreAsync();
         }
         finally

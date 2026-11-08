@@ -50,6 +50,18 @@ public interface INexusModsClient
     /// 403 unless the file has direct downloads enabled; callers should offer a
     /// browser fallback.
     /// </summary>
+    /// <summary>
+    /// Resolves the legacy v1 file id (the value used by the website's
+    /// ?file_id= parameter) for a v3 file version.
+    /// </summary>
+    Task<long?> GetLegacyFileIdAsync(
+        string gameDomain,
+        string modId,
+        string name,
+        string version,
+        DateTimeOffset? uploadedAt,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<NexusDownloadLink>> GetDownloadLinksAsync(
         string gameDomain,
         string fileVersionGameScopedId,

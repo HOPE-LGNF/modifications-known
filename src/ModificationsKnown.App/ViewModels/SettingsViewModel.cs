@@ -98,6 +98,22 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     }
 
     [RelayCommand]
+    private void OpenApiKeyPage()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("https://www.nexusmods.com/settings/api-keys")
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception exception)
+        {
+            _shell.SetStatus($"打开 API Key 页面失败：{exception.Message}", StatusKind.Error);
+        }
+    }
+
+    [RelayCommand]
     private async Task BrowseGameAsync()
     {
         var path = await _filePicker.PickExecutableAsync();

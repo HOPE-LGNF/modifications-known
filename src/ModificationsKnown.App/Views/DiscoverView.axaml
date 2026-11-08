@@ -67,8 +67,7 @@
                                     BorderBrush="{DynamicResource BorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="10"
-                                    Padding="10"
-                                    Margin="0,0,0,8">
+                                    Padding="10">
                                 <Grid ColumnDefinitions="64,*" ColumnSpacing="10">
                                     <Border Width="64" Height="64"
                                             CornerRadius="7"
@@ -144,10 +143,15 @@
 
                     <ScrollViewer IsVisible="{Binding HasSelection}" VerticalScrollBarVisibility="Auto">
                         <StackPanel Spacing="14">
-                            <Border Height="210"
+                            <Border Height="{Binding DetailImageHeight}"
                                     Background="{DynamicResource SurfaceAltBrush}"
+                                    CornerRadius="10"
                                     ClipToBounds="True">
-                                <Image Source="{Binding DetailImage}" Stretch="UniformToFill" />
+                                <Button Classes="image-button"
+                                        Command="{Binding ToggleImageCommand}"
+                                        ToolTip.Tip="点击放大，再次点击还原">
+                                    <Image Source="{Binding DetailImage}" Stretch="UniformToFill" />
+                                </Button>
                             </Border>
 
                             <StackPanel Margin="18,0,18,0" Spacing="8">
@@ -169,8 +173,15 @@
                                            Classes="muted"
                                            FontSize="12"
                                            TextWrapping="Wrap"
-                                           MaxHeight="150"
+                                           MaxHeight="{Binding DescriptionMaxHeight}"
                                            TextTrimming="CharacterEllipsis" />
+                                <Button Classes="Ghost"
+                                        Content="{Binding DescriptionToggleText}"
+                                        Command="{Binding ToggleDescriptionCommand}"
+                                        IsVisible="{Binding HasLongDescription}"
+                                        HorizontalAlignment="Left"
+                                        Padding="0"
+                                        FontSize="11" />
                             </StackPanel>
 
                             <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="18,0" />
@@ -185,9 +196,19 @@
                                          MaxHeight="160">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid ColumnDefinitions="*,Auto" Margin="4,4">
+                                            <Grid ColumnDefinitions="*,Auto,Auto" Margin="4,4">
                                                 <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Grid.Column="1"
+                                                <Border Grid.Column="1"
+                                                        Background="{DynamicResource SurfaceAltBrush}"
+                                                        CornerRadius="4"
+                                                        Padding="5,2"
+                                                        Margin="8,0,0,0"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding ManagerDownloadLabel}"
+                                                               FontSize="9"
+                                                               Classes="muted" />
+                                                </Border>
+                                                <TextBlock Grid.Column="2"
                                                            Text="{Binding UploadedLabel}"
                                                            Classes="caption"
                                                            Margin="8,0,0,0" />

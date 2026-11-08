@@ -115,6 +115,44 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private bool _nxmRegistered;
 
+    [ObservableProperty]
+    private bool _isDescriptionExpanded;
+
+    [ObservableProperty]
+    private bool _isImageExpanded;
+
+    public double DetailImageHeight => IsImageExpanded ? 480 : 210;
+
+    partial void OnIsImageExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(DetailImageHeight));
+    }
+
+    [RelayCommand]
+    private void ToggleImage()
+    {
+        IsImageExpanded = !IsImageExpanded;
+    }
+
+    [ObservableProperty]
+    private bool _hasLongDescription;
+
+    public double DescriptionMaxHeight => IsDescriptionExpanded ? 5000 : 150;
+
+    public string DescriptionToggleText => IsDescriptionExpanded ? "收起描述" : "展开全部";
+
+    partial void OnIsDescriptionExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(DescriptionMaxHeight));
+        OnPropertyChanged(nameof(DescriptionToggleText));
+    }
+
+    [RelayCommand]
+    private void ToggleDescription()
+    {
+        IsDescriptionExpanded = !IsDescriptionExpanded;
+    }
+
     public bool NxmNotRegistered => !NxmRegistered;
 
     partial void OnNxmRegisteredChanged(bool value) => OnPropertyChanged(nameof(NxmNotRegistered));
@@ -215,6 +253,9 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         OnPropertyChanged(nameof(NexusPageUrl));
         Details = null;
         DetailImage = null;
+        IsDescriptionExpanded = false;
+        HasLongDescription = false;
+        IsImageExpanded = false;
         Files.Clear();
         Versions.Clear();
         SelectedFile = null;
@@ -230,6 +271,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             if (version != _loadVersion) return;
 
             Details = details;
+            HasLongDescription = details.DescriptionText.Length > 240;
+            IsDescriptionExpanded = false;
             var imageUrl = details.GalleryUrls.FirstOrDefault() ?? card.Summary.ThumbnailUrl;
             DetailImage = await _thumbnails.LoadAsync(imageUrl);
 
@@ -343,7 +386,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             else
             {
                 _shell.SetStatus(installed.Message, StatusKind.Error);
-                DownloadStatus = installed.Message;
+                DownloadStatus = "安装未完成。";
             }
         }
         catch (NexusApiException exception)
@@ -360,7 +403,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     card.Summary.Id,
                     file?.Id);
                 DownloadStatus = "普通 API Key 无法获取直链。已打开 Nexus 文件页，请完成 Slow download / Mod manager download，MK 会继续。";
-                OpenNexusFilePage();
+                await OpenNexusFilePageAsync();
                 _shell.SetStatus(DownloadStatus, StatusKind.Warning);
                 return;
             }
@@ -393,7 +436,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     }
 
     [RelayCommand]
-    private void OpenNexusFilePage()
+    private async Task OpenNexusFilePageAsync()
     {
         if (SelectedCard is null) return;
         if (!NxmRegistered)
@@ -404,8 +447,23 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
         var domain = _settings.Current.NexusGameDomain;
         var url = $"https://www.nexusmods.com/{domain}/mods/{SelectedCard.Summary.GameScopedId}?tab=files";
-        if (SelectedFile is not null)
-            url += $"&file_id={SelectedFile.Id}";
+
+        // v3 file ids are not the legacy ids the website expects. Resolve the
+        // v1 file id by name/version; if that fails, omit the parameter rather
+        // than opening an unrelated file.
+        if (SelectedVersion is { } version)
+        {
+            var legacyFileId = await _nexus.GetLegacyFileIdAsync(
+                domain,
+                SelectedCard.Summary.GameScopedId,
+                version.Name,
+                version.Version,
+                version.UploadedAt);
+            if (legacyFileId is not null)
+                url += $"&file_id={legacyFileId.Value}";
+        }
+
+        url += "&nmm=1";
 
         try
         {
@@ -576,7 +634,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             }
 
             _shell.SetStatus(installed.Message, installed.Success ? StatusKind.Success : StatusKind.Error);
-            DownloadStatus = installed.Message;
+            DownloadStatus = installed.Success ? "安装完成。" : "安装未完成。";
         }
         catch (NexusApiException exception)
         {

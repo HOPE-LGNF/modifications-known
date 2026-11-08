@@ -51,10 +51,6 @@
         <Grid Grid.Row="3">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="8">
-                    <ProgressBar IsIndeterminate="True"
-                                 Height="3"
-                                 IsVisible="{Binding IsBusy}"
-                                 Margin="0,0,0,4" />
                     <TextBlock Text="{Binding EmptyMessage}"
                                Classes="muted"
                                TextWrapping="Wrap"
@@ -112,9 +108,6 @@
                                             </StackPanel>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <CheckBox Content="启用"
-                                                      IsChecked="{Binding IsEnabled, Mode=TwoWay}"
-                                                      VerticalAlignment="Center" />
                                             <Button Classes="Ghost"
                                                     Content="接管"
                                                     IsVisible="{Binding CanAdopt}"
@@ -131,6 +124,9 @@
                                                     Content="删除目录"
                                                     IsVisible="{Binding CanDeleteWhole}"
                                                     Command="{Binding DeleteWholeCommand}" />
+                                            <CheckBox Content="启用"
+                                                      IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                      VerticalAlignment="Center" />
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -139,6 +135,12 @@
                     </ItemsControl>
                 </StackPanel>
             </ScrollViewer>
+            <ProgressBar IsIndeterminate="True"
+                         Height="3"
+                         IsVisible="{Binding IsBusy}"
+                         IsHitTestVisible="False"
+                         VerticalAlignment="Bottom"
+                         Margin="0,0,0,2" />
         </Grid>
     </Grid>
 </UserControl>

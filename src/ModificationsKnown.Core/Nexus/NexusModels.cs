@@ -96,11 +96,19 @@ public sealed record NexusModFile(
     string Name,
     bool IsActive,
     DateTimeOffset? LastUploadedAt,
-    int VersionsCount)
+    int VersionsCount,
+    bool AllowModManagerDownload = true,
+    bool PrimaryModManagerDownload = false)
 {
     public string UploadedLabel => LastUploadedAt is null
         ? "上传时间未知"
         : LastUploadedAt.Value.LocalDateTime.ToString("yyyy-MM-dd");
+
+    public bool IsManualOnly => !AllowModManagerDownload;
+
+    public string ManagerDownloadLabel => AllowModManagerDownload
+        ? PrimaryModManagerDownload ? "管理器默认" : "支持管理器"
+        : "仅手动下载";
 }
 
 public sealed record NexusFileVersion(

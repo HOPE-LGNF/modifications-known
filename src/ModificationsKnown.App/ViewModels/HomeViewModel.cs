@@ -48,6 +48,14 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private bool _isBusy;
 
+    [ObservableProperty]
+    private bool _nexusConfigured;
+
+    public bool NexusNotConfigured => !NexusConfigured;
+
+    partial void OnNexusConfiguredChanged(bool value) =>
+        OnPropertyChanged(nameof(NexusNotConfigured));
+
     public HomeViewModel(
         IAppShell shell,
         IGameLocator locator,
@@ -82,9 +90,8 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
                 BepInExReady = false;
                 ModCountLabel = "0";
                 EnabledCountLabel = "0";
-                NexusLabel = string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey)
-                    ? "未配置 API Key"
-                    : "API Key 已配置";
+                NexusConfigured = !string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey);
+                NexusLabel = NexusConfigured ? "API Key 已配置" : "未配置 API Key";
                 return;
             }
 
@@ -95,9 +102,8 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             GamePath = installation.GameDirectory;
             BepInExLabel = installation.HasBepInEx ? "BepInEx 已就绪" : "BepInEx 未安装";
             BepInExReady = installation.HasBepInEx;
-            NexusLabel = string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey)
-                ? "未配置 API Key"
-                : "API Key 已配置";
+            NexusConfigured = !string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey);
+            NexusLabel = NexusConfigured ? "API Key 已配置" : "未配置 API Key";
 
             if (installation.HasPluginsDirectory)
             {
