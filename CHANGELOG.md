@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.5] - 2026-11-08
+
+### Added
+
+- Current-page category filter on Discover, populated from the `category.name`
+  values Nexus returns for each result. This is client-side because the v3
+  search request has no category filter; the tooltip states it filters the
+  current page.
+
+
 ## [0.2.4] - 2026-11-08
 
 ### Fixed

@@ -104,6 +104,9 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private bool _apiKeyMissing;
 
     [ObservableProperty]
+    private string _selectedCategory = AllCategories;
+
+    [ObservableProperty]
     private string _resultSummary = "输入关键词，或直接浏览 Nexus 上的 CU 模组。";
 
     [ObservableProperty]
@@ -162,6 +165,9 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
     private string? _nxmFallbackUrl;
     private PendingFreeDownload? _pendingFreeDownload;
+    private readonly List<ModCardViewModel> _allCards = [];
+
+    public const string AllCategories = "全部分类";
 
     public DiscoverViewModel(
         IAppShell shell,
@@ -186,6 +192,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     }
 
     public ObservableCollection<ModCardViewModel> Mods { get; } = [];
+
+    public ObservableCollection<string> Categories { get; } = [];
 
     public ObservableCollection<NexusModFile> Files { get; } = [];
 
@@ -215,6 +223,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         RefreshNxmStatus();
         return Mods.Count > 0 ? Task.CompletedTask : LoadPageAsync();
     }
+
+    partial void OnSelectedCategoryChanged(string value) => ApplyCategoryFilter();
 
     [RelayCommand]
     private async Task SearchAsync()
@@ -757,13 +767,27 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                 _settings.Current.IncludeAdultMods);
 
             var result = await _nexus.SearchModsAsync(_settings.Current.NexusGameDomain, query);
-            Mods.Clear();
+            _allCards.Clear();
             foreach (var summary in result.Items)
             {
                 var card = new ModCardViewModel(summary);
-                Mods.Add(card);
+                _allCards.Add(card);
                 _ = LoadCardThumbnailAsync(card);
             }
+
+            var categories = _allCards
+                .Select(card => card.Summary.Category)
+                .Where(category => !string.IsNullOrWhiteSpace(category))
+                .Select(category => category!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(category => category, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            Categories.Clear();
+            Categories.Add(AllCategories);
+            foreach (var category in categories) Categories.Add(category);
+            if (!Categories.Contains(SelectedCategory)) SelectedCategory = AllCategories;
+            else ApplyCategoryFilter();
 
             TotalCount = result.TotalCount;
             TotalPages = result.TotalPages;
@@ -787,6 +811,17 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         {
             IsLoading = false;
         }
+    }
+
+    private void ApplyCategoryFilter()
+    {
+        var filtered = SelectedCategory == AllCategories
+            ? _allCards
+            : _allCards.Where(card =>
+                string.Equals(card.Summary.Category, SelectedCategory, StringComparison.OrdinalIgnoreCase));
+
+        Mods.Clear();
+        foreach (var card in filtered) Mods.Add(card);
     }
 
     private async Task LoadCardThumbnailAsync(ModCardViewModel card)

@@ -4,7 +4,7 @@
     <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
 
         <!-- Search / sort / refresh -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
             <TextBox Name="SearchBox"
                      Text="{Binding SearchText, Mode=TwoWay}"
                      Watermark="搜索模组名称"
@@ -17,10 +17,15 @@
                 <ComboBoxItem>最新</ComboBoxItem>
                 <ComboBoxItem>最近更新</ComboBoxItem>
             </ComboBox>
-            <Button Grid.Column="2"
+            <ComboBox Grid.Column="2"
+                      Width="128"
+                      ItemsSource="{Binding Categories}"
+                      SelectedItem="{Binding SelectedCategory, Mode=TwoWay}"
+                      ToolTip.Tip="按当前页结果的 Nexus 分类过滤" />
+            <Button Grid.Column="3"
                     Content="搜索"
                     Command="{Binding SearchCommand}" />
-            <Button Grid.Column="3"
+            <Button Grid.Column="4"
                     Classes="Ghost"
                     Content="刷新"
                     Command="{Binding RefreshCommand}" />
