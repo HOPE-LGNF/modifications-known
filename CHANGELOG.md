@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.9] - 2026-11-08
+
+### Changed
+
+- Design C’s trailer actions are collapsed into a “⋯” Flyout. The card now
+  shows only the enable checkbox and the menu trigger; Nexus/link/adopt/uninstall
+  and whole-directory delete live inside the menu.
+- Design A remains the compact mode, where actions stay visible.
+
+
 ## [0.2.8] - 2026-11-08
 
 ### Changed

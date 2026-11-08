@@ -148,20 +148,44 @@
                                                 <CheckBox Content="启用"
                                                           IsChecked="{Binding IsEnabled, Mode=TwoWay}"
                                                           HorizontalAlignment="Right" />
-                                                <Button Classes="Ghost" Content="Nexus"
-                                                        IsVisible="{Binding IsNexusMatched}"
-                                                        Command="{Binding OpenNexusCommand}" />
-                                                <Button Classes="Ghost" Content="关联 Nexus"
-                                                        Command="{Binding LinkNexusCommand}" />
-                                                <Button Classes="Ghost" Content="接管"
-                                                        IsVisible="{Binding CanAdopt}"
-                                                        Command="{Binding AdoptCommand}" />
-                                                <Button Classes="Danger" Content="卸载"
-                                                        IsVisible="{Binding CanDelete}"
-                                                        Command="{Binding UninstallCommand}" />
-                                                <Button Classes="Danger" Content="删除目录"
-                                                        IsVisible="{Binding CanDeleteWhole}"
-                                                        Command="{Binding DeleteWholeCommand}" />
+                                                <Button Classes="Ghost"
+                                                        Content="⋯"
+                                                        FontSize="18"
+                                                        Padding="8,2"
+                                                        HorizontalAlignment="Right"
+                                                        ToolTip.Tip="更多操作">
+                                                    <Button.Flyout>
+                                                        <Flyout Placement="BottomEdgeAlignedRight">
+                                                            <StackPanel Width="190" Spacing="5">
+                                                                <Button Classes="Ghost"
+                                                                        Content="在 Nexus 打开"
+                                                                        HorizontalContentAlignment="Left"
+                                                                        IsVisible="{Binding IsNexusMatched}"
+                                                                        Command="{Binding OpenNexusCommand}" />
+                                                                <Button Classes="Ghost"
+                                                                        Content="关联 Nexus"
+                                                                        HorizontalContentAlignment="Left"
+                                                                        Command="{Binding LinkNexusCommand}" />
+                                                                <Button Classes="Ghost"
+                                                                        Content="接管为托管"
+                                                                        HorizontalContentAlignment="Left"
+                                                                        IsVisible="{Binding CanAdopt}"
+                                                                        Command="{Binding AdoptCommand}" />
+                                                                <Separator Margin="0,4" />
+                                                                <Button Classes="Danger"
+                                                                        Content="卸载"
+                                                                        HorizontalContentAlignment="Left"
+                                                                        IsVisible="{Binding CanDelete}"
+                                                                        Command="{Binding UninstallCommand}" />
+                                                                <Button Classes="Danger"
+                                                                        Content="删除整个目录"
+                                                                        HorizontalContentAlignment="Left"
+                                                                        IsVisible="{Binding CanDeleteWhole}"
+                                                                        Command="{Binding DeleteWholeCommand}" />
+                                                            </StackPanel>
+                                                        </Flyout>
+                                                    </Button.Flyout>
+                                                </Button>
                                             </StackPanel>
                                         </Grid>
                                     </Border>
