@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.7] - 2026-11-08
+
+### Fixed
+
+- Replaced the stock `ListBoxItem` template with a content-only template. The
+  default template was still drawing the square selection/focus surface under
+  the rounded card; styling the background was not enough.
+- Download now opens a version-picker Flyout from the “下载并安装” button. The
+  duplicate standalone “选择版本” flyout was removed.
+- Overrode Avalonia Fluent’s `SystemAccentColor` / system accent brushes with the
+  active MK palette. Windows’ brown DWM colorization no longer leaks into
+  checkboxes, sliders and selection.
+
+### Docs
+
+- Added `docs/VERSION_MODEL.md` for the approved Instance-per-version + Mod Group
+  architecture (Scheme A).
+- Added installed-item design samples at `docs/mockups/installed-items.png`.
+
+
 ## [0.2.6] - 2026-11-08
 
 ### Fixed

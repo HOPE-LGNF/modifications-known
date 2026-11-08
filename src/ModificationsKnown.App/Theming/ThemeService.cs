@@ -120,6 +120,29 @@ public static class ThemeService
         resources["DangerBrush"] = Brush(palette.Danger);
         resources["HeroStartBrush"] = Brush(palette.HeroStart);
         resources["HeroEndBrush"] = Brush(palette.HeroEnd);
+
+        // Avalonia's FluentTheme reads the platform accent color for checks,
+        // sliders and selection. Without overriding these, a Windows accent
+        // (e.g. #604B27) leaks into an otherwise green MK theme.
+        var accent = Color.Parse(palette.Accent);
+        var accentHover = Color.Parse(palette.AccentHover);
+        var accentSoft = Color.Parse(palette.AccentSoft);
+        resources["SystemAccentColor"] = accent;
+        resources["SystemAccentColorLight1"] = accentHover;
+        resources["SystemAccentColorLight2"] = accentHover;
+        resources["SystemAccentColorLight3"] = accentHover;
+        resources["SystemAccentColorDark1"] = accentSoft;
+        resources["SystemAccentColorDark2"] = accentSoft;
+        resources["SystemAccentColorDark3"] = accentSoft;
+        resources["SystemControlHighlightAccentBrush"] = Brush(palette.Accent);
+        resources["SystemControlForegroundAccentBrush"] = Brush(palette.Accent);
+        resources["SystemControlBackgroundAccentBrush"] = Brush(palette.Accent);
+        resources["ProgressBarForeground"] = Brush(palette.Accent);
+        resources["CheckBoxCheckBackgroundFillChecked"] = Brush(palette.Accent);
+        resources["CheckBoxCheckBackgroundFillCheckedPointerOver"] = Brush(palette.AccentHover);
+        resources["CheckBoxCheckBackgroundFillCheckedPressed"] = Brush(palette.AccentHover);
+        resources["CheckBoxCheckBackgroundStrokeChecked"] = Brush(palette.Accent);
+        resources["CheckBoxCheckGlyphForegroundChecked"] = Brush(palette.AccentContrast);
     }
 
     private static bool TryReadTheme(

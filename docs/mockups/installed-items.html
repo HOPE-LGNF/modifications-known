@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  :root{--bg:#0f1412;--panel:#151d19;--panel2:#1b2621;--line:#2a3730;--text:#e8f0eb;--muted:#93a79d;--accent:#79c99e;--accent2:#1e3a2c;--danger:#e07a7a;--warn:#e5b567}
+  *{box-sizing:border-box}
+  body{margin:0;padding:28px;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+  h1{font-size:22px;margin:0 0 4px} .sub{color:var(--muted);font-size:12px;margin:0 0 24px}
+  .wrap{display:grid;gap:20px;max-width:980px}
+  .variant{border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden}
+  .variant-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);background:#111815}
+  .variant-title{font-weight:600;font-size:13px} .tag{font-size:10px;color:var(--accent);background:var(--accent2);padding:3px 8px;border-radius:99px}
+  .list{padding:14px 16px;display:grid;gap:8px}
+  .row{display:grid;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+  .row:hover{border-color:#3b5147;background:#202d27}
+  .icon{width:42px;height:42px;border-radius:9px;background:linear-gradient(135deg,#2a4a38,#18241f);display:flex;align-items:center;justify-content:center;color:var(--accent);font-weight:700;font-size:16px}
+  .main{min-width:0}
+  .name{font-weight:600;display:flex;align-items:center;gap:8px}
+  .meta{color:var(--muted);font-size:11px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .badge{font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:2px 6px;white-space:nowrap}
+  .ok{color:var(--accent)!important;border-color:#365544!important}
+  .warn{color:var(--warn)!important;border-color:#5a4a2e!important}
+  .actions{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+  .btn{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:7px;padding:6px 10px;font-size:11px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#0f1412;font-weight:600}
+  .btn.danger{color:var(--danger);border-color:#5a3636}
+  .checkbox{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;white-space:nowrap}
+  .box{width:17px;height:17px;border-radius:4px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#0f1412;font-weight:700;font-size:12px}
+  .off .box{background:transparent;border:1px solid #4a5a51;color:transparent}
+  .off .name{color:#7f9188}
+  .muted{color:var(--muted)}
+  .section-note{font-size:11px;color:var(--muted);padding:0 16px 14px}
+  /* B */
+  .bcard{padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);display:grid;grid-template-columns:1fr auto;gap:12px}
+  .bcard .accentline{height:3px;border-radius:99px;background:var(--accent);width:44px;margin-bottom:8px}
+  .brow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .bfoot{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:9px;margin-top:10px;font-size:11px;color:var(--muted)}
+  /* C */
+  .ccard{display:grid;grid-template-columns:56px 1fr auto;gap:14px;padding:14px;border:1px solid var(--line);border-radius:10px;background:linear-gradient(180deg,#1b2621,#151d19)}
+  .cicon{width:56px;height:56px;border-radius:12px;background:radial-gradient(circle at 30% 20%,#3d6b52,#18241f);display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--accent)}
+  .cstats{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+  .pill{font-size:10px;border:1px solid var(--line);border-radius:99px;padding:2px 8px;color:var(--muted)}
+  .pill.green{color:var(--accent);border-color:#365544;background:#17271f}
+  .more{color:var(--muted);font-size:18px;padding:0 4px}
+</style>
+</head>
+<body>
+  <h1>已安装模组条目 · 设计样稿</h1>
+  <p class="sub">三种方向，均使用当前苔原主题变量；重点观察「启用」位置、元信息密度和操作区层级。</p>
+  <div class="wrap">
+
+    <section class="variant">
+      <div class="variant-head"><span class="variant-title">A · 紧凑行：操作靠右，启用固定尾部</span><span class="tag">推荐起点</span></div>
+      <div class="list">
+        <div class="row" style="grid-template-columns:42px 1fr auto">
+          <div class="icon">CU</div>
+          <div class="main">
+            <div class="name">CUCoreLib <span class="badge ok">已托管</span></div>
+            <div class="meta">Jimmyking · v1.0.7 · 3 个 DLL · 文件完整</div>
+          </div>
+          <div class="actions">
+            <span class="badge">Nexus</span>
+            <button class="btn">卸载</button><button class="btn danger">删除目录</button>
+            <label class="checkbox"><span class="box">✓</span>启用</label>
+          </div>
+        </div>
+        <div class="row off" style="grid-template-columns:42px 1fr auto">
+          <div class="icon">GS</div>
+          <div class="main">
+            <div class="name">Gunsaw Genetics <span class="badge">本地模组</span></div>
+            <div class="meta">Xion · 版本未知 · 1 个 DLL · 未托管</div>
+          </div>
+          <div class="actions">
+            <button class="btn">关联 Nexus</button>
+            <label class="checkbox"><span class="box">✓</span>启用</label>
+          </div>
+        </div>
+      </div>
+      <div class="section-note">优点：一屏能看很多；启用框永远在最右，不会因按钮数量而漂移。缺点：元信息只能放一行。</div>
+    </section>
+
+    <section class="variant">
+      <div class="variant-head"><span class="variant-title">B · 双层卡片：标题/元信息/操作分区</span><span class="tag">信息更清晰</span></div>
+      <div class="list">
+        <div class="bcard">
+          <div>
+            <div class="accentline"></div>
+            <div class="brow"><strong>CUCoreLib</strong><span class="badge ok">已托管</span><span class="badge">Nexus</span><span class="badge ok">文件完整</span></div>
+            <div class="meta">Jimmyking · v1.0.7 · 3 个 DLL · 依赖 1</div>
+            <div class="bfoot"><span>路径：BepInEx/plugins/CUCoreLib</span><label class="checkbox"><span class="box">✓</span>启用</label></div>
+          </div>
+          <div class="actions" style="align-self:start"><button class="btn">打开</button><button class="btn">卸载</button><button class="btn danger">删除目录</button></div>
+        </div>
+        <div class="bcard off">
+          <div>
+            <div class="accentline" style="background:#4a5a51"></div>
+            <div class="brow"><strong>Gunsaw Genetics</strong><span class="badge">本地模组</span><span class="badge">未托管</span></div>
+            <div class="meta">Xion · 版本未知 · 1 个 DLL · 未关联 Nexus</div>
+            <div class="bfoot"><span>路径：BepInEx/plugins/Gunsaw Genetics</span><label class="checkbox"><span class="box">✓</span>启用</label></div>
+          </div>
+          <div class="actions" style="align-self:start"><button class="btn">关联 Nexus</button><button class="btn danger">删除目录</button></div>
+        </div>
+      </div>
+      <div class="section-note">优点：来源、文件状态、路径、启用状态各归其位；适合以后加“更新可用”。缺点：纵向占用更大。</div>
+    </section>
+
+    <section class="variant">
+      <div class="variant-head"><span class="variant-title">C · 信息面板：左侧图标 + 统计胶囊 + 更多菜单</span><span class="tag">视觉更轻</span></div>
+      <div class="list">
+        <div class="ccard">
+          <div class="cicon">◈</div>
+          <div>
+            <div class="name">CUCoreLib</div>
+            <div class="meta">Jimmyking · 已托管 · v1.0.7</div>
+            <div class="cstats"><span class="pill green">文件完整</span><span class="pill">3 个 DLL</span><span class="pill">Nexus</span></div>
+          </div>
+          <div class="actions"><label class="checkbox"><span class="box">✓</span>启用</label><span class="more">⋯</span></div>
+        </div>
+        <div class="ccard off">
+          <div class="cicon">◈</div>
+          <div>
+            <div class="name">Gunsaw Genetics</div>
+            <div class="meta">Xion · 未托管 · 版本未知</div>
+            <div class="cstats"><span class="pill">未托管</span><span class="pill">1 个 DLL</span><span class="pill">未关联</span></div>
+          </div>
+          <div class="actions"><label class="checkbox"><span class="box">✓</span>启用</label><span class="more">⋯</span></div>
+        </div>
+      </div>
+      <div class="section-note">优点：视觉噪音低，适合大量模组；缺点：卸载/关联等操作要进“⋯”菜单，关键动作多一步。</div>
+    </section>
+
+  </div>
+</body>
+</html>
