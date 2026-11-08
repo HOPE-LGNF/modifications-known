@@ -81,7 +81,7 @@
                 <ListBox Name="ModList"
                          Classes="mod-list"
                          ItemsSource="{Binding Mods}"
-                         SelectedItem="{Binding SelectedCard, Mode=TwoWay}"
+                         SelectedItem="{Binding SelectedCard, Mode=OneWay}"
                          SelectionChanged="OnModSelectionChanged"
                          ItemContainerTheme="{StaticResource ModListItemTheme}"
                          Background="Transparent"

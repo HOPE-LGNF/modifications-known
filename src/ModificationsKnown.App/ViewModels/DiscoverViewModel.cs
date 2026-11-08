@@ -256,6 +256,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private async Task SelectModAsync(ModCardViewModel? card)
     {
         if (card is null) return;
+        if (ReferenceEquals(card, SelectedCard) && Details is not null) return;
 
         SelectedCard = card;
         OnPropertyChanged(nameof(HasSelection));
@@ -854,30 +855,12 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         Mods.Clear();
         foreach (var card in filtered) Mods.Add(card);
 
+        // Selection is intentionally sticky: changing a category, searching or
+        // paging must not discard the mod the user is reading. Only selecting
+        // another card replaces it. The ListBox is OneWay-bound, so clearing
+        // its items cannot null SelectedCard behind our back.
         if (previous is not null && filtered.Contains(previous))
-        {
-            // Re-selecting the same card keeps the detail panel in sync after
-            // the ListBox collection was cleared.
-            SelectedCard = previous;
-            return;
-        }
-
-        if (previous is not null || Details is not null)
-        {
-            SelectedCard = null;
-            Details = null;
-            DetailImage = null;
-            IsDescriptionExpanded = false;
-            HasLongDescription = false;
-            IsImageExpanded = false;
-            Files.Clear();
-            Versions.Clear();
-            SelectedFile = null;
-            SelectedVersion = null;
-            OnPropertyChanged(nameof(HasSelection));
-            OnPropertyChanged(nameof(HasNoSelection));
-            OnPropertyChanged(nameof(NexusPageUrl));
-        }
+            OnPropertyChanged(nameof(SelectedCard));
     }
 
     private async Task LoadCardThumbnailAsync(ModCardViewModel card)

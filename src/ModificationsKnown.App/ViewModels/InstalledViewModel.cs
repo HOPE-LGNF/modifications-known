@@ -14,9 +14,26 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
     private bool _isDetailed = true;
 
     [ObservableProperty]
+    private bool _isCompact;
+
+    [ObservableProperty]
     private NexusMatch? _nexusMatch;
 
     public bool IsNexusMatched => NexusMatch is not null;
+
+    public bool IsDetailedMode => !IsCompact;
+
+    partial void OnIsCompactChanged(bool value) => OnPropertyChanged(nameof(IsDetailedMode));
+
+    public string Monogram
+    {
+        get
+        {
+            var name = Name.Trim();
+            if (name.Length == 0) return "?";
+            return name.Length == 1 ? name.ToUpperInvariant() : name[..2].ToUpperInvariant();
+        }
+    }
 
     public string SourceLabel => NexusMatch is null ? "未关联 Nexus" : "Nexus 模组";
 
@@ -192,7 +209,10 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         OnPropertyChanged(nameof(ViewModeButtonText));
 
         foreach (var item in _allItems)
+        {
             item.IsDetailed = !value;
+            item.IsCompact = value;
+        }
     }
 
     public InstalledViewModel(
@@ -488,6 +508,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         return new InstalledModItemViewModel(mod, ToggleAsync, UninstallAsync, DeleteWholeAsync, AdoptAsync, LinkNexusAsync)
         {
             IsDetailed = IsDetailedView,
+            IsCompact = IsCompactView,
             NexusDomain = _settings.Current.NexusGameDomain,
             NexusMatch = match
         };

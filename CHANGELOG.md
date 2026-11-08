@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.8] - 2026-11-08
+
+### Changed
+
+- Discover selection is sticky: category changes, searches and page changes no
+  longer clear the selected mod or its detail pane. Only selecting another card
+  replaces it. The ListBox is OneWay-bound so clearing the collection cannot
+  null the view-model selection.
+- Installed page defaults to design C (information panel with monogram, metadata
+  pills and trailer actions). The “紧凑列表” toggle switches to design A (compact
+  row with trailing enable checkbox).
+- Re-selecting the already-loaded card no longer reloads its details.
+
+
 ## [0.2.7] - 2026-11-08
 
 ### Fixed
