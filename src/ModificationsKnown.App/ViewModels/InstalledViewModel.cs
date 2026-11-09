@@ -203,14 +203,38 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private ModGroup? _selectedGroup;
 
     [ObservableProperty]
-    private string _newGroupName = string.Empty;
+    private bool _isModified;
 
     public bool CanDeleteGroup => SelectedGroup is { IsDefault: false };
 
+    public bool HasSelectedGroup => SelectedGroup is not null;
+
+    /// <summary>True while the group list is being rebuilt; the view must not
+    /// treat the resulting ComboBox churn as a user-initiated switch.</summary>
+    public bool IsReloadingGroups { get; private set; }
+
+    public string SaveButtonText => IsModified ? "保存修改 *" : "保存当前状态";
+
+    public string GroupHint => IsModified
+        ? "有未保存的组修改"
+        : "启用/禁用立即生效；保存只更新组快照";
+
+    partial void OnIsModifiedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SaveButtonText));
+        OnPropertyChanged(nameof(GroupHint));
+    }
+
     partial void OnSelectedGroupChanged(ModGroup? value)
     {
-        NewGroupName = value?.Name ?? string.Empty;
         OnPropertyChanged(nameof(CanDeleteGroup));
+        OnPropertyChanged(nameof(HasSelectedGroup));
+    }
+
+    private void MarkModifiedIfNeeded()
+    {
+        if (SelectedGroup is null) return;
+        IsModified = true;
     }
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
@@ -279,6 +303,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 _allItems.Clear();
                 ApplyFilter();
                 Groups.Clear();
+                SelectedGroup = null;
+                IsModified = false;
                 HasGame = false;
                 BepInExMissing = false;
                 EmptyMessage = "尚未选择游戏安装。请先在设置中检测游戏。";
@@ -299,6 +325,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 ApplyFilter();
                 EmptyMessage = "没有找到 BepInEx/plugins。请先安装 BepInEx。";
                 Groups.Clear();
+                SelectedGroup = null;
+                IsModified = false;
                 CountLabel = "0";
                 EnabledLabel = "0";
                 return;
@@ -375,6 +403,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 ?? throw new InvalidOperationException("尚未选择游戏安装。");
             var action = mod.IsEnabled ? "禁用" : "启用";
             var result = await _operations.SetEnabledAsync(installation, mod, !mod.IsEnabled);
+            if (result.Success) MarkModifiedIfNeeded();
             _shell.SetStatus(
                 result.Success ? $"已{action}「{mod.Name}」。" : $"{action}「{mod.Name}」失败：{result.Message}",
                 result.Success ? StatusKind.Success : StatusKind.Error);
@@ -606,13 +635,16 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         try
         {
             var failures = new List<string>();
+            var changed = false;
             foreach (var item in _allItems.ToList())
             {
                 if (item.Mod.IsEnabled == enabled) continue;
                 var result = await _operations.SetEnabledAsync(installation, item.Mod, enabled);
-                if (!result.Success) failures.Add($"{item.Name}: {result.Message}");
+                if (result.Success) changed = true;
+                else failures.Add($"{item.Name}: {result.Message}");
             }
 
+            if (changed) MarkModifiedIfNeeded();
             _shell.SetStatus(
                 failures.Count == 0
                     ? (enabled ? "已启用全部模组。" : "已禁用全部模组。")
@@ -642,14 +674,37 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             groups.Add(defaultGroup);
         }
 
-        Groups.Clear();
-        foreach (var group in groups.OrderByDescending(group => group.IsDefault)
-                     .ThenBy(group => group.CreatedAt))
-            Groups.Add(group);
+        IsReloadingGroups = true;
+        try
+        {
+            Groups.Clear();
+            foreach (var group in groups.OrderByDescending(group => group.IsDefault)
+                         .ThenBy(group => group.CreatedAt))
+                Groups.Add(group);
 
-        SelectedGroup = Groups.FirstOrDefault(group => group.Id == previousId)
-                        ?? Groups.FirstOrDefault(group => group.IsDefault)
-                        ?? Groups.FirstOrDefault();
+            var next = Groups.FirstOrDefault(group => group.Id == previousId)
+                       ?? Groups.FirstOrDefault(group => group.IsDefault)
+                       ?? Groups.FirstOrDefault();
+
+            // Refresh keeps the current group; only an actual group change
+            // clears the unsaved marker, otherwise a toggle would be wiped by
+            // the rescan.
+            var switching = !string.Equals(previousId, next?.Id, StringComparison.Ordinal);
+            if (!switching)
+            {
+                // Rebuilding ItemsSource clears the ComboBox's local selection;
+                // the one-way binding only refreshes when the value changes, so
+                // nudge it even when the same group comes back.
+                SelectedGroup = null;
+            }
+
+            SelectedGroup = next;
+            if (switching) IsModified = false;
+        }
+        finally
+        {
+            IsReloadingGroups = false;
+        }
     }
 
     private List<string> SnapshotEnabledPackageIds() =>
@@ -659,15 +714,54 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+    /// <summary>
+    /// Called by the view when the group ComboBox changes. When the current
+    /// group has unsaved edits the switch is confirmed first; a false result
+    /// tells the view to restore the previous selection.
+    /// </summary>
+    public async Task<bool> TrySelectGroupAsync(ModGroup group)
+    {
+        if (SelectedGroup?.Id == group.Id) return true;
+
+        if (IsModified)
+        {
+            var confirmed = await _dialogs.ConfirmAsync(
+                "切换 Mod 组",
+                $"「{SelectedGroup?.Name ?? "当前组"}」有尚未保存到组快照的启用状态修改。\n\n" +
+                "切换会丢弃这些修改。磁盘上的启用状态保持不变，但不会写回任何组快照。要继续吗？",
+                "丢弃并切换",
+                "取消");
+            if (!confirmed) return false;
+        }
+
+        SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id) ?? group;
+        IsModified = false;
+        _shell.SetStatus(
+            $"已切换到 Mod 组「{SelectedGroup.Name}」；点“应用该组”才会改写启用状态。",
+            StatusKind.Info);
+        return true;
+    }
+
     [RelayCommand]
     private async Task CreateGroupAsync()
     {
         var installation = _shell.Game.Selected;
         if (installation is null) return;
 
-        var name = NewGroupName.Trim();
-        if (string.IsNullOrWhiteSpace(name))
-            name = $"组 {Groups.Count + 1}";
+        var input = await _dialogs.PromptAsync(
+            "新建 Mod 组",
+            "新组会保存当前版本的启用状态快照。",
+            $"组 {Groups.Count + 1}",
+            "Mod 组名称");
+        if (input is null) return;
+
+        var name = input.Trim();
+        if (name.Length == 0)
+        {
+            _shell.SetStatus("Mod 组名称不能为空。", StatusKind.Warning);
+            return;
+        }
+
         if (Groups.Any(group => string.Equals(group.Name, name, StringComparison.OrdinalIgnoreCase)))
         {
             _shell.SetStatus($"已存在同名 Mod 组「{name}」；请先重命名或选择它。", StatusKind.Warning);
@@ -681,9 +775,9 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             DateTimeOffset.UtcNow);
         _groupStore.Add(installation.GameDirectory, group);
         LoadGroups(installation);
-        SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id);
+        SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id) ?? group;
+        IsModified = false;
         _shell.SetStatus($"已新建 Mod 组「{name}」。", StatusKind.Success);
-        await Task.CompletedTask;
     }
 
     [RelayCommand]
@@ -698,10 +792,18 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
         var installation = _shell.Game.Selected;
         if (installation is null) return;
-        var name = NewGroupName.Trim();
-        if (string.IsNullOrWhiteSpace(name))
+
+        var input = await _dialogs.PromptAsync(
+            "重命名 Mod 组",
+            "只修改组名，不影响组内保存的启用状态。",
+            group.Name,
+            "Mod 组名称");
+        if (input is null) return;
+
+        var name = input.Trim();
+        if (name.Length == 0)
         {
-            _shell.SetStatus("组名不能为空。", StatusKind.Warning);
+            _shell.SetStatus("Mod 组名称不能为空。", StatusKind.Warning);
             return;
         }
 
@@ -721,9 +823,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         var updated = group with { Name = name };
         _groupStore.Update(installation.GameDirectory, updated);
         LoadGroups(installation);
-        SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id);
+        SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id) ?? updated;
         _shell.SetStatus($"已重命名为「{name}」。", StatusKind.Success);
-        await Task.CompletedTask;
     }
 
     [RelayCommand]
@@ -736,7 +837,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         var updated = group with { EnabledPackageIds = SnapshotEnabledPackageIds() };
         _groupStore.Update(installation.GameDirectory, updated);
         LoadGroups(installation);
-        SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id);
+        SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id) ?? updated;
+        IsModified = false;
         _shell.SetStatus($"已把当前启用集合保存到「{group.Name}」。", StatusKind.Success);
         await Task.CompletedTask;
     }
@@ -774,6 +876,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                     : $"Mod 组应用部分失败：{string.Join("；", failures)}",
                 failures.Count == 0 ? StatusKind.Success : StatusKind.Warning);
             await RefreshCoreAsync();
+            if (failures.Count == 0) IsModified = false;
         }
         finally
         {
@@ -782,7 +885,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     }
 
     [RelayCommand]
-    private void DeleteGroup()
+    private async Task DeleteGroupAsync()
     {
         if (SelectedGroup is not { } group) return;
         if (group.IsDefault)
@@ -794,8 +897,16 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         var installation = _shell.Game.Selected;
         if (installation is null) return;
 
+        var confirmed = await _dialogs.ConfirmAsync(
+            "删除 Mod 组",
+            $"将删除组快照「{group.Name}」。\n\n这不会改变当前启用状态，也不会删除任何模组文件。",
+            "删除组",
+            "取消");
+        if (!confirmed) return;
+
         _groupStore.Remove(installation.GameDirectory, group.Id);
         LoadGroups(installation);
+        IsModified = false;
         _shell.SetStatus($"已删除 Mod 组「{group.Name}」。", StatusKind.Success);
     }
 

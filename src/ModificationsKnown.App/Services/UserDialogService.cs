@@ -11,6 +11,12 @@ public interface IUserDialogService
 
     Task AlertAsync(string title, string message, string closeText = "知道了");
 
+    Task<string?> PromptAsync(
+        string title,
+        string message,
+        string initialValue = "",
+        string watermark = "名称");
+
     Task<NexusMatch?> PickNexusMatchAsync(string gameDomain, string suggestedName);
 }
 
@@ -45,6 +51,19 @@ public sealed class UserDialogService : IUserDialogService
 
         var dialog = new ConfirmDialog(title, message, closeText, string.Empty, showCancel: false);
         await dialog.ShowDialog<bool>(owner);
+    }
+
+    public async Task<string?> PromptAsync(
+        string title,
+        string message,
+        string initialValue = "",
+        string watermark = "名称")
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var dialog = new TextPromptDialog(title, message, initialValue, watermark);
+        return await dialog.ShowDialog<string?>(owner);
     }
 
     public async Task<NexusMatch?> PickNexusMatchAsync(string gameDomain, string suggestedName)

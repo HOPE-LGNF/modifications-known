@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.4.1] - 2026-11-10
+
+### Fixed
+
+- Overview: the three stat cards overlapped because only the hero panel set
+  `Grid.Column`; the cards now occupy their own columns, and the “从这里开始”
+  card no longer stacks on “当前安装”.
+- Overview: the hero version card no longer stretches to the hero height; its
+  content is centred and the edition/BepInEx text is larger.
+- Version management: the “当前” badge now follows the BepInEx status instead of
+  sitting between the edition and loader labels.
+- Installed: the action buttons were a single cramped row of mixed styles. They
+  are now grouped — scan/open-directory on the title row, view/enable/disable/
+  local-install in a toolbar — with 重新扫描 as the primary action.
+- All dialogs now use a borderless full-window overlay with a dimmed, blurred
+  backdrop and a centred rounded card, including the file/version picker that
+  used to be a Flyout anchored to “下载并安装”.
+
+### Changed
+
+- Mod group toolbar: `ComboBox` + state-aware `保存当前状态 / 保存修改 *` button +
+  `⋮ 更多操作` menu (new/rename/delete). New and rename use a centred text
+  prompt instead of an inline text box; delete asks for confirmation.
+- Group switching is intercepted when there are unsaved edits; cancelling
+  restores the previous ComboBox selection. Unsaved state no longer changes
+  simply because another group was selected.
+
 ## [0.4.0] - 2026-11-09
 
 ### Fixed

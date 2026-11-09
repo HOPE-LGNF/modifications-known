@@ -1,0 +1,49 @@
+<views:DialogWindow xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:views="using:ModificationsKnown.App.Views"
+                    x:Class="ModificationsKnown.App.Views.TextPromptDialog"
+                    Title="输入">
+    <Grid>
+        <Border Background="{DynamicResource DialogScrimBrush}" />
+
+        <Border HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Width="440"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="16"
+                Padding="26,24"
+                BoxShadow="0 20 56 0 #A0000000">
+            <StackPanel Spacing="12">
+                <TextBlock Name="TitleText"
+                           Text="输入"
+                           FontSize="20"
+                           FontWeight="SemiBold" />
+                <TextBlock Name="MessageText"
+                           Text=""
+                           Classes="muted"
+                           FontSize="13"
+                           TextWrapping="Wrap" />
+                <TextBox Name="ValueBox"
+                         Watermark="名称"
+                         Margin="0,2,0,0"
+                         KeyDown="OnValueKeyDown" />
+                <TextBlock Name="ErrorText"
+                           IsVisible="False"
+                           Foreground="{DynamicResource DangerBrush}"
+                           FontSize="11" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,6,0,0">
+                    <Button Name="CancelButton"
+                            Classes="Ghost"
+                            Content="取消"
+                            Click="OnCancelClick" />
+                    <Button Name="ConfirmButton"
+                            Classes="Primary"
+                            Content="确定"
+                            Click="OnConfirmClick" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</views:DialogWindow>

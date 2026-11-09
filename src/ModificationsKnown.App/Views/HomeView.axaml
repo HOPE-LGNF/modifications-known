@@ -30,29 +30,28 @@
 
                     <Border Grid.Column="1"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Stretch"
-                            MinWidth="170"
+                            VerticalAlignment="Center"
+                            MinWidth="180"
                             Background="{DynamicResource SurfaceAltBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1"
-                            CornerRadius="10"
-                            Padding="12,10">
-                        <Grid RowDefinitions="Auto,*,Auto">
-                            <StackPanel Spacing="3">
-                                <TextBlock Text="当前版本"
-                                           FontSize="10"
-                                           Foreground="{DynamicResource TextSecondaryBrush}" />
-                                <TextBlock Text="{Binding EditionLabel}"
-                                           FontSize="14"
-                                           Foreground="{DynamicResource AccentBrush}"
-                                           FontWeight="SemiBold" />
-                            </StackPanel>
-                            <TextBlock Grid.Row="2"
-                                       Text="{Binding BepInExLabel}"
+                            CornerRadius="12"
+                            Padding="18,16">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="当前版本"
                                        FontSize="11"
-                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                       HorizontalAlignment="Right" />
-                        </Grid>
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                            <TextBlock Text="{Binding EditionLabel}"
+                                       FontSize="22"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       FontWeight="SemiBold" />
+                            <Border Height="1"
+                                    Background="{DynamicResource BorderBrush}"
+                                    Margin="0,8,0,8" />
+                            <TextBlock Text="{Binding BepInExLabel}"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                        </StackPanel>
                     </Border>
                 </Grid>
             </Border>
@@ -65,7 +64,7 @@
                         <TextBlock Text="BepInEx/plugins 中的包" Classes="caption" />
                     </StackPanel>
                 </Border>
-                <Border Classes="card" Margin="0,0,12,0">
+                <Border Grid.Column="1" Classes="card" Margin="0,0,12,0">
                     <StackPanel Spacing="4">
                         <TextBlock Text="启用中" Classes="muted" FontSize="12" />
                         <TextBlock Text="{Binding EnabledCountLabel}"
@@ -75,7 +74,7 @@
                         <TextBlock Text="当前会随游戏加载" Classes="caption" />
                     </StackPanel>
                 </Border>
-                <Border Classes="card" VerticalAlignment="Top">
+                <Border Grid.Column="2" Classes="card">
                     <StackPanel Spacing="4">
                         <TextBlock Text="Nexus 状态" Classes="muted" FontSize="12" />
                         <TextBlock Text="{Binding NexusLabel}"
@@ -107,7 +106,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Classes="card">
+                <Border Grid.Column="1" Classes="card">
                     <StackPanel Spacing="10">
                         <TextBlock Text="从这里开始" Classes="h2" />
                         <TextBlock Text="1. 在设置里确认游戏路径和 Nexus API Key。" Classes="muted" FontSize="12" TextWrapping="Wrap" />

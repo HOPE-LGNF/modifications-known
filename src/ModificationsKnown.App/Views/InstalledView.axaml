@@ -3,56 +3,125 @@
              x:Class="ModificationsKnown.App.Views.InstalledView">
     <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12">
 
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10">
-            <StackPanel Spacing="3">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="已安装模组" Classes="h2" />
-                    <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="5" Padding="7,2" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding CountLabel, StringFormat='{}{0} 个包'}"
-                                   FontSize="10"
-                                   Foreground="{DynamicResource AccentBrush}" />
-                    </Border>
-                    <TextBlock Text="{Binding EnabledLabel, StringFormat='已启用 {0}'}"
-                               Classes="caption"
-                               VerticalAlignment="Center" />
+        <StackPanel Grid.Row="0" Spacing="10">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                <StackPanel Spacing="3">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="已安装模组" Classes="h2" />
+                        <Border Background="{DynamicResource AccentSoftBrush}" CornerRadius="5" Padding="7,2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding CountLabel, StringFormat='{}{0} 个包'}"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource AccentBrush}" />
+                        </Border>
+                        <TextBlock Text="{Binding EnabledLabel, StringFormat='已启用 {0}'}"
+                                   Classes="caption"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding PluginsPath}"
+                               Classes="mono"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
                 </StackPanel>
-                <TextBlock Text="{Binding PluginsPath}"
-                           Classes="mono"
-                           Foreground="{DynamicResource TextSecondaryBrush}"
-                           TextTrimming="CharacterEllipsis" />
-                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,5,0,0">
-                    <TextBlock Text="Mod 组" Classes="muted" VerticalAlignment="Center" />
-                    <ComboBox Width="150"
-                              ItemsSource="{Binding Groups}"
-                              SelectedItem="{Binding SelectedGroup, Mode=TwoWay}"
-                              PlaceholderText="未选择">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <TextBlock Text="{Binding Name}" />
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <TextBox Width="110"
-                             Text="{Binding NewGroupName, Mode=TwoWay}"
-                             Watermark="新组名" />
-                    <Button Classes="Ghost" Content="新建组" Command="{Binding CreateGroupCommand}" />
-                    <Button Classes="Ghost" Content="重命名" Command="{Binding RenameGroupCommand}" />
-                    <Button Classes="Ghost" Content="保存当前" Command="{Binding SaveCurrentGroupCommand}" />
-                    <Button Classes="Ghost" Content="应用" Command="{Binding ApplyGroupCommand}" />
-                    <Button Classes="Ghost" Content="删除组"
-                            IsEnabled="{Binding CanDeleteGroup}"
-                            Command="{Binding DeleteGroupCommand}" />
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            VerticalAlignment="Top">
+                    <Button Classes="Ghost"
+                            Content="打开插件目录"
+                            Command="{Binding OpenPluginsFolderCommand}" />
+                    <Button Classes="Primary"
+                            Content="重新扫描"
+                            Command="{Binding RefreshCommand}" />
                 </StackPanel>
-            </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <Button Classes="Ghost" Content="{Binding ViewModeButtonText}" Command="{Binding ToggleViewModeCommand}" />
-                <Button Classes="Ghost" Content="全部启用" Command="{Binding EnableAllCommand}" />
-                <Button Classes="Ghost" Content="全部禁用" Command="{Binding DisableAllCommand}" />
-                <Button Classes="Ghost" Content="安装已下载文件" Command="{Binding InstallLocalArchiveCommand}" />
-                <Button Classes="Ghost" Content="打开插件目录" Command="{Binding OpenPluginsFolderCommand}" />
-                <Button Content="重新扫描" Command="{Binding RefreshCommand}" />
-            </StackPanel>
-        </Grid>
+            </Grid>
+
+            <Border Background="{DynamicResource SurfaceAltBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="12,10">
+                <StackPanel Spacing="9">
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="10">
+                        <TextBlock Text="Mod 组"
+                                   Classes="muted"
+                                   VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1"
+                                  Name="GroupComboBox"
+                                  Width="220"
+                                  ItemsSource="{Binding Groups}"
+                                  SelectedItem="{Binding SelectedGroup, Mode=OneWay}"
+                                  SelectionChanged="OnGroupSelectionChanged"
+                                  PlaceholderText="未选择">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <StackPanel Grid.Column="2"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    HorizontalAlignment="Left">
+                            <Button Content="{Binding SaveButtonText}"
+                                    Command="{Binding SaveCurrentGroupCommand}"
+                                    IsEnabled="{Binding HasSelectedGroup}"
+                                    Classes.modified="{Binding IsModified}"
+                                    ToolTip.Tip="把当前启用状态写回选中的 Mod 组快照" />
+                            <Button Classes="Ghost"
+                                    Content="应用该组"
+                                    Command="{Binding ApplyGroupCommand}"
+                                    IsEnabled="{Binding HasSelectedGroup}"
+                                    ToolTip.Tip="把选中组的启用快照应用到当前版本；组外的包会被禁用" />
+                        </StackPanel>
+                        <Button Grid.Column="3"
+                                Classes="Ghost"
+                                Content="⋮ 更多操作">
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <MenuItem Header="➕ 新建 Mod 组…"
+                                              Command="{Binding CreateGroupCommand}" />
+                                    <MenuItem Header="✏️ 重命名当前组…"
+                                              Command="{Binding RenameGroupCommand}" />
+                                    <Separator />
+                                    <MenuItem Header="🗑️ 删除当前组"
+                                              Foreground="{DynamicResource DangerBrush}"
+                                              IsEnabled="{Binding CanDeleteGroup}"
+                                              Command="{Binding DeleteGroupCommand}" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                    </Grid>
+
+                    <Border Height="1" Background="{DynamicResource BorderBrush}" />
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <Button Classes="Ghost"
+                                    Content="{Binding ViewModeButtonText}"
+                                    Command="{Binding ToggleViewModeCommand}" />
+                            <Button Classes="Ghost"
+                                    Content="全部启用"
+                                    Command="{Binding EnableAllCommand}" />
+                            <Button Classes="Ghost"
+                                    Content="全部禁用"
+                                    Command="{Binding DisableAllCommand}" />
+                            <Border Width="1"
+                                    Height="18"
+                                    Margin="6,0"
+                                    Background="{DynamicResource BorderBrush}" />
+                            <Button Classes="Ghost"
+                                    Content="安装已下载文件"
+                                    Command="{Binding InstallLocalArchiveCommand}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding GroupHint}"
+                                   Classes="caption"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
 
         <TextBox Grid.Row="1"
                  Text="{Binding SearchText, Mode=TwoWay}"

@@ -226,58 +226,9 @@
 
                             <StackPanel Margin="18,0,18,18" Spacing="9">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                    <Button Classes="Primary" Content="下载并安装">
-                                        <Button.Flyout>
-                                            <Flyout Placement="TopEdgeAlignedLeft">
-                                                <StackPanel Width="380" Spacing="8">
-                                                    <TextBlock Text="选择要安装的文件和版本" FontSize="12" FontWeight="SemiBold" />
-                                                    <ListBox ItemsSource="{Binding Files}"
-                                                             SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
-                                                             Background="Transparent"
-                                                             BorderThickness="0"
-                                                             MaxHeight="150">
-                                                        <ListBox.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Grid ColumnDefinitions="*,Auto" Margin="4,4">
-                                                                    <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" />
-                                                                    <TextBlock Grid.Column="1"
-                                                                               Text="{Binding UploadedLabel}"
-                                                                               Classes="caption"
-                                                                               Margin="8,0,0,0" />
-                                                                </Grid>
-                                                            </DataTemplate>
-                                                        </ListBox.ItemTemplate>
-                                                    </ListBox>
-                                                    <ListBox ItemsSource="{Binding Versions}"
-                                                             SelectedItem="{Binding SelectedVersion, Mode=TwoWay}"
-                                                             Background="Transparent"
-                                                             BorderThickness="0"
-                                                             MaxHeight="190">
-                                                        <ListBox.ItemTemplate>
-                                                            <DataTemplate>
-                                                                <Grid ColumnDefinitions="*,Auto" Margin="4,4">
-                                                                    <StackPanel Spacing="1">
-                                                                        <TextBlock Text="{Binding VersionLabel}" FontSize="12" />
-                                                                        <TextBlock Text="{Binding Name}" Classes="caption" TextTrimming="CharacterEllipsis" />
-                                                                    </StackPanel>
-                                                                    <Border Grid.Column="1"
-                                                                            Background="{DynamicResource SurfaceAltBrush}"
-                                                                            CornerRadius="4"
-                                                                            Padding="5,2"
-                                                                            VerticalAlignment="Center">
-                                                                        <TextBlock Text="{Binding CategoryLabel}" FontSize="9" Classes="muted" />
-                                                                    </Border>
-                                                                </Grid>
-                                                            </DataTemplate>
-                                                        </ListBox.ItemTemplate>
-                                                    </ListBox>
-                                                    <Button Classes="Primary"
-                                                            Content="下载此版本"
-                                                            Command="{Binding DownloadCommand}" />
-                                                </StackPanel>
-                                            </Flyout>
-                                        </Button.Flyout>
-                                    </Button>
+                                    <Button Classes="Primary"
+                                            Content="下载并安装"
+                                            Click="OnDownloadClick" />
                                     <Button Grid.Column="1"
                                             Classes="Ghost"
                                             Content="在 Nexus 打开"

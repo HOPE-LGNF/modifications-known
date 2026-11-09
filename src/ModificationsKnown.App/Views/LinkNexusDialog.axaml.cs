@@ -6,7 +6,7 @@ using ModificationsKnown.Core.Nexus;
 
 namespace ModificationsKnown.App.Views;
 
-public partial class LinkNexusDialog : Window
+public partial class LinkNexusDialog : DialogWindow
 {
     private readonly INexusModsClient _client;
     private readonly string _gameDomain;

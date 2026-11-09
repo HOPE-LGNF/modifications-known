@@ -53,6 +53,7 @@
                                                          Width="170"
                                                          Watermark="版本显示名" />
                                                 <TextBlock Text="{Binding EditionLabel}" Classes="caption" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding LoaderLabel}" Classes="caption" VerticalAlignment="Center" />
                                                 <Border Background="{DynamicResource AccentSoftBrush}"
                                                         CornerRadius="4"
                                                         Padding="5,2"
@@ -60,7 +61,6 @@
                                                         IsVisible="{Binding IsCurrent}">
                                                     <TextBlock Text="当前" FontSize="9" Foreground="{DynamicResource AccentBrush}" />
                                                 </Border>
-                                                <TextBlock Text="{Binding LoaderLabel}" Classes="caption" VerticalAlignment="Center" />
                                             </StackPanel>
                                             <TextBlock Text="{Binding Path}"
                                                        Classes="mono"
