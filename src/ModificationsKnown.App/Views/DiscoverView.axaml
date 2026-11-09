@@ -171,14 +171,14 @@
 
                     <ScrollViewer IsVisible="{Binding HasSelection}" VerticalScrollBarVisibility="Auto">
                         <StackPanel Spacing="14">
-                            <Border Height="{Binding DetailImageHeight}"
+                            <Border Height="210"
                                     Background="{DynamicResource SurfaceAltBrush}"
                                     CornerRadius="10"
                                     ClipToBounds="True">
                                 <Button Classes="image-button"
-                                        Command="{Binding ToggleImageCommand}"
-                                        ToolTip.Tip="点击放大，再次点击还原">
-                                    <Image Source="{Binding DetailImage}" Stretch="UniformToFill" />
+                                        Click="OnImageClick"
+                                        ToolTip.Tip="点击查看完整图片">
+                                    <Image Source="{Binding DetailImage}" Stretch="Uniform" />
                                 </Button>
                             </Border>
 

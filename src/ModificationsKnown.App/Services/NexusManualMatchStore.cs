@@ -52,6 +52,21 @@ public sealed class NexusManualMatchStore
         }
     }
 
+    public int RemoveAll(string gameDirectory)
+    {
+        lock (_gate)
+        {
+            var cache = Load();
+            var prefix = Path.GetFullPath(gameDirectory).TrimEnd(Path.DirectorySeparatorChar).ToLowerInvariant() + "|";
+            var keys = cache.Keys
+                .Where(key => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            foreach (var key in keys) cache.Remove(key);
+            if (keys.Count > 0) Save(cache);
+            return keys.Count;
+        }
+    }
+
     private Dictionary<string, NexusMatch> Load()
     {
         if (_cache is not null) return _cache;

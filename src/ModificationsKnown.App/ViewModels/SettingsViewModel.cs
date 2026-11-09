@@ -23,6 +23,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private readonly NxmProtocolRegistrar _nxmRegistrar;
     private readonly IUserDialogService _dialogs;
     private readonly GameInstanceStore _instances;
+    private readonly InstanceDeletionService _deletion;
     private readonly BepInExInstaller _bepInExInstaller;
     private bool _loadingSettings;
 
@@ -79,7 +80,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         IAppLogger logger,
         NxmProtocolRegistrar nxmRegistrar,
         IUserDialogService dialogs,
-        GameInstanceStore instances)
+        GameInstanceStore instances,
+        InstanceDeletionService deletion)
     {
         _shell = shell;
         _settings = settings;
@@ -90,6 +92,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         _nxmRegistrar = nxmRegistrar;
         _dialogs = dialogs;
         _instances = instances;
+        _deletion = deletion;
         _bepInExInstaller = new BepInExInstaller(logger);
         LoadFromSettings();
         RefreshNxmStatus();
@@ -120,7 +123,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
                 string.Equals(_shell.Game.Selected?.GameDirectory, installation.GameDirectory, StringComparison.OrdinalIgnoreCase),
                 SaveVersionAliasAsync,
                 SelectVersionAsync,
-                InstallLoaderAsync));
+                InstallLoaderAsync,
+                DeleteVersionAsync));
         }
     }
 
@@ -137,6 +141,76 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         await _settings.SaveAsync();
         RefreshGameVersions();
         _shell.SetStatus($"版本已重命名为「{alias}」。", StatusKind.Success);
+    }
+
+    private async Task DeleteVersionAsync(GameVersionRow row)
+    {
+        var installation = row.Installation;
+        if (InstanceDeletionService.IsInstanceRunning(installation))
+        {
+            await _dialogs.AlertAsync(
+                "无法删除版本",
+                $"「{installation.DisplayLabel}」正在运行。\n\n请先关闭游戏，再回来删除；本次没有做任何修改。");
+            return;
+        }
+
+        var profile = _deletion.GetProfileDirectory(installation);
+        var saves = _deletion.ListSaves(installation);
+        var plan = await _dialogs.PickInstanceDeletionAsync(
+            installation,
+            saves,
+            profile,
+            _deletion.SuggestSaveTarget(installation));
+        if (plan is null) return;
+
+        if (InstanceDeletionService.IsInstanceRunning(installation))
+        {
+            await _dialogs.AlertAsync(
+                "无法删除版本",
+                "实例在确认过程中启动了。请先关闭游戏；本次没有做任何修改。");
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var report = await _deletion.ExecuteAsync(installation, plan);
+            var lines = report.Steps
+                .Select(step => $"{(step.Success ? "成功" : "失败")} · {step.Name}：{step.Message}")
+                .ToList();
+            var message = string.Join(Environment.NewLine, lines);
+            if (!string.IsNullOrWhiteSpace(message)) message = Environment.NewLine + message;
+
+            await _dialogs.AlertAsync(
+                report.Aborted ? "删除已中止" : report.Success ? "版本已删除" : "删除完成，但有失败项",
+                report.Summary + message,
+                "知道了");
+
+            if (!report.Aborted)
+            {
+                var wasSelected = string.Equals(
+                    _shell.Game.Selected?.GameDirectory,
+                    installation.GameDirectory,
+                    StringComparison.OrdinalIgnoreCase);
+                _shell.Game.Remove(installation.GameDirectory);
+
+                if (wasSelected)
+                {
+                    _shell.Settings.Current.PreferredGamePath = _shell.Game.Selected?.GameDirectory;
+                    _shell.Settings.Current.PreferredInstallationId = _shell.Game.Selected?.Profile.Id;
+                    await _shell.Settings.SaveAsync();
+                }
+
+                RefreshGameVersions();
+                _shell.SetStatus(
+                    report.Success ? $"已删除版本「{installation.DisplayLabel}」。" : report.Summary,
+                    report.Success ? StatusKind.Success : StatusKind.Warning);
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private async Task SelectVersionAsync(GameVersionRow row)

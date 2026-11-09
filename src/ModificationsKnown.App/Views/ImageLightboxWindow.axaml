@@ -1,0 +1,60 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ModificationsKnown.App.Views.ImageLightboxWindow"
+        Title="查看图片"
+        SystemDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        Background="Transparent">
+    <Grid Name="Root" Opacity="0" Background="#E6080B09">
+        <Grid RowDefinitions="Auto,*">
+            <Border Background="#33000000" Padding="20,12">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Name="CaptionText"
+                                   FontSize="13"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <TextBlock Text="滚轮缩放 · 拖拽平移 · Esc 关闭"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <TextBlock Name="ZoomText"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   VerticalAlignment="Center" />
+                        <Button Name="ResetButton"
+                                Classes="Ghost"
+                                Content="适应窗口"
+                                Click="OnResetClick" />
+                        <Button Name="CloseButton"
+                                Classes="Ghost"
+                                Content="✕"
+                                FontSize="16"
+                                Padding="10,2"
+                                Click="OnCloseClick" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1"
+                  Name="Viewport"
+                  ClipToBounds="True"
+                  Background="Transparent"
+                  SizeChanged="OnViewportSizeChanged"
+                  PointerPressed="OnPointerPressed"
+                  PointerMoved="OnPointerMoved"
+                  PointerReleased="OnPointerReleased"
+                  PointerWheelChanged="OnPointerWheelChanged">
+                <Image Name="LightboxImage"
+                       Stretch="Uniform"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Top"
+                       RenderTransformOrigin="0,0" />
+
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

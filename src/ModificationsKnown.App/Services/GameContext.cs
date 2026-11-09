@@ -7,10 +7,12 @@ namespace ModificationsKnown.App.Services;
 public partial class GameContext : ObservableObject
 {
     private readonly GameInstanceStore _instances;
+    private readonly HiddenInstanceStore? _hidden;
 
-    public GameContext(GameInstanceStore instances)
+    public GameContext(GameInstanceStore instances, HiddenInstanceStore? hidden = null)
     {
         _instances = instances;
+        _hidden = hidden;
     }
 
     [ObservableProperty]
@@ -52,6 +54,8 @@ public partial class GameContext : ObservableObject
             Installations.Clear();
             foreach (var installation in detected)
             {
+                if (_hidden?.IsHidden(installation.GameDirectory) == true) continue;
+
                 var alias = _instances.GetAlias(installation.GameDirectory);
                 Installations.Add(string.IsNullOrWhiteSpace(alias)
                     ? installation
@@ -75,6 +79,23 @@ public partial class GameContext : ObservableObject
             string.Equals(installation.GameDirectory, gameDirectory, StringComparison.OrdinalIgnoreCase));
         if (match is null) return false;
         Selected = match;
+        return true;
+    }
+
+    public bool Remove(string gameDirectory)
+    {
+        var match = Installations.FirstOrDefault(installation =>
+            string.Equals(installation.GameDirectory, gameDirectory, StringComparison.OrdinalIgnoreCase));
+        if (match is null) return false;
+
+        var wasSelected = ReferenceEquals(Selected, match);
+        Installations.Remove(match);
+        if (wasSelected)
+        {
+            Selected = Installations.FirstOrDefault();
+            if (Selected is null) Changed?.Invoke(this, EventArgs.Empty);
+        }
+
         return true;
     }
 

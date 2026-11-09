@@ -72,6 +72,17 @@ public sealed class ModGroupStore
         }
     }
 
+    public bool RemoveAll(string gameDirectory)
+    {
+        lock (_gate)
+        {
+            var cache = Load();
+            if (!cache.Remove(Key(gameDirectory))) return false;
+            Save(cache);
+            return true;
+        }
+    }
+
     private Dictionary<string, List<ModGroup>> Load()
     {
         if (_cache is not null) return _cache;

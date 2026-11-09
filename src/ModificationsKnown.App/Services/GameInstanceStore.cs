@@ -69,6 +69,17 @@ public sealed class GameInstanceStore
         }
     }
 
+    public bool RemoveAlias(string gameDirectory)
+    {
+        lock (_gate)
+        {
+            var aliases = Load();
+            if (!aliases.Remove(Key(gameDirectory))) return false;
+            Save(aliases);
+            return true;
+        }
+    }
+
     private Dictionary<string, string> Load()
     {
         if (_aliases is not null) return _aliases;

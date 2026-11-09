@@ -65,6 +65,44 @@ public sealed class JsonInstalledSourceStore : IInstalledSourceStore
         }
     }
 
+    public async Task<int> RemoveAllAsync(
+        string gameDirectory,
+        CancellationToken cancellationToken = default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var cache = Load();
+            var prefix = Path.GetFullPath(gameDirectory)
+                .TrimEnd(Path.DirectorySeparatorChar)
+                .ToLowerInvariant() + "|";
+            var keys = cache.Keys
+                .Where(key => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (keys.Count == 0) return 0;
+
+            foreach (var key in keys) cache.Remove(key);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            var temporary = _path + ".tmp";
+            var json = JsonSerializer.Serialize(cache.Values.ToList(), JsonOptions);
+            await File.WriteAllTextAsync(temporary, json, cancellationToken).ConfigureAwait(false);
+            File.Move(temporary, _path, overwrite: true);
+            _cache = cache;
+            _logger?.Debug($"Removed {keys.Count} source record(s) for {gameDirectory}");
+            return keys.Count;
+        }
+        catch (Exception exception)
+        {
+            _logger?.Warn($"删除安装来源失败：{exception.Message}");
+            return 0;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private Dictionary<string, InstalledSource> Load()
     {
         if (_cache is not null) return _cache;

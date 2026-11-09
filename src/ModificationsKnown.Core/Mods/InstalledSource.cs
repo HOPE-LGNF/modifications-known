@@ -20,4 +20,6 @@ public interface IInstalledSourceStore
     InstalledSource? Get(string gameDirectory, string packageName);
 
     Task RecordAsync(IReadOnlyList<InstalledSource> sources, CancellationToken cancellationToken = default);
+
+    Task<int> RemoveAllAsync(string gameDirectory, CancellationToken cancellationToken = default);
 }

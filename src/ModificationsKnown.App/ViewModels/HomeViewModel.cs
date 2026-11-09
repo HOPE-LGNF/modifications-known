@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
+using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
 
 namespace ModificationsKnown.App.ViewModels;
@@ -14,6 +15,8 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private readonly IModManager _modManager;
     private readonly IGameLauncher _launcher;
     private readonly IAppSettingsService _settings;
+    private readonly INexusModsClient _nexus;
+    private DateTimeOffset _lastAccountCheck;
 
     [ObservableProperty]
     private bool _hasGame;
@@ -46,6 +49,12 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private string _nexusLabel = "未配置 API Key";
 
     [ObservableProperty]
+    private string _nexusAccountLabel = "账号类型未知";
+
+    [ObservableProperty]
+    private string _nexusAccountDetail = "配置 API Key 后可检查";
+
+    [ObservableProperty]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -61,13 +70,15 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         IGameLocator locator,
         IModManager modManager,
         IGameLauncher launcher,
-        IAppSettingsService settings)
+        IAppSettingsService settings,
+        INexusModsClient nexus)
     {
         _shell = shell;
         _locator = locator;
         _modManager = modManager;
         _launcher = launcher;
         _settings = settings;
+        _nexus = nexus;
         _shell.Game.Changed += OnGameChanged;
     }
 
@@ -92,6 +103,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
                 EnabledCountLabel = "0";
                 NexusConfigured = !string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey);
                 NexusLabel = NexusConfigured ? "API Key 已配置" : "未配置 API Key";
+                await RefreshNexusAccountAsync();
                 return;
             }
 
@@ -104,6 +116,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             BepInExReady = installation.HasBepInEx;
             NexusConfigured = !string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey);
             NexusLabel = NexusConfigured ? "API Key 已配置" : "未配置 API Key";
+            await RefreshNexusAccountAsync();
 
             if (installation.HasPluginsDirectory)
             {
@@ -120,6 +133,38 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private async Task RefreshNexusAccountAsync()
+    {
+        if (!NexusConfigured)
+        {
+            NexusAccountLabel = "未配置";
+            NexusAccountDetail = "配置 API Key 后可显示普通 / Premium";
+            return;
+        }
+
+        // The home page is re-activated often; a five-minute cache avoids
+        // hammering /users/validate on every navigation.
+        if (DateTimeOffset.UtcNow - _lastAccountCheck < TimeSpan.FromMinutes(5)) return;
+
+        try
+        {
+            var status = await _nexus.GetAccountStatusAsync();
+            NexusAccountLabel = status.TierLabel;
+            NexusAccountDetail = status.IsPremium
+                ? "Premium · 可直接生成下载链接"
+                : $"普通账号 · {status.QuotaLabel}";
+        }
+        catch (Exception exception)
+        {
+            NexusAccountLabel = "未知";
+            NexusAccountDetail = $"账号查询失败：{exception.Message}";
+        }
+        finally
+        {
+            _lastAccountCheck = DateTimeOffset.UtcNow;
         }
     }
 

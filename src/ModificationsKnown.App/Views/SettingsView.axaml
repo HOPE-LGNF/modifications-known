@@ -6,8 +6,8 @@
 
             <Border Classes="card">
                 <StackPanel Spacing="12">
-                    <TextBlock Text="游戏与安装" Classes="h2" />
-                    <TextBlock Text="启动器会优先读取 Steam 的 appmanifest；也可以手动指定 .exe 或游戏目录。正式版与试玩版可以同时存在。"
+                    <TextBlock Text="游戏与版本" Classes="h2" />
+                    <TextBlock Text="启动器会优先读取 Steam 的 appmanifest；也可以手动指定 .exe 或游戏目录。每个检测到的目录都是一个独立实例，拥有自己的 BepInEx/plugins、存档和 Mod 组。"
                                Classes="muted"
                                FontSize="12"
                                TextWrapping="Wrap" />
@@ -19,24 +19,23 @@
                     </Grid>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Classes="Primary" Content="检测此路径" Command="{Binding DetectGameCommand}" />
-                        <TextBlock Text="检测成功后会更新上方的游戏选择。"
+                        <TextBlock Text="检测成功后会自动选中该版本。"
                                    Classes="caption"
                                    VerticalAlignment="Center" />
                     </StackPanel>
-                </StackPanel>
-            </Border>
 
-            <Border Classes="card">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="版本管理" Classes="h2" />
-                    <TextBlock Text="每个检测到的游戏目录都是一个独立实例，拥有自己的 BepInEx/plugins。重命名只改显示名，不改目录；切换当前版本会影响首页、已安装页和 Mod 组。"
+                    <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,4" />
+
+                    <TextBlock Text="已检测版本" FontSize="13" FontWeight="SemiBold" />
+                    <TextBlock Text="重命名只改显示名，不改目录；切换当前版本会影响首页、已安装页和 Mod 组。"
                                Classes="muted"
-                               FontSize="12"
+                               FontSize="11"
                                TextWrapping="Wrap" />
                     <TextBlock Text="启动前会自动把 %LocalLow%\Orsoniks\CasualtiesUnknown 指向当前版本的独立存档目录，避免正式版与 Demo 共用 save.sv。若从 MK 之外启动游戏，游戏会写入最后一次由 MK 选中的版本存档。"
                                Classes="muted"
                                FontSize="11"
                                TextWrapping="Wrap" />
+
                     <ItemsControl ItemsSource="{Binding GameVersions}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -51,7 +50,8 @@
                                             <StackPanel Orientation="Horizontal" Spacing="7">
                                                 <TextBox Text="{Binding Alias, Mode=TwoWay}"
                                                          Width="170"
-                                                         Watermark="版本显示名" />
+                                                         Watermark="版本显示名"
+                                                         KeyDown="OnAliasKeyDown" />
                                                 <TextBlock Text="{Binding EditionLabel}" Classes="caption" VerticalAlignment="Center" />
                                                 <TextBlock Text="{Binding LoaderLabel}" Classes="caption" VerticalAlignment="Center" />
                                                 <Border Background="{DynamicResource AccentSoftBrush}"
@@ -69,12 +69,19 @@
                                                        TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <Button Classes="Ghost" Content="保存名称" Command="{Binding SaveAliasCommand}" />
+                                            <Button Content="{Binding SaveAliasText}"
+                                                    Command="{Binding SaveAliasCommand}"
+                                                    IsVisible="{Binding IsAliasDirty}"
+                                                    IsEnabled="{Binding CanSaveAlias}"
+                                                    Classes.modified="{Binding IsAliasDirty}" />
                                             <Button Classes="Ghost" Content="设为当前" Command="{Binding SelectCommand}" />
                                             <Button Classes="Ghost"
                                                     Content="安装 BepInEx"
                                                     IsVisible="{Binding CanInstallLoader}"
                                                     Command="{Binding InstallLoaderCommand}" />
+                                            <Button Classes="Danger"
+                                                    Content="删除版本"
+                                                    Command="{Binding DeleteCommand}" />
                                         </StackPanel>
                                     </Grid>
                                 </Border>

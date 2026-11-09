@@ -122,22 +122,6 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private bool _isDescriptionExpanded;
 
     [ObservableProperty]
-    private bool _isImageExpanded;
-
-    public double DetailImageHeight => IsImageExpanded ? 480 : 210;
-
-    partial void OnIsImageExpandedChanged(bool value)
-    {
-        OnPropertyChanged(nameof(DetailImageHeight));
-    }
-
-    [RelayCommand]
-    private void ToggleImage()
-    {
-        IsImageExpanded = !IsImageExpanded;
-    }
-
-    [ObservableProperty]
     private bool _hasLongDescription;
 
     public double DescriptionMaxHeight => IsDescriptionExpanded ? 5000 : 150;
@@ -266,7 +250,6 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         DetailImage = null;
         IsDescriptionExpanded = false;
         HasLongDescription = false;
-        IsImageExpanded = false;
         Files.Clear();
         Versions.Clear();
         SelectedFile = null;

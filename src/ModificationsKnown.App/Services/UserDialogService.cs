@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using ModificationsKnown.App.Views;
+using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Nexus;
 
 namespace ModificationsKnown.App.Services;
@@ -18,6 +19,12 @@ public interface IUserDialogService
         string watermark = "名称");
 
     Task<NexusMatch?> PickNexusMatchAsync(string gameDomain, string suggestedName);
+
+    Task<InstanceDeletionPlan?> PickInstanceDeletionAsync(
+        GameInstallation installation,
+        IReadOnlyList<InstanceSaveFile> saves,
+        string profileDirectory,
+        string suggestedTarget);
 }
 
 public sealed class UserDialogService : IUserDialogService
@@ -64,6 +71,19 @@ public sealed class UserDialogService : IUserDialogService
 
         var dialog = new TextPromptDialog(title, message, initialValue, watermark);
         return await dialog.ShowDialog<string?>(owner);
+    }
+
+    public async Task<InstanceDeletionPlan?> PickInstanceDeletionAsync(
+        GameInstallation installation,
+        IReadOnlyList<InstanceSaveFile> saves,
+        string profileDirectory,
+        string suggestedTarget)
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var dialog = new DeleteInstanceDialog(installation, saves, profileDirectory, suggestedTarget);
+        return await dialog.ShowDialog<InstanceDeletionPlan?>(owner);
     }
 
     public async Task<NexusMatch?> PickNexusMatchAsync(string gameDomain, string suggestedName)

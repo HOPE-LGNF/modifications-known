@@ -38,4 +38,14 @@ public partial class DiscoverView : UserControl
         var dialog = new VersionPickerDialog(viewModel);
         await dialog.ShowDialog(owner);
     }
+
+    private async void OnImageClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not DiscoverViewModel viewModel || viewModel.DetailImage is null) return;
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
+
+        var caption = viewModel.SelectedCard?.Name ?? "模组图片";
+        var viewer = new ImageLightboxWindow(viewModel.DetailImage, caption);
+        await viewer.ShowDialog(owner);
+    }
 }

@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.5.0] - 2026-11-10
+
+### Added
+
+- Version deletion with a two-step wizard: archive saves by copy/move, or keep
+  the managed save directory in place; optionally delete the game folder
+  (default off). The second step lists every affected item in red before the
+  destructive action. Records are hidden in `hidden-instances.json` so detection
+  does not resurrect them, and every execution step reports success/failure.
+  Deletion is blocked while the instance is running; the live save junction is
+  detached when its profile is removed.
+- Full-window image lightbox for Nexus screenshots: aspect-fit with
+  `min(availW / w, availH / h, 1)`, no crop or stretch; wheel zoom anchored at
+  the cursor, clamped panning, Esc/backdrop/close, fit-on-resize.
+- Overview Nexus card now shows the account tier (免费账号 / Premium) and quota,
+  cached for five minutes.
+
+### Changed
+
+- Rename save button in version management is hidden until the trimmed text
+  differs; it is accent-highlighted, disables while saving, supports Enter to
+  save and Esc to restore.
+- “游戏与安装” and “版本管理” are merged into one “游戏与版本” card; bindings and
+  settings keys are unchanged, and the settings nav subtitle now covers game,
+  versions and Nexus. The image lightbox fixes the square-image crop caused by
+  the old fixed 210/480 px container plus `UniformToFill`.
 ## [0.4.2] - 2026-11-10
 
 ### Changed

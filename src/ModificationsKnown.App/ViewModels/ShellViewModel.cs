@@ -76,7 +76,8 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _dialogs = dialogs;
 
         var instanceStore = new GameInstanceStore();
-        Game = new GameContext(instanceStore);
+        var hiddenInstances = new HiddenInstanceStore();
+        Game = new GameContext(instanceStore, hiddenInstances);
         _saveIsolation = new SaveIsolationService(logger);
         NavigationItems =
         [
@@ -85,7 +86,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             new("installed", "已安装", "启用、停用与清理本地模组", "▣"),
             new("appearance", "启动器外观", "主题变量与基础皮肤", "◈"),
             new("gameskin", "游戏皮肤", "游戏内外观管理", "♧", "开发中", false),
-            new("settings", "设置", "路径、API 与日志", "⚙")
+            new("settings", "设置", "游戏、版本与 Nexus", "⚙")
         ];
 
         var nexusMatch = new NexusMatchService(nexus, settings, logger);
@@ -94,14 +95,22 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         var sources = new JsonInstalledSourceStore(logger);
         var operations = new ModOperationService(modManager, installer);
         var nxmRegistrar = new NxmProtocolRegistrar();
+        var deletion = new InstanceDeletionService(
+            instanceStore,
+            hiddenInstances,
+            modGroups,
+            manualMatches,
+            sources,
+            _saveIsolation,
+            logger);
         _pages = new Dictionary<string, object>
         {
-            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings),
+            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
-            ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore)
+            ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion)
         };
 
         SelectedNavigation = NavigationItems[0];
