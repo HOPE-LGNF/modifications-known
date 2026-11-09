@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.2] - 2026-11-10
+
+### Changed
+
+- Modal backdrop no longer relies on the system acrylic blur: the owner content
+  gets a tunable 6 px blur, the scrim is lighter, and the card fades/scales in
+  over 180 ms instead of appearing abruptly.
+- The game-skin “施工中” veil moved from the page into `MainWindow`, so it now
+  covers the header and the status bar as well as the page body.
+- Launcher appearance header card rebuilt: the import action sits under the
+  description, and the current theme is a labelled swatch block instead of a
+  floating chip with a detached button.
+
 ## [0.4.1] - 2026-11-10
 
 ### Fixed

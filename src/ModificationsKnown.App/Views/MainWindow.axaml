@@ -189,6 +189,39 @@
                                Margin="12,0,0,0" />
                 </Grid>
             </Border>
+
+            <!-- The game-skin page is a placeholder: veil the whole page row
+                 edge-to-edge, but keep the top game/launch bar and the status
+                 bar usable. -->
+            <Border Grid.Row="1"
+                    ZIndex="20"
+                    Background="{DynamicResource ScrimBrush}"
+                    IsVisible="{Binding IsGameSkinOverlayVisible}">
+                <Border Width="430"
+                        Padding="28"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="{DynamicResource SurfaceBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="14">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="施工中"
+                                   FontSize="24"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="游戏皮肤管理正在开发中。"
+                                   FontSize="15"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock Text="这个版本不会读取或修改 Body / Head / Wings 等游戏皮肤目录。请先使用模组管理功能。"
+                                   Classes="muted"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Border>
         </Grid>
     </Grid>
 </Window>

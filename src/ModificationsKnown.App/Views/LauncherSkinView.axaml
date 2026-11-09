@@ -4,29 +4,49 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Spacing="16">
             <Border Classes="card">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="24">
+                    <StackPanel Spacing="8">
                         <TextBlock Text="启动器外观" Classes="h2" />
                         <TextBlock Text="{Binding Explanation}"
                                    Classes="muted"
                                    FontSize="12"
                                    TextWrapping="Wrap"
-                                   MaxWidth="700" />
+                                   MaxWidth="680" />
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="10"
+                                    Margin="0,6,0,0">
+                            <Button Content="导入主题 JSON"
+                                    Command="{Binding ImportThemeCommand}" />
+                            <TextBlock Text="支持 .json；导入后可在下方列表中选择"
+                                       Classes="caption"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
                     </StackPanel>
-                    <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
-                        <Border Background="{DynamicResource AccentSoftBrush}"
-                                CornerRadius="8"
-                                Padding="12,8">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="当前主题" FontSize="10" Classes="muted" />
+
+                    <Border Grid.Column="1"
+                            VerticalAlignment="Center"
+                            MinWidth="190"
+                            Background="{DynamicResource SurfaceAltBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12"
+                            Padding="18,14">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="当前主题"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="9">
+                                <Border Width="14"
+                                        Height="14"
+                                        CornerRadius="7"
+                                        VerticalAlignment="Center"
+                                        Background="{DynamicResource AccentBrush}" />
                                 <TextBlock Text="{Binding CurrentThemeName}"
-                                           FontSize="14"
-                                           Foreground="{DynamicResource AccentBrush}"
+                                           FontSize="18"
                                            FontWeight="SemiBold" />
                             </StackPanel>
-                        </Border>
-                        <Button Classes="Ghost" Content="导入主题 JSON" Command="{Binding ImportThemeCommand}" />
-                    </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Border>
 

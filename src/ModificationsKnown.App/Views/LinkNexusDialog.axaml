@@ -4,9 +4,15 @@
                     x:Class="ModificationsKnown.App.Views.LinkNexusDialog"
                     Title="关联 Nexus 模组">
     <Grid>
-        <Border Background="{DynamicResource DialogScrimBrush}" />
+        <Border Name="DialogScrim"
+                Opacity="0"
+                Background="{DynamicResource DialogScrimBrush}" />
 
-        <Border HorizontalAlignment="Center"
+        <Border Name="DialogCard"
+                Opacity="0"
+                RenderTransform="scale(0.97)"
+                RenderTransformOrigin="50%,50%"
+                HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 Width="660"
                 Height="520"

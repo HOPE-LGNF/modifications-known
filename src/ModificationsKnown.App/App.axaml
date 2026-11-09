@@ -16,7 +16,7 @@
         <SolidColorBrush x:Key="AccentSoftBrush" Color="#1E3A2C" />
         <SolidColorBrush x:Key="AccentContrastBrush" Color="#0F1412" />
         <SolidColorBrush x:Key="ScrimBrush" Color="#CC080B09" />
-        <SolidColorBrush x:Key="DialogScrimBrush" Color="#A6080B09" />
+        <SolidColorBrush x:Key="DialogScrimBrush" Color="#8C080B09" />
         <SolidColorBrush x:Key="SuccessBrush" Color="#7DCE9A" />
         <SolidColorBrush x:Key="WarningBrush" Color="#E5B567" />
         <SolidColorBrush x:Key="DangerBrush" Color="#E07A7A" />

@@ -5,9 +5,15 @@
                     Title="确认">
     <Grid>
         <!-- Dim + blur the app behind the modal. -->
-        <Border Background="{DynamicResource DialogScrimBrush}" />
+        <Border Name="DialogScrim"
+                Opacity="0"
+                Background="{DynamicResource DialogScrimBrush}" />
 
-        <Border HorizontalAlignment="Center"
+        <Border Name="DialogCard"
+                Opacity="0"
+                RenderTransform="scale(0.97)"
+                RenderTransformOrigin="50%,50%"
+                HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 MinWidth="400"
                 MaxWidth="520"

@@ -119,6 +119,10 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         ? "未检测到游戏"
         : Game.Selected.DisplayLabel;
 
+    /// <summary>The game-skin page is a placeholder; its veil lives in
+    /// MainWindow so it also covers the header and the status bar.</summary>
+    public bool IsGameSkinOverlayVisible => SelectedNavigation?.Key == "gameskin";
+
     public string VersionText
     {
         get
@@ -274,6 +278,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     {
         if (value is null) return;
         CurrentPage = _pages.GetValueOrDefault(value.Key);
+        OnPropertyChanged(nameof(IsGameSkinOverlayVisible));
         _ = ActivateCurrentPageAsync();
     }
 
