@@ -1,10 +1,10 @@
 # 已知改装 / Modifications Known — 交接文档
 
 > 更新时间：2026-11-10  
-> 当前版本：`0.4.1`  
+> 当前版本：`0.4.2`  
 > 仓库：<https://github.com/HOPE-LGNF/modifications-known>  
-> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.4.1>  
-> 最新功能提交：`7a4b213 fix: repair overview layout, dialog overlays and mod-group toolbar`
+> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.4.2>  
+> 最新功能提交：`48bae89 fix: soften dialog backdrop, animate modals and polish two pages`
 
 ---
 
@@ -27,7 +27,11 @@
 
 ### 尚未由用户实测完成
 
-- v0.4.1 的界面修复（作者已在 Linux 离屏渲染检查，Windows 真机待确认）：
+- v0.4.2 的弹窗/遮罩/外观卡（作者已在 Linux 离屏渲染检查，Windows 真机待确认）：
+  - 弹窗背景改为可控 6px 模糊 + 180ms 淡入缩放；
+  - 游戏皮肤遮罩只覆盖页面行，不再盖住顶部启动栏；
+  - 启动器外观头部卡重排。
+- v0.4.1 的界面修复：
   - 概览三张统计卡不再重叠；
   - hero 版本卡不再被拉高，字号已放大；
   - “当前”badge 已移到 BepInEx 状态之后；
@@ -48,11 +52,11 @@
 ### 最新产物
 
 ```text
-Release: ModificationsKnown-v0.4.1-win-x64.exe
-SHA-256: ce822a1e611932cc36f9aed5028ae7318912c0c52b79b8061fe56327c208cdee
+Release: ModificationsKnown-v0.4.2-win-x64.exe
+SHA-256: 5528b8de9b4ecc49fe061e3e4076dea147dc63f9961ca889e2901802bd0afc98
 
 桌面:
-C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.4.1-win-x64.exe
+C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.4.2-win-x64.exe
 ```
 
 桌面目录应只保留最新版；旧版本 exe 删除。当前 `Downloads` 里的 v0.1.0 不属于桌面发布目录，未动。
@@ -319,7 +323,7 @@ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
 项目：/home/unauth-hope/projects/modifications-known
 远程：https://github.com/HOPE-LGNF/modifications-known
 当前版本：0.4.1
-最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.4.1
+最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.4.2
 最新功能提交：7a4b213 fix: repair overview layout, dialog overlays and mod-group toolbar
 桌面交付目录：C:\Users\liuchunyan\Desktop\Modifications Known
 
