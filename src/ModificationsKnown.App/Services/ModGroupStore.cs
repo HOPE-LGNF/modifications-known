@@ -48,6 +48,19 @@ public sealed class ModGroupStore
         }
     }
 
+    public void Update(string gameDirectory, ModGroup group)
+    {
+        lock (_gate)
+        {
+            var cache = Load();
+            if (!cache.TryGetValue(Key(gameDirectory), out var groups)) return;
+            var index = groups.FindIndex(candidate => candidate.Id == group.Id);
+            if (index < 0) return;
+            groups[index] = group;
+            Save(cache);
+        }
+    }
+
     public void Remove(string gameDirectory, string id)
     {
         lock (_gate)

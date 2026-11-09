@@ -142,7 +142,7 @@
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Spacing="1" Margin="4,2">
-                                        <TextBlock Text="{Binding Profile.DisplayName}" FontSize="12" />
+                                        <TextBlock Text="{Binding DisplayLabel}" FontSize="12" />
                                         <TextBlock Text="{Binding Profile.EditionLabel}"
                                                    FontSize="10"
                                                    Foreground="{DynamicResource TextSecondaryBrush}" />

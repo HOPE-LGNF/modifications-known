@@ -33,6 +33,10 @@
                                Classes="muted"
                                FontSize="12"
                                TextWrapping="Wrap" />
+                    <TextBlock Text="启动前会自动把 %LocalLow%\Orsoniks\CasualtiesUnknown 指向当前版本的独立存档目录，避免正式版与 Demo 共用 save.sv。若从 MK 之外启动游戏，游戏会写入最后一次由 MK 选中的版本存档。"
+                               Classes="muted"
+                               FontSize="11"
+                               TextWrapping="Wrap" />
                     <ItemsControl ItemsSource="{Binding GameVersions}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -52,6 +56,7 @@
                                                 <Border Background="{DynamicResource AccentSoftBrush}"
                                                         CornerRadius="4"
                                                         Padding="5,2"
+                                                        VerticalAlignment="Center"
                                                         IsVisible="{Binding IsCurrent}">
                                                     <TextBlock Text="当前" FontSize="9" Foreground="{DynamicResource AccentBrush}" />
                                                 </Border>
@@ -76,10 +81,17 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <Button Classes="Ghost"
-                            Content="打开 BepInEx 下载页"
-                            HorizontalAlignment="Left"
-                            Command="{Binding OpenBepInExPageCommand}" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Classes="Ghost"
+                                Content="GitHub BepInEx Releases"
+                                Command="{Binding OpenBepInExPageCommand}" />
+                        <Button Classes="Ghost"
+                                Content="Thunderstore · BepInExPack"
+                                Command="{Binding OpenThunderstoreBepInExCommand}" />
+                        <Button Classes="Ghost"
+                                Content="Nexus · BepInEx 搜索"
+                                Command="{Binding OpenNexusBepInExSearchCommand}" />
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

@@ -205,6 +205,14 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private string _newGroupName = string.Empty;
 
+    public bool CanDeleteGroup => SelectedGroup is { IsDefault: false };
+
+    partial void OnSelectedGroupChanged(ModGroup? value)
+    {
+        NewGroupName = value?.Name ?? string.Empty;
+        OnPropertyChanged(nameof(CanDeleteGroup));
+    }
+
     partial void OnSearchTextChanged(string value) => ApplyFilter();
 
     public bool IsDetailedView => !IsCompactView;
@@ -621,13 +629,35 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private void LoadGroups(GameInstallation installation)
     {
         var previousId = SelectedGroup?.Id;
+        var groups = _groupStore.Get(installation.GameDirectory).ToList();
+        if (groups.All(group => !group.IsDefault))
+        {
+            var defaultGroup = new ModGroup(
+                Guid.NewGuid().ToString("N"),
+                "默认组",
+                SnapshotEnabledPackageIds(),
+                DateTimeOffset.UtcNow,
+                IsDefault: true);
+            _groupStore.Add(installation.GameDirectory, defaultGroup);
+            groups.Add(defaultGroup);
+        }
+
         Groups.Clear();
-        foreach (var group in _groupStore.Get(installation.GameDirectory))
+        foreach (var group in groups.OrderByDescending(group => group.IsDefault)
+                     .ThenBy(group => group.CreatedAt))
             Groups.Add(group);
 
         SelectedGroup = Groups.FirstOrDefault(group => group.Id == previousId)
+                        ?? Groups.FirstOrDefault(group => group.IsDefault)
                         ?? Groups.FirstOrDefault();
     }
+
+    private List<string> SnapshotEnabledPackageIds() =>
+        _allItems
+            .Where(item => item.Mod.IsEnabled)
+            .Select(item => item.Mod.PackageId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     [RelayCommand]
     private async Task CreateGroupAsync()
@@ -638,19 +668,76 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         var name = NewGroupName.Trim();
         if (string.IsNullOrWhiteSpace(name))
             name = $"组 {Groups.Count + 1}";
+        if (Groups.Any(group => string.Equals(group.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            _shell.SetStatus($"已存在同名 Mod 组「{name}」；请先重命名或选择它。", StatusKind.Warning);
+            return;
+        }
 
-        var enabled = _allItems
-            .Where(item => item.Mod.IsEnabled)
-            .Select(item => item.Mod.PackageId)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var group = new ModGroup(Guid.NewGuid().ToString("N"), name, enabled, DateTimeOffset.UtcNow);
+        var group = new ModGroup(
+            Guid.NewGuid().ToString("N"),
+            name,
+            SnapshotEnabledPackageIds(),
+            DateTimeOffset.UtcNow);
         _groupStore.Add(installation.GameDirectory, group);
         LoadGroups(installation);
         SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id);
-        NewGroupName = string.Empty;
-        _shell.SetStatus($"已保存 Mod 组「{name}」（{enabled.Count} 个启用包）。", StatusKind.Success);
+        _shell.SetStatus($"已新建 Mod 组「{name}」。", StatusKind.Success);
+        await Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private async Task RenameGroupAsync()
+    {
+        if (SelectedGroup is not { } group) return;
+        if (group.IsDefault)
+        {
+            _shell.SetStatus("默认组名称固定；可以修改默认组内的启用集合。", StatusKind.Warning);
+            return;
+        }
+
+        var installation = _shell.Game.Selected;
+        if (installation is null) return;
+        var name = NewGroupName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            _shell.SetStatus("组名不能为空。", StatusKind.Warning);
+            return;
+        }
+
+        if (string.Equals(name, group.Name, StringComparison.Ordinal))
+        {
+            _shell.SetStatus("组名没有变化。", StatusKind.Info);
+            return;
+        }
+
+        if (Groups.Any(candidate => candidate.Id != group.Id
+                                    && string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            _shell.SetStatus($"已存在同名 Mod 组「{name}」。", StatusKind.Warning);
+            return;
+        }
+
+        var updated = group with { Name = name };
+        _groupStore.Update(installation.GameDirectory, updated);
+        LoadGroups(installation);
+        SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id);
+        _shell.SetStatus($"已重命名为「{name}」。", StatusKind.Success);
+        await Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private async Task SaveCurrentGroupAsync()
+    {
+        if (SelectedGroup is not { } group) return;
+        var installation = _shell.Game.Selected;
+        if (installation is null) return;
+
+        var updated = group with { EnabledPackageIds = SnapshotEnabledPackageIds() };
+        _groupStore.Update(installation.GameDirectory, updated);
+        LoadGroups(installation);
+        SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id);
+        _shell.SetStatus($"已把当前启用集合保存到「{group.Name}」。", StatusKind.Success);
         await Task.CompletedTask;
     }
 
@@ -698,6 +785,12 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private void DeleteGroup()
     {
         if (SelectedGroup is not { } group) return;
+        if (group.IsDefault)
+        {
+            _shell.SetStatus("默认组不能删除。", StatusKind.Warning);
+            return;
+        }
+
         var installation = _shell.Game.Selected;
         if (installation is null) return;
 

@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.4.0] - 2026-11-09
+
+### Fixed
+
+- Version aliases now feed the top launch ComboBox through `DisplayLabel`;
+  changing an alias updates the selected display and the header label.
+- The “当前” badge in version management is vertically centered, removing the
+  stretched blank block.
+- Overview’s right-side version panel now stretches to the hero height with a
+  surface card; the Nexus status card top-aligns instead of stretching to the
+  left card height.
+- Mod groups now create a persistent “默认组” per instance and select it by
+  default.
+- Mod group editing is explicit: 新建组 / 重命名 / 保存当前 / 应用 / 删除组.
+  Duplicate and empty names are rejected; the default group cannot be renamed
+  or deleted; current enabled state can be saved into the selected group.
+
+### Added
+
+- Per-installation save isolation before launch. `%LocalLow%\Orsoniks\CasualtiesUnknown`
+  is junctioned to a profile keyed by the game directory, so Demo and full-game
+  save.sv cannot overwrite each other.
+- BepInEx source links: GitHub Releases, Thunderstore BepInExPack search, Nexus
+  BepInEx search; local archive install remains the validated path.
+- Source dependency audit (`docs/SOURCE_AUDIT.md`) and BepInEx channel comparison
+  (`docs/BEPINEX_SOURCES.md`).
+
+
 ## [0.3.1] - 2026-11-08
 
 ### Fixed

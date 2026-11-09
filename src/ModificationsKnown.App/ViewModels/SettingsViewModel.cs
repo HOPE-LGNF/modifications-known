@@ -190,18 +190,24 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     }
 
     [RelayCommand]
-    private void OpenBepInExPage()
+    private void OpenBepInExPage() => OpenUrl("https://github.com/BepInEx/BepInEx/releases");
+
+    [RelayCommand]
+    private void OpenThunderstoreBepInEx() => OpenUrl("https://thunderstore.io/?q=BepInExPack");
+
+    [RelayCommand]
+    private void OpenNexusBepInExSearch() =>
+        OpenUrl("https://www.nexusmods.com/scavprototype/search/?gsearch=BepInEx");
+
+    private void OpenUrl(string url)
     {
         try
         {
-            Process.Start(new ProcessStartInfo("https://github.com/BepInEx/BepInEx/releases")
-            {
-                UseShellExecute = true
-            });
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
         catch (Exception exception)
         {
-            _shell.SetStatus($"打开 BepInEx 页面失败：{exception.Message}", StatusKind.Error);
+            _shell.SetStatus($"打开页面失败：{exception.Message}", StatusKind.Error);
         }
     }
 

@@ -21,6 +21,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private readonly IGameLocator _locator;
     private readonly IGameLauncher _launcher;
     private readonly IUserDialogService _dialogs;
+    private readonly SaveIsolationService _saveIsolation;
     private readonly Dictionary<string, object> _pages;
     private bool _initialized;
 
@@ -76,6 +77,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
         var instanceStore = new GameInstanceStore();
         Game = new GameContext(instanceStore);
+        _saveIsolation = new SaveIsolationService(logger);
         NavigationItems =
         [
             new("home", "概览", "游戏状态与快捷启动", "⌂"),
@@ -221,11 +223,18 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         }
 
         IsLaunching = true;
-        SetStatus($"正在启动 {installation.Profile.EditionLabel}…");
-        _logger.Info($"Launch requested for {installation.Profile.EditionLabel} at {installation.GameDirectory}");
-
         try
         {
+            var saveIsolation = await _saveIsolation.PrepareAsync(installation);
+            if (!saveIsolation.Success)
+            {
+                SetStatus(saveIsolation.Message, StatusKind.Error);
+                return;
+            }
+
+            SetStatus($"正在启动 {installation.DisplayLabel}…");
+            _logger.Info($"Launch requested for {installation.Profile.EditionLabel} at {installation.GameDirectory}");
+
             var result = string.IsNullOrWhiteSpace(installation.ExecutablePath)
                 ? await _launcher.LaunchViaSteamAsync(installation.Profile)
                 : await _launcher.LaunchDirectAsync(installation);

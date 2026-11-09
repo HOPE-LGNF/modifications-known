@@ -35,9 +35,13 @@
                     <TextBox Width="110"
                              Text="{Binding NewGroupName, Mode=TwoWay}"
                              Watermark="新组名" />
-                    <Button Classes="Ghost" Content="保存当前" Command="{Binding CreateGroupCommand}" />
+                    <Button Classes="Ghost" Content="新建组" Command="{Binding CreateGroupCommand}" />
+                    <Button Classes="Ghost" Content="重命名" Command="{Binding RenameGroupCommand}" />
+                    <Button Classes="Ghost" Content="保存当前" Command="{Binding SaveCurrentGroupCommand}" />
                     <Button Classes="Ghost" Content="应用" Command="{Binding ApplyGroupCommand}" />
-                    <Button Classes="Ghost" Content="删除组" Command="{Binding DeleteGroupCommand}" />
+                    <Button Classes="Ghost" Content="删除组"
+                            IsEnabled="{Binding CanDeleteGroup}"
+                            Command="{Binding DeleteGroupCommand}" />
                 </StackPanel>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
