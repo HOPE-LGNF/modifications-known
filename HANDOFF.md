@@ -1,10 +1,10 @@
 # 已知改装 / Modifications Known — 交接文档
 
-> 更新时间：2026-11-09  
-> 当前版本：`0.4.0`  
+> 更新时间：2026-11-10  
+> 当前版本：`0.4.1`  
 > 仓库：<https://github.com/HOPE-LGNF/modifications-known>  
-> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.4.0>  
-> 最新提交：`7932961 feat: save isolation and R4 group/layout fixes`
+> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.4.1>  
+> 最新功能提交：`7a4b213 fix: repair overview layout, dialog overlays and mod-group toolbar`
 
 ---
 
@@ -27,30 +27,32 @@
 
 ### 尚未由用户实测完成
 
-- v0.4.0 的 R4 布局修复：
-  - 顶部启动下拉栏别名同步；
-  - “当前”badge 垂直居中；
-  - 概览右侧面板与 hero 同高；
-  - Nexus 状态卡空白消除。
-- v0.4.0 的 Mod 组重构：
+- v0.4.1 的界面修复（作者已在 Linux 离屏渲染检查，Windows 真机待确认）：
+  - 概览三张统计卡不再重叠；
+  - hero 版本卡不再被拉高，字号已放大；
+  - “当前”badge 已移到 BepInEx 状态之后；
+  - 已安装页按钮分组与 Mod 组工具栏；
+  - 弹窗改为居中圆角 + 背景压暗/模糊。
+- v0.4.1 的 Mod 组重构：
   - 默认组初始化；
   - 新建/重命名/保存当前/应用/删除；
+  - 未保存拦截与取消后恢复选中；
   - 同名、空名、默认组保护。
 - v0.4.0 的存档隔离：
   - **没有在真实 Windows 存档上执行过完整回归**；
   - junction 创建、切换、回滚只在代码层审查过。
-- v0.4.0 的 BepInEx 来源入口和本地 zip 安装：
+- v0.4.0 的 BepInEx 来源入口和本地 zip 安装（未变）：
   - 单元测试覆盖安装器；
   - Windows UI 流程未完整回归。
 
 ### 最新产物
 
 ```text
-Release: ModificationsKnown-v0.4.0-win-x64.exe
-SHA-256: 0bf5c82317c26d220f8a6ec80b4d05279afaf79584014265fb15e3097231599e
+Release: ModificationsKnown-v0.4.1-win-x64.exe
+SHA-256: ce822a1e611932cc36f9aed5028ae7318912c0c52b79b8061fe56327c208cdee
 
 桌面:
-C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.4.0-win-x64.exe
+C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.4.1-win-x64.exe
 ```
 
 桌面目录应只保留最新版；旧版本 exe 删除。当前 `Downloads` 里的 v0.1.0 不属于桌面发布目录，未动。
@@ -316,9 +318,9 @@ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
 
 项目：/home/unauth-hope/projects/modifications-known
 远程：https://github.com/HOPE-LGNF/modifications-known
-当前版本：0.4.0
-最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.4.0
-最新提交：7932961 feat: save isolation and R4 group/layout fixes
+当前版本：0.4.1
+最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.4.1
+最新功能提交：7a4b213 fix: repair overview layout, dialog overlays and mod-group toolbar
 桌面交付目录：C:\Users\liuchunyan\Desktop\Modifications Known
 
 先不要改代码，先完成 HANDOFF.md 第 4 节的验证顺序，尤其是：
@@ -361,7 +363,7 @@ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 ~/.dsh/tmp/dotnet8/dotnet test Modificat
 
 ## 8. 交接结论
 
-当前代码已经具备“发现 → 下载/安装 → 清单管理 → 启用/禁用 → 版本实例 → Mod 组 → 存档隔离”的完整主链路，但 **v0.4.0 的存档隔离和 R4 UI 修复尚未完成用户侧真机验证**。
+当前代码已经具备“发现 → 下载/安装 → 清单管理 → 启用/禁用 → 版本实例 → Mod 组 → 存档隔离”的完整主链路，v0.4.1 已修复概览重叠、badge 顺序、已安装页按钮和弹窗样式，并重构 Mod 组工具栏；**存档隔离仍只完成了 junction 创建/读取的间接确认，跨版本互不可见仍需真机回归**。
 
 下一会话最重要的不是继续加功能，而是：
 
