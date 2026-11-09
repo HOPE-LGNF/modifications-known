@@ -1,10 +1,10 @@
 # 已知改装 / Modifications Known — 交接文档
 
 > 更新时间：2026-11-10  
-> 当前版本：`0.4.2`  
+> 当前版本：`0.5.0`  
 > 仓库：<https://github.com/HOPE-LGNF/modifications-known>  
-> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.4.2>  
-> 最新功能提交：`48bae89 fix: soften dialog backdrop, animate modals and polish two pages`
+> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.5.0>  
+> 最新功能提交：`71cd78d feat: instance deletion, image lightbox and merged settings`
 
 ---
 
@@ -27,6 +27,13 @@
 
 ### 尚未由用户实测完成
 
+- v0.5.0 的功能（作者已在 Linux 离屏渲染/编译检查，Windows 真机待确认）：
+  - 版本删除两步向导、存档复制/移动/保持、可选删除实例文件夹；
+  - 隐藏实例记录，刷新后不再复活；
+  - 重命名按钮脏检查、Enter/Esc、保存中禁用；
+  - Nexus 账号类型展示；
+  - 图片灯箱（方图完整显示、滚轮缩放、拖拽、Esc）；
+  - 设置页“游戏与版本”合并。
 - v0.4.2 的弹窗/遮罩/外观卡（作者已在 Linux 离屏渲染检查，Windows 真机待确认）：
   - 弹窗背景改为可控 6px 模糊 + 180ms 淡入缩放；
   - 游戏皮肤遮罩只覆盖页面行，不再盖住顶部启动栏；
@@ -52,11 +59,11 @@
 ### 最新产物
 
 ```text
-Release: ModificationsKnown-v0.4.2-win-x64.exe
-SHA-256: 5528b8de9b4ecc49fe061e3e4076dea147dc63f9961ca889e2901802bd0afc98
+Release: ModificationsKnown-v0.5.0-win-x64.exe
+SHA-256: 8f33ae20a18b223b81e224f1da181265ae50fb6d78403c205100d21f17d28485
 
 桌面:
-C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.4.2-win-x64.exe
+C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.5.0-win-x64.exe
 ```
 
 桌面目录应只保留最新版；旧版本 exe 删除。当前 `Downloads` 里的 v0.1.0 不属于桌面发布目录，未动。
@@ -323,7 +330,7 @@ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
 项目：/home/unauth-hope/projects/modifications-known
 远程：https://github.com/HOPE-LGNF/modifications-known
 当前版本：0.4.1
-最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.4.2
+最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.5.0
 最新功能提交：7a4b213 fix: repair overview layout, dialog overlays and mod-group toolbar
 桌面交付目录：C:\Users\liuchunyan\Desktop\Modifications Known
 
