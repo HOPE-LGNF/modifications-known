@@ -25,7 +25,7 @@ public sealed class JsonAppSettingsService : IAppSettingsService
         if (!File.Exists(AppPaths.SettingsFile))
         {
             Current = new AppSettings();
-            await SaveAsync(cancellationToken);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
             return;
         }
 
