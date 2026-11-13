@@ -179,10 +179,10 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         else
             _logger.Info(message);
 
-        ShowToast(message);
+        ShowToast(message, kind);
     }
 
-    private async void ShowToast(string message)
+    private async void ShowToast(string message, StatusKind kind)
     {
         var generation = ++_toastGeneration;
         ToastMessage = message;
@@ -195,7 +195,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         if (generation != _toastGeneration) return;
         ToastOpacity = 1;
 
-        await Task.Delay(5000);
+        await Task.Delay(kind is StatusKind.Error or StatusKind.Warning ? 4500 : 2500);
         if (generation != _toastGeneration) return;
         ToastOpacity = 0;
 
