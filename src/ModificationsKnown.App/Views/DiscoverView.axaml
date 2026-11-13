@@ -100,8 +100,7 @@
                                             CornerRadius="7"
                                             Background="{DynamicResource SurfaceAltBrush}"
                                             ClipToBounds="True">
-                                        <Image Source="{Binding Thumbnail}"
-                                               Stretch="UniformToFill" />
+                                        <views:CoverImage Source="{Binding Thumbnail}" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Spacing="3">
                                         <TextBlock Text="{Binding Name}"
@@ -177,10 +176,7 @@
                                 <Button Classes="image-button"
                                         Click="OnImageClick"
                                         ToolTip.Tip="点击查看完整图片">
-                                    <Image Source="{Binding DetailImage}"
-                                           Stretch="Uniform"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
+                                    <views:CoverImage Source="{Binding DetailImage}" BlurRadius="64" />
                                 </Button>
                             </Border>
 

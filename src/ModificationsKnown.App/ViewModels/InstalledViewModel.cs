@@ -28,15 +28,9 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
 
     public bool IsNexusMatched => NexusMatch is not null;
 
-    public bool HasThumbnail => Thumbnail is not null;
-
     public bool ShowMonogram => Thumbnail is null;
 
-    partial void OnThumbnailChanged(Bitmap? value)
-    {
-        OnPropertyChanged(nameof(HasThumbnail));
-        OnPropertyChanged(nameof(ShowMonogram));
-    }
+    partial void OnThumbnailChanged(Bitmap? value) => OnPropertyChanged(nameof(ShowMonogram));
 
     public bool IsDetailedMode => !IsCompact;
 

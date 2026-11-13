@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ModificationsKnown.App.Views.CoverImage"
+             ClipToBounds="True">
+    <Panel Name="Layers" IsVisible="False">
+        <!-- Scaled up so the blur's transparent fringe falls outside the clip. -->
+        <Image Name="Backdrop"
+               Stretch="UniformToFill"
+               RenderTransform="scale(1.25)" />
+        <Border Background="#73000000" />
+        <Image Name="Picture"
+               Stretch="Uniform"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center" />
+    </Panel>
+</UserControl>
