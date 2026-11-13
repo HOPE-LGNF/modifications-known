@@ -1,6 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ModificationsKnown.App.App"
+             xmlns:chrome="using:Avalonia.Controls.Chrome"
              RequestedThemeVariant="Dark">
 
     <Application.Resources>
@@ -107,6 +108,8 @@
         </Style>
 
         <Style Selector="Button.image-button">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
@@ -138,6 +141,12 @@
         <Style Selector="ListBoxItem:selected Border.mod-card">
             <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+
+        <!-- Fluent's caption buttons are 30px tall and pinned to the top of the
+             56px title bar (ExtendClientAreaTitleBarHeightHint). -->
+        <Style Selector="chrome|CaptionButtons">
+            <Setter Property="Margin" Value="0,13,0,0" />
         </Style>
 
         <Style Selector="Button.launch">

@@ -177,7 +177,10 @@
                                 <Button Classes="image-button"
                                         Click="OnImageClick"
                                         ToolTip.Tip="点击查看完整图片">
-                                    <Image Source="{Binding DetailImage}" Stretch="Uniform" />
+                                    <Image Source="{Binding DetailImage}"
+                                           Stretch="Uniform"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
                                 </Button>
                             </Border>
 
