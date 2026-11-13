@@ -126,8 +126,18 @@
             <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
         </Style>
 
+        <Style Selector="Border.mod-card">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+        </Style>
+
         <Style Selector="Border.mod-card:pointerover">
             <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+        </Style>
+
+        <Style Selector="ListBoxItem:selected Border.mod-card">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
         </Style>
 
         <Style Selector="Border.card">

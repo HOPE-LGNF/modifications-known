@@ -92,8 +92,6 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Border Classes="mod-card"
-                                    Background="{DynamicResource SurfaceBrush}"
-                                    BorderBrush="{DynamicResource BorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="10"
                                     Padding="10">

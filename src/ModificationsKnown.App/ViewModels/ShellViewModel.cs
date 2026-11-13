@@ -128,7 +128,11 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
         SelectedNavigation = NavigationItems[0];
         CurrentPage = _pages["home"];
-        Game.Changed += (_, _) => OnPropertyChanged(nameof(CurrentGameLabel));
+        Game.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(CurrentGameLabel));
+            OnPropertyChanged(nameof(DropHint));
+        };
     }
 
     public IAppSettingsService Settings { get; }
@@ -216,6 +220,20 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
         NavigateTo("discover");
         await discover.HandleNxmLinkAsync(raw);
+    }
+
+    public static readonly string[] ArchiveExtensions = [".zip", ".7z", ".rar"];
+
+    public string DropHint => Game.Selected is { HasPluginsDirectory: true } installation
+        ? $"松开以安装到 {installation.DisplayLabel}"
+        : "当前游戏没有 BepInEx/plugins，无法安装";
+
+    public async Task InstallDroppedArchivesAsync(IReadOnlyList<string> paths)
+    {
+        if (_pages.GetValueOrDefault("installed") is not InstalledViewModel installed) return;
+
+        NavigateTo("installed");
+        await installed.InstallArchivesAsync(paths);
     }
 
     public void NavigateTo(string key)

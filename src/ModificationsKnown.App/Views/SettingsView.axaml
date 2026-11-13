@@ -2,269 +2,287 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="using:ModificationsKnown.App.Views"
              x:Class="ModificationsKnown.App.Views.SettingsView">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="14" MaxWidth="1120" HorizontalAlignment="Center">
+    <Grid RowDefinitions="*,Auto">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="14" MaxWidth="1120" HorizontalAlignment="Center">
 
-            <Border Classes="card">
-                <StackPanel Spacing="12">
-                    <TextBlock Text="游戏与版本" Classes="h2" />
-                    <TextBlock Text="启动器会优先读取 Steam 的 appmanifest；也可以手动指定 .exe 或游戏目录。每个检测到的目录都是一个独立实例，拥有自己的 BepInEx/plugins、存档和 Mod 组。"
-                               Classes="muted"
-                               FontSize="12"
-                               TextWrapping="Wrap" />
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button Classes="Primary" Content="＋ 添加实例">
-                            <Button.Flyout>
-                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                                    <MenuItem Header="选择游戏可执行文件…"
-                                              Command="{Binding AddInstanceFromFileCommand}" />
-                                    <MenuItem Header="选择游戏目录…"
-                                              Command="{Binding AddInstanceFromFolderCommand}" />
-                                    <Separator />
-                                    <MenuItem Header="重新探测 Steam 库"
-                                              Command="{Binding RediscoverInstancesCommand}" />
-                                </MenuFlyout>
-                            </Button.Flyout>
-                        </Button>
-                        <TextBlock Text="{Binding InstanceHint}"
-                                   Classes="caption"
-                                   VerticalAlignment="Center"
+                <Border Classes="card">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="游戏与版本" Classes="h2" />
+                        <TextBlock Text="启动器会优先读取 Steam 的 appmanifest；也可以手动指定 .exe 或游戏目录。每个检测到的目录都是一个独立实例，拥有自己的 BepInEx/plugins、存档和 Mod 组。"
+                                   Classes="muted"
+                                   FontSize="12"
                                    TextWrapping="Wrap" />
-                    </StackPanel>
-
-                    <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,4" />
-
-                    <TextBlock Text="版本列表" FontSize="13" FontWeight="SemiBold" />
-                    <TextBlock Text="重命名只改显示名，不改目录；切换当前版本会影响首页、已安装页和 Mod 组。"
-                               Classes="muted"
-                               FontSize="11"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="启动前会自动把 %LocalLow%\Orsoniks\CasualtiesUnknown 指向当前版本的独立存档目录，避免正式版与 Demo 共用 save.sv。若从 MK 之外启动游戏，游戏会写入最后一次由 MK 选中的版本存档。"
-                               Classes="muted"
-                               FontSize="11"
-                               TextWrapping="Wrap" />
-
-                    <ItemsControl ItemsSource="{Binding GameVersions}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="{DynamicResource SurfaceAltBrush}"
-                                        BorderBrush="{DynamicResource BorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="8"
-                                        Padding="10"
-                                        Margin="0,0,0,6">
-                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
-                                        <TextBox Text="{Binding Alias, Mode=TwoWay}"
-                                                 Width="150"
-                                                 Watermark="版本显示名"
-                                                 KeyDown="OnAliasKeyDown" />
-                                        <StackPanel Grid.Column="1"
-                                                    Orientation="Horizontal"
-                                                    Spacing="7"
-                                                    VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding EditionLabel}" Classes="caption" VerticalAlignment="Center" />
-                                            <TextBlock Text="{Binding LoaderLabel}" Classes="caption" VerticalAlignment="Center" />
-                                            <Border Background="{DynamicResource AccentSoftBrush}"
-                                                    CornerRadius="4"
-                                                    Padding="5,2"
-                                                    VerticalAlignment="Center"
-                                                    IsVisible="{Binding IsCurrent}">
-                                                <TextBlock Text="当前" FontSize="9" Foreground="{DynamicResource AccentBrush}" />
-                                            </Border>
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="2"
-                                                   Text="{Binding Path}"
-                                                   Classes="mono"
-                                                   FontSize="10"
-                                                   Foreground="{DynamicResource TextSecondaryBrush}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   VerticalAlignment="Center" />
-                                        <StackPanel Grid.Column="3"
-                                                    Orientation="Horizontal"
-                                                    Spacing="6"
-                                                    VerticalAlignment="Center">
-                                            <Button Content="{Binding SaveAliasText}"
-                                                    Command="{Binding SaveAliasCommand}"
-                                                    IsVisible="{Binding IsAliasDirty}"
-                                                    IsEnabled="{Binding CanSaveAlias}"
-                                                    Classes.modified="{Binding IsAliasDirty}" />
-                                            <Button Classes="Ghost"
-                                                    Content="⋯"
-                                                    FontSize="16"
-                                                    Padding="8,2"
-                                                    ToolTip.Tip="更多操作">
-                                                <Button.Flyout>
-                                                    <MenuFlyout Placement="BottomEdgeAlignedRight">
-                                                        <MenuItem Header="安装 BepInEx…"
-                                                                  IsVisible="{Binding CanInstallLoader}"
-                                                                  Command="{Binding InstallLoaderCommand}" />
-                                                        <MenuItem Header="下载 BepInEx 最新稳定版"
-                                                                  IsVisible="{Binding CanInstallLoader}"
-                                                                  Command="{Binding OpenLoaderDownloadCommand}" />
-                                                        <Separator />
-                                                        <MenuItem Header="删除版本…"
-                                                                  Foreground="{DynamicResource DangerBrush}"
-                                                                  Command="{Binding DeleteCommand}" />
-                                                    </MenuFlyout>
-                                                </Button.Flyout>
-                                            </Button>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="card">
-                <StackPanel Spacing="12">
-                    <TextBlock Text="Nexus Mods" Classes="h2" />
-                    <TextBlock Text="API Key 只保存在本机 AppData 的 settings.json 中，不会写入日志。免费账号可能无法直接生成下载链接，此时请使用“在 Nexus 打开”。"
-                               Classes="muted"
-                               FontSize="12"
-                               TextWrapping="Wrap" />
-                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                            <TextBlock Text="API Key" Classes="muted" />
-                            <views:InfoHint Text="MK 用 API Key 读取 Nexus 的模组、文件和下载授权；只保存在本机，不会发送给第三方。" />
-                        </StackPanel>
-                        <TextBox Grid.Column="1"
-                                 Text="{Binding NexusApiKey, Mode=TwoWay}"
-                                 PasswordChar="●"
-                                 Watermark="粘贴 Nexus 个人 API Key" />
-                        <Button Grid.Column="2" Classes="Ghost" Content="获取 API Key" Command="{Binding OpenApiKeyPageCommand}" />
-                    </Grid>
-                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-                        <TextBlock Text="游戏域" Classes="muted" VerticalAlignment="Center" />
-                        <TextBox Grid.Column="1"
-                                 Text="{Binding NexusDomain, Mode=TwoWay}"
-                                 Watermark="scavprototype" />
-                        <Button Grid.Column="2" Content="测试连接" Command="{Binding TestNexusCommand}" />
-                    </Grid>
-                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-                        <TextBlock Text="账号类型" Classes="muted" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="{Binding AccountStatus}" Classes="caption" VerticalAlignment="Center" TextWrapping="Wrap" />
-                        <Button Grid.Column="2" Classes="Ghost" Content="检查账号" Command="{Binding CheckAccountCommand}" />
-                    </Grid>
-                    <TextBlock Text="{Binding ConnectionStatus}"
-                               Classes="caption"
-                               TextWrapping="Wrap" />
-                    <Grid ColumnDefinitions="Auto,160,Auto,120,Auto,*" ColumnSpacing="10">
-                        <TextBlock Text="每页数量" Classes="muted" VerticalAlignment="Center" />
-                        <NumericUpDown Grid.Column="1"
-                                       Value="{Binding PageSize, Mode=TwoWay}"
-                                       Minimum="1"
-                                       Maximum="100"
-                                       Increment="1" />
-                        <TextBlock Grid.Column="2" Text="包含成人内容" Classes="muted" VerticalAlignment="Center" />
-                        <ToggleSwitch Grid.Column="3"
-                                      IsChecked="{Binding IncludeAdultMods, Mode=TwoWay}"
-                                      OnContent="是"
-                                      OffContent="否" />
-                        <TextBlock Grid.Column="4"
-                                   Text="默认关闭；开启后搜索结果会包含成人模组。"
-                                   Classes="caption"
-                                   VerticalAlignment="Center"
-                                   TextWrapping="Wrap" />
-                    </Grid>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="card">
-                <StackPanel Spacing="10">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <TextBlock Text="浏览器集成（NXM）" Classes="h2" />
-                        <views:InfoHint VerticalAlignment="Center"
-                                        Text="注册后，浏览器里的 Mod manager download 会把 nxm:// 链接交给 MK；免费账号靠它获取下载授权，而不是仅凭 API Key。" />
-                    </StackPanel>
-                    <TextBlock Text="注册后，Nexus 页面点击“Mod manager download”会通过 nxm:// 回到启动器。只写入当前用户 HKCU，不需要管理员权限；已存在其他 handler 时会拒绝覆盖。"
-                               Classes="muted"
-                               FontSize="12"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding NxmProtocolStatus}"
-                               Classes="caption"
-                               TextWrapping="Wrap" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Classes="Primary"
-                                Content="注册 NXM 链接"
-                                IsVisible="{Binding NxmProtocolSupported}"
-                                Command="{Binding RegisterNxmProtocolCommand}" />
-                        <Button Classes="Ghost"
-                                Content="取消注册"
-                                IsVisible="{Binding NxmProtocolRegistered}"
-                                Command="{Binding UnregisterNxmProtocolCommand}" />
-                    </StackPanel>
-                    <TextBlock Text="应用运行时浏览器会复用当前窗口；应用未运行时会启动它。"
-                               Classes="caption" />
-                </StackPanel>
-            </Border>
-
-            <Border Classes="card">
-                <StackPanel Spacing="12">
-                    <TextBlock Text="行为与数据" Classes="h2" />
-                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-                        <TextBlock Text="删除确认" Classes="muted" VerticalAlignment="Center" />
-                        <ToggleSwitch Grid.Column="1"
-                                      IsChecked="{Binding ConfirmBeforeDelete, Mode=TwoWay}"
-                                      OnContent="开启"
-                                      OffContent="关闭" />
-                    </Grid>
-
-                    <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,2" />
-
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="日志目录" Classes="muted" FontSize="11" />
-                            <TextBlock Text="{Binding LogDirectory}"
-                                       Classes="mono"
-                                       FontSize="10"
-                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="Primary" Content="＋ 添加实例">
+                                <Button.Flyout>
+                                    <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                        <MenuItem Header="选择游戏可执行文件…"
+                                                  Command="{Binding AddInstanceFromFileCommand}" />
+                                        <MenuItem Header="选择游戏目录…"
+                                                  Command="{Binding AddInstanceFromFolderCommand}" />
+                                        <Separator />
+                                        <MenuItem Header="重新探测 Steam 库"
+                                                  Command="{Binding RediscoverInstancesCommand}" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+                            <TextBlock Text="{Binding InstanceHint}"
+                                       Classes="caption"
+                                       VerticalAlignment="Center"
                                        TextWrapping="Wrap" />
                         </StackPanel>
-                        <Button Grid.Column="1"
-                                Classes="Ghost"
-                                Content="打开日志目录"
-                                VerticalAlignment="Center"
-                                Command="{Binding OpenLogsCommand}" />
-                    </Grid>
 
-                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="数据目录" Classes="muted" FontSize="11" />
-                            <TextBlock Text="{Binding DataRoot}"
-                                       Classes="mono"
-                                       FontSize="10"
-                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                        <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,4" />
+
+                        <TextBlock Text="版本列表" FontSize="13" FontWeight="SemiBold" />
+                        <TextBlock Text="重命名只改显示名，不改目录；切换当前版本会影响首页、已安装页和 Mod 组。"
+                                   Classes="muted"
+                                   FontSize="11"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="启动前会自动把 %LocalLow%\Orsoniks\CasualtiesUnknown 指向当前版本的独立存档目录，避免正式版与 Demo 共用 save.sv。若从 MK 之外启动游戏，游戏会写入最后一次由 MK 选中的版本存档。"
+                                   Classes="muted"
+                                   FontSize="11"
+                                   TextWrapping="Wrap" />
+
+                        <ItemsControl ItemsSource="{Binding GameVersions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource SurfaceAltBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8"
+                                            Padding="10"
+                                            Margin="0,0,0,6">
+                                        <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+                                            <TextBox Text="{Binding Alias, Mode=TwoWay}"
+                                                     Width="150"
+                                                     Watermark="版本显示名"
+                                                     KeyDown="OnAliasKeyDown" />
+                                            <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="7"
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding EditionLabel}" Classes="caption" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding LoaderLabel}" Classes="caption" VerticalAlignment="Center" />
+                                                <Border Background="{DynamicResource AccentSoftBrush}"
+                                                        CornerRadius="4"
+                                                        Padding="5,2"
+                                                        VerticalAlignment="Center"
+                                                        IsVisible="{Binding IsCurrent}">
+                                                    <TextBlock Text="当前" FontSize="11" Foreground="{DynamicResource AccentBrush}" />
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding Path}"
+                                                       Classes="mono"
+                                                       FontSize="10"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" />
+                                            <StackPanel Grid.Column="3"
+                                                        Orientation="Horizontal"
+                                                        Spacing="6"
+                                                        VerticalAlignment="Center">
+                                                <Button Content="{Binding SaveAliasText}"
+                                                        Command="{Binding SaveAliasCommand}"
+                                                        IsVisible="{Binding IsAliasDirty}"
+                                                        IsEnabled="{Binding CanSaveAlias}"
+                                                        Classes.modified="{Binding IsAliasDirty}" />
+                                                <Button Classes="Ghost"
+                                                        Content="⋯"
+                                                        FontSize="16"
+                                                        Padding="8,2"
+                                                        ToolTip.Tip="更多操作">
+                                                    <Button.Flyout>
+                                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                                            <MenuItem Header="安装 BepInEx…"
+                                                                      IsVisible="{Binding CanInstallLoader}"
+                                                                      Command="{Binding InstallLoaderCommand}" />
+                                                            <MenuItem Header="下载 BepInEx 最新稳定版"
+                                                                      IsVisible="{Binding CanInstallLoader}"
+                                                                      Command="{Binding OpenLoaderDownloadCommand}" />
+                                                            <Separator />
+                                                            <MenuItem Header="删除版本…"
+                                                                      Foreground="{DynamicResource DangerBrush}"
+                                                                      Command="{Binding DeleteCommand}" />
+                                                        </MenuFlyout>
+                                                    </Button.Flyout>
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Nexus Mods" Classes="h2" />
+                        <TextBlock Text="API Key 只保存在本机 AppData 的 settings.json 中，不会写入日志。免费账号可能无法直接生成下载链接，此时请使用“在 Nexus 打开”。"
+                                   Classes="muted"
+                                   FontSize="12"
+                                   TextWrapping="Wrap" />
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                                <TextBlock Text="API Key" Classes="muted" />
+                                <views:InfoHint Text="MK 用 API Key 读取 Nexus 的模组、文件和下载授权；只保存在本机，不会发送给第三方。" />
+                            </StackPanel>
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding NexusApiKey, Mode=TwoWay}"
+                                     PasswordChar="●"
+                                     Watermark="粘贴 Nexus 个人 API Key" />
+                            <Button Grid.Column="2" Classes="Ghost" Content="获取 API Key" Command="{Binding OpenApiKeyPageCommand}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                            <TextBlock Text="游戏域" Classes="muted" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1"
+                                     Text="{Binding NexusDomain, Mode=TwoWay}"
+                                     Watermark="scavprototype" />
+                            <Button Grid.Column="2" Content="测试连接" Command="{Binding TestNexusCommand}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                            <TextBlock Text="账号类型" Classes="muted" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Text="{Binding AccountStatus}" Classes="caption" VerticalAlignment="Center" TextWrapping="Wrap" />
+                            <Button Grid.Column="2" Classes="Ghost" Content="检查账号" Command="{Binding CheckAccountCommand}" />
+                        </Grid>
+                        <TextBlock Text="{Binding ConnectionStatus}"
+                                   Classes="caption"
+                                   TextWrapping="Wrap" />
+                        <Grid ColumnDefinitions="Auto,160,Auto,120,Auto,*" ColumnSpacing="10">
+                            <TextBlock Text="每页数量" Classes="muted" VerticalAlignment="Center" />
+                            <NumericUpDown Grid.Column="1"
+                                           Value="{Binding PageSize, Mode=TwoWay}"
+                                           Minimum="1"
+                                           Maximum="100"
+                                           Increment="1" />
+                            <TextBlock Grid.Column="2" Text="包含成人内容" Classes="muted" VerticalAlignment="Center" />
+                            <ToggleSwitch Grid.Column="3"
+                                          IsChecked="{Binding IncludeAdultMods, Mode=TwoWay}"
+                                          OnContent="是"
+                                          OffContent="否" />
+                            <TextBlock Grid.Column="4"
+                                       Text="默认关闭；开启后搜索结果会包含成人模组。"
+                                       Classes="caption"
+                                       VerticalAlignment="Center"
                                        TextWrapping="Wrap" />
-                        </StackPanel>
-                        <Button Grid.Column="1"
-                                Classes="Ghost"
-                                Content="更改…"
-                                VerticalAlignment="Center"
-                                Command="{Binding ChangeDataRootCommand}" />
-                        <Button Grid.Column="2"
-                                Classes="Ghost"
-                                Content="恢复默认"
-                                VerticalAlignment="Center"
-                                IsVisible="{Binding IsCustomDataRoot}"
-                                Command="{Binding ResetDataRootCommand}" />
-                    </Grid>
-                    <TextBlock Text="更改数据目录后需要重启；设置、实例列表、Mod 组与主题会复制到新位置，存档 profile 固定在默认目录，旧日志保留在原处。"
-                               Classes="caption"
-                               TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding SettingsPath}"
-                               Classes="caption"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+                        </Grid>
+                    </StackPanel>
+                </Border>
 
-            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
-                <Button Classes="Primary" Content="保存设置" Command="{Binding SaveCommand}" />
-                <TextBlock Text="修改后需要保存；API Key 测试会先使用当前输入。"
-                           Classes="caption"
-                           VerticalAlignment="Center" />
+                <Border Classes="card">
+                    <StackPanel Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="浏览器集成（NXM）" Classes="h2" />
+                            <views:InfoHint VerticalAlignment="Center"
+                                            Text="注册后，浏览器里的 Mod manager download 会把 nxm:// 链接交给 MK；免费账号靠它获取下载授权，而不是仅凭 API Key。" />
+                        </StackPanel>
+                        <TextBlock Text="注册后，Nexus 页面点击“Mod manager download”会通过 nxm:// 回到启动器。只写入当前用户 HKCU，不需要管理员权限；已存在其他 handler 时会拒绝覆盖。"
+                                   Classes="muted"
+                                   FontSize="12"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding NxmProtocolStatus}"
+                                   Classes="caption"
+                                   TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Classes="Primary"
+                                    Content="注册 NXM 链接"
+                                    IsVisible="{Binding NxmProtocolSupported}"
+                                    Command="{Binding RegisterNxmProtocolCommand}" />
+                            <Button Classes="Ghost"
+                                    Content="取消注册"
+                                    IsVisible="{Binding NxmProtocolRegistered}"
+                                    Command="{Binding UnregisterNxmProtocolCommand}" />
+                        </StackPanel>
+                        <TextBlock Text="应用运行时浏览器会复用当前窗口；应用未运行时会启动它。"
+                                   Classes="caption" />
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="行为与数据" Classes="h2" />
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                            <TextBlock Text="删除确认" Classes="muted" VerticalAlignment="Center" />
+                            <ToggleSwitch Grid.Column="1"
+                                          IsChecked="{Binding ConfirmBeforeDelete, Mode=TwoWay}"
+                                          OnContent="开启"
+                                          OffContent="关闭" />
+                        </Grid>
+
+                        <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,2" />
+
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="日志目录" Classes="muted" FontSize="11" />
+                                <TextBlock Text="{Binding LogDirectory}"
+                                           Classes="mono"
+                                           FontSize="10"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Classes="Ghost"
+                                    Content="打开日志目录"
+                                    VerticalAlignment="Center"
+                                    Command="{Binding OpenLogsCommand}" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="数据目录" Classes="muted" FontSize="11" />
+                                <TextBlock Text="{Binding DataRoot}"
+                                           Classes="mono"
+                                           FontSize="10"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Classes="Ghost"
+                                    Content="更改…"
+                                    VerticalAlignment="Center"
+                                    Command="{Binding ChangeDataRootCommand}" />
+                            <Button Grid.Column="2"
+                                    Classes="Ghost"
+                                    Content="恢复默认"
+                                    VerticalAlignment="Center"
+                                    IsVisible="{Binding IsCustomDataRoot}"
+                                    Command="{Binding ResetDataRootCommand}" />
+                        </Grid>
+                        <TextBlock Text="更改数据目录后需要重启；设置、实例列表、Mod 组与主题会复制到新位置，存档 profile 固定在默认目录，旧日志保留在原处。"
+                                   Classes="caption"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding SettingsPath}"
+                                   Classes="caption"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
             </StackPanel>
-        </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+
+        <Border Grid.Row="1"
+                IsVisible="{Binding HasUnsavedChanges}"
+                Margin="0,12,0,0"
+                Padding="16,10"
+                Background="{DynamicResource AccentSoftBrush}"
+                BorderBrush="{DynamicResource AccentBrush}"
+                BorderThickness="1"
+                CornerRadius="10">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <TextBlock Text="有未保存的修改。API Key 测试会先使用当前输入。"
+                           FontSize="12"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="1"
+                        Classes="Ghost"
+                        Content="撤销"
+                        Command="{Binding DiscardChangesCommand}" />
+                <Button Grid.Column="2"
+                        Classes="Primary"
+                        Content="保存设置"
+                        Command="{Binding SaveCommand}" />
+            </Grid>
+        </Border>
+    </Grid>
 </UserControl>

@@ -7,6 +7,7 @@
         Width="1240" Height="800"
         MinWidth="1020" MinHeight="680"
         WindowStartupLocation="CenterScreen"
+        DragDrop.AllowDrop="True"
         Background="{DynamicResource AppBackgroundBrush}">
 
     <Window.DataTemplates>
@@ -257,5 +258,31 @@
                 </Border>
             </Border>
         </Grid>
+
+        <!-- Hit-testable on purpose: once shown it is the only drop target, so
+             moving between child controls cannot fire DragLeave and flicker. -->
+        <Border Name="DropOverlay"
+                Grid.ColumnSpan="2"
+                ZIndex="30"
+                IsVisible="False"
+                Background="{DynamicResource ScrimBrush}">
+            <Border HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="36,26"
+                    Background="{DynamicResource SurfaceBrush}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="2"
+                    CornerRadius="14">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="安装模组压缩包"
+                               FontSize="20"
+                               FontWeight="SemiBold"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding DropHint}"
+                               Classes="muted"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
+        </Border>
     </Grid>
 </Window>
