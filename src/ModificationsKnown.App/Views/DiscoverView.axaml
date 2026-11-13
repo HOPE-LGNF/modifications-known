@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:ModificationsKnown.App.Views"
              x:Class="ModificationsKnown.App.Views.DiscoverView">
     <UserControl.Resources>
         <!-- Replace the default ListBoxItem template entirely. The stock
@@ -263,6 +264,10 @@
                                 <TextBlock Text="{Binding DownloadStatus}"
                                            Classes="caption"
                                            TextWrapping="Wrap" />
+                                <views:InfoHint Label="为什么？"
+                                                HorizontalAlignment="Left"
+                                                IsVisible="{Binding ShowFreeDownloadWhy}"
+                                                Text="Nexus 对免费账号的限制：普通 API Key 不能直接生成下载直链，只有 Premium 账号或作者开启直连时才能直接下载。免费账号需要在文件页完成 Slow download，MK 会接管随后出现的 NXM 链接。" />
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>

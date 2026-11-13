@@ -113,6 +113,9 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private string _downloadStatus = string.Empty;
 
     [ObservableProperty]
+    private bool _showFreeDownloadWhy;
+
+    [ObservableProperty]
     private bool _hasNxmFallback;
 
     [ObservableProperty]
@@ -326,6 +329,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         var file = SelectedFile;
 
         IsDownloading = true;
+        ShowFreeDownloadWhy = false;
         DownloadStatus = "正在获取下载链接…";
         DownloadProgress = 0;
         try
@@ -396,7 +400,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     card.Summary.Version,
                     card.Summary.Id,
                     file?.Id);
-                DownloadStatus = "普通 API Key 无法获取直链。已打开 Nexus 文件页，请完成 Slow download / Mod manager download，MK 会继续。";
+                DownloadStatus = "普通 API Key 无法获取直链。已打开 Nexus 文件页，请完成 Slow download，MK 会继续。";
+                ShowFreeDownloadWhy = true;
                 await OpenNexusFilePageAsync();
                 _shell.SetStatus(DownloadStatus, StatusKind.Warning);
                 return;

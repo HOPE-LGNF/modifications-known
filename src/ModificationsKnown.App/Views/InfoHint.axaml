@@ -10,8 +10,10 @@
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="1"
                 PointerEntered="OnBadgeEnter"
-                PointerExited="OnBadgeLeave">
-            <TextBlock Text="?"
+                PointerExited="OnBadgeLeave"
+                PointerPressed="OnBadgePressed">
+            <TextBlock Name="BadgeText"
+                       Text="?"
                        FontSize="10"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"

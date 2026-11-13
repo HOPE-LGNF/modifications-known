@@ -163,13 +163,20 @@
                                             <Border Width="56" Height="56"
                                                     CornerRadius="12"
                                                     Background="{DynamicResource AccentSoftBrush}"
+                                                    ClipToBounds="True"
                                                     VerticalAlignment="Top">
-                                                <TextBlock Text="{Binding Monogram}"
-                                                           FontSize="16"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource AccentBrush}"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center" />
+                                                <Grid>
+                                                    <Image Source="{Binding Thumbnail}"
+                                                           Stretch="UniformToFill"
+                                                           IsVisible="{Binding HasThumbnail}" />
+                                                    <TextBlock Text="{Binding Monogram}"
+                                                               FontSize="16"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource AccentBrush}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               IsVisible="{Binding ShowMonogram}" />
+                                                </Grid>
                                             </Border>
 
                                             <StackPanel Grid.Column="1" Spacing="4">
@@ -247,35 +254,25 @@
                                                         HorizontalAlignment="Right"
                                                         ToolTip.Tip="更多操作">
                                                     <Button.Flyout>
-                                                        <Flyout Placement="BottomEdgeAlignedRight">
-                                                            <StackPanel Width="190" Spacing="5">
-                                                                <Button Classes="Ghost"
-                                                                        Content="在 Nexus 打开"
-                                                                        HorizontalContentAlignment="Left"
-                                                                        IsVisible="{Binding IsNexusMatched}"
-                                                                        Command="{Binding OpenNexusCommand}" />
-                                                                <Button Classes="Ghost"
-                                                                        Content="关联 Nexus"
-                                                                        HorizontalContentAlignment="Left"
-                                                                        Command="{Binding LinkNexusCommand}" />
-                                                                <Button Classes="Ghost"
-                                                                        Content="接管为托管"
-                                                                        HorizontalContentAlignment="Left"
-                                                                        IsVisible="{Binding CanAdopt}"
-                                                                        Command="{Binding AdoptCommand}" />
-                                                                <Separator Margin="0,4" />
-                                                                <Button Classes="Danger"
-                                                                        Content="卸载"
-                                                                        HorizontalContentAlignment="Left"
-                                                                        IsVisible="{Binding CanDelete}"
-                                                                        Command="{Binding UninstallCommand}" />
-                                                                <Button Classes="Danger"
-                                                                        Content="删除整个目录"
-                                                                        HorizontalContentAlignment="Left"
-                                                                        IsVisible="{Binding CanDeleteWhole}"
-                                                                        Command="{Binding DeleteWholeCommand}" />
-                                                            </StackPanel>
-                                                        </Flyout>
+                                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                                            <MenuItem Header="在 Nexus 打开"
+                                                                      IsVisible="{Binding IsNexusMatched}"
+                                                                      Command="{Binding OpenNexusCommand}" />
+                                                            <MenuItem Header="关联 Nexus"
+                                                                      Command="{Binding LinkNexusCommand}" />
+                                                            <MenuItem Header="接管为托管"
+                                                                      IsVisible="{Binding CanAdopt}"
+                                                                      Command="{Binding AdoptCommand}" />
+                                                            <Separator />
+                                                            <MenuItem Header="卸载"
+                                                                      Foreground="{DynamicResource DangerBrush}"
+                                                                      IsVisible="{Binding CanDelete}"
+                                                                      Command="{Binding UninstallCommand}" />
+                                                            <MenuItem Header="删除整个目录"
+                                                                      Foreground="{DynamicResource DangerBrush}"
+                                                                      IsVisible="{Binding CanDeleteWhole}"
+                                                                      Command="{Binding DeleteWholeCommand}" />
+                                                        </MenuFlyout>
                                                     </Button.Flyout>
                                                 </Button>
                                             </StackPanel>

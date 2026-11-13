@@ -56,7 +56,10 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     [ObservableProperty]
     private IBrush _toastBrush = new SolidColorBrush(Color.Parse("#79C99E"));
 
-    private DispatcherTimer? _toastTimer;
+    [ObservableProperty]
+    private double _toastOpacity;
+
+    private int _toastGeneration;
 
     public bool CanLaunch => !IsLaunching;
 
@@ -117,7 +120,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar),
-            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups),
+            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion)
@@ -182,20 +185,25 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         ShowToast(message);
     }
 
-    private void ShowToast(string message)
+    private async void ShowToast(string message)
     {
+        var generation = ++_toastGeneration;
         ToastMessage = message;
         ToastBrush = StatusBrush;
+        ToastOpacity = 0;
         IsToastVisible = true;
 
-        _toastTimer?.Stop();
-        _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3.2) };
-        _toastTimer.Tick += (_, _) =>
-        {
-            _toastTimer?.Stop();
-            IsToastVisible = false;
-        };
-        _toastTimer.Start();
+        // Let the hidden state render once, then fade/slide in.
+        await Task.Delay(16);
+        if (generation != _toastGeneration) return;
+        ToastOpacity = 1;
+
+        await Task.Delay(5000);
+        if (generation != _toastGeneration) return;
+        ToastOpacity = 0;
+
+        await Task.Delay(240);
+        if (generation == _toastGeneration) IsToastVisible = false;
     }
 
     public async Task HandleNxmLinkAsync(string raw)

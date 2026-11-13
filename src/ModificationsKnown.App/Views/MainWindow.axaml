@@ -194,10 +194,11 @@
             <Border Grid.Row="1"
                     ZIndex="15"
                     IsVisible="{Binding IsToastVisible}"
-                    HorizontalAlignment="Right"
+                    Opacity="{Binding ToastOpacity}"
+                    HorizontalAlignment="Center"
                     VerticalAlignment="Top"
-                    Margin="0,10,20,0"
-                    MaxWidth="460"
+                    Margin="0,12,0,0"
+                    MaxWidth="640"
                     Background="{DynamicResource SurfaceAltBrush}"
                     BorderBrush="{Binding ToastBrush}"
                     BorderThickness="1"
@@ -211,9 +212,16 @@
                              Fill="{Binding ToastBrush}" />
                     <TextBlock Text="{Binding ToastMessage}"
                                FontSize="11"
-                               MaxWidth="400"
-                               TextTrimming="CharacterEllipsis" />
+                               MaxWidth="560"
+                               TextWrapping="Wrap" />
                 </StackPanel>
+                <Border.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Opacity"
+                                          Duration="0:0:0.22"
+                                          Easing="CubicEaseOut" />
+                    </Transitions>
+                </Border.Transitions>
             </Border>
 
             <!-- The game-skin page is a placeholder: veil the whole page row

@@ -53,53 +53,61 @@
                                         CornerRadius="8"
                                         Padding="10"
                                         Margin="0,0,0,6">
-                                    <Grid RowDefinitions="Auto,Auto" RowSpacing="7">
-                                        <StackPanel Spacing="3">
-                                            <StackPanel Orientation="Horizontal" Spacing="7">
-                                                <TextBox Text="{Binding Alias, Mode=TwoWay}"
-                                                         Width="170"
-                                                         Watermark="版本显示名"
-                                                         KeyDown="OnAliasKeyDown" />
-                                                <TextBlock Text="{Binding EditionLabel}" Classes="caption" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding LoaderLabel}" Classes="caption" VerticalAlignment="Center" />
-                                                <Border Background="{DynamicResource AccentSoftBrush}"
-                                                        CornerRadius="4"
-                                                        Padding="5,2"
-                                                        VerticalAlignment="Center"
-                                                        IsVisible="{Binding IsCurrent}">
-                                                    <TextBlock Text="当前" FontSize="9" Foreground="{DynamicResource AccentBrush}" />
-                                                </Border>
-                                            </StackPanel>
-                                            <TextBlock Text="{Binding Path}"
-                                                       Classes="mono"
-                                                       FontSize="10"
-                                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       TextTrimming="CharacterEllipsis" />
+                                    <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+                                        <TextBox Text="{Binding Alias, Mode=TwoWay}"
+                                                 Width="150"
+                                                 Watermark="版本显示名"
+                                                 KeyDown="OnAliasKeyDown" />
+                                        <StackPanel Grid.Column="1"
+                                                    Orientation="Horizontal"
+                                                    Spacing="7"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding EditionLabel}" Classes="caption" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding LoaderLabel}" Classes="caption" VerticalAlignment="Center" />
+                                            <Border Background="{DynamicResource AccentSoftBrush}"
+                                                    CornerRadius="4"
+                                                    Padding="5,2"
+                                                    VerticalAlignment="Center"
+                                                    IsVisible="{Binding IsCurrent}">
+                                                <TextBlock Text="当前" FontSize="9" Foreground="{DynamicResource AccentBrush}" />
+                                            </Border>
                                         </StackPanel>
-                                        <StackPanel Grid.Row="1"
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding Path}"
+                                                   Classes="mono"
+                                                   FontSize="10"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="3"
                                                     Orientation="Horizontal"
                                                     Spacing="6"
-                                                    HorizontalAlignment="Right">
+                                                    VerticalAlignment="Center">
                                             <Button Content="{Binding SaveAliasText}"
                                                     Command="{Binding SaveAliasCommand}"
                                                     IsVisible="{Binding IsAliasDirty}"
                                                     IsEnabled="{Binding CanSaveAlias}"
                                                     Classes.modified="{Binding IsAliasDirty}" />
                                             <Button Classes="Ghost"
-                                                    Content="安装 BepInEx"
-                                                    IsVisible="{Binding CanInstallLoader}">
+                                                    Content="⋯"
+                                                    FontSize="16"
+                                                    Padding="8,2"
+                                                    ToolTip.Tip="更多操作">
                                                 <Button.Flyout>
                                                     <MenuFlyout Placement="BottomEdgeAlignedRight">
-                                                        <MenuItem Header="本地导入压缩包…"
+                                                        <MenuItem Header="安装 BepInEx…"
+                                                                  IsVisible="{Binding CanInstallLoader}"
                                                                   Command="{Binding InstallLoaderCommand}" />
-                                                        <MenuItem Header="GitHub 下载最新稳定版"
+                                                        <MenuItem Header="下载 BepInEx 最新稳定版"
+                                                                  IsVisible="{Binding CanInstallLoader}"
                                                                   Command="{Binding OpenLoaderDownloadCommand}" />
+                                                        <Separator />
+                                                        <MenuItem Header="删除版本…"
+                                                                  Foreground="{DynamicResource DangerBrush}"
+                                                                  Command="{Binding DeleteCommand}" />
                                                     </MenuFlyout>
                                                 </Button.Flyout>
                                             </Button>
-                                            <Button Classes="Danger"
-                                                    Content="删除版本"
-                                                    Command="{Binding DeleteCommand}" />
                                         </StackPanel>
                                     </Grid>
                                 </Border>

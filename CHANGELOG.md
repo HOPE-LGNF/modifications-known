@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.6.1] - 2026-11-13
+
+### Fixed
+
+- Version cards are single-line again: alias, edition, loader, “当前”, path and
+  one overflow menu on the same row; install/delete actions moved into `⋯`.
+- Page-top toast is centred, lasts five seconds, fades in/out over 220 ms and
+  wraps long text instead of truncating it.
+
+### Changed
+
+- Free-account download message no longer mentions “Mod manager download” and
+  gains a click/hover “为什么？” hover card explaining the Nexus limit.
+- Installed mods can show the Nexus thumbnail (resolved through `GetModAsync`,
+  existing thumbnail cache, failures ignored); the monogram remains the fallback.
+- Per-mod actions in the detailed list are now a `MenuFlyout` list instead of a
+  stack of buttons, matching the “添加实例” menu style.
+
+### Added
+
+- `docs/mockups/pcl-style-preview.png` (and its HTML source): a PCL-inspired
+  light-theme layout proposal. Design only — no runtime layout was changed.
 ## [0.6.0] - 2026-11-13
 
 ### Fixed

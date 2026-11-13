@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
+using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
 
 namespace ModificationsKnown.App.ViewModels;
@@ -20,7 +22,20 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
     [ObservableProperty]
     private NexusMatch? _nexusMatch;
 
+    [ObservableProperty]
+    private Bitmap? _thumbnail;
+
     public bool IsNexusMatched => NexusMatch is not null;
+
+    public bool HasThumbnail => Thumbnail is not null;
+
+    public bool ShowMonogram => Thumbnail is null;
+
+    partial void OnThumbnailChanged(Bitmap? value)
+    {
+        OnPropertyChanged(nameof(HasThumbnail));
+        OnPropertyChanged(nameof(ShowMonogram));
+    }
 
     public bool IsDetailedMode => !IsCompact;
 
@@ -169,6 +184,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly IFilePickerService _filePicker;
     private readonly NexusManualMatchStore _manualMatches;
     private readonly ModGroupStore _groupStore;
+    private readonly INexusModsClient _nexus;
+    private readonly ThumbnailService _thumbnails;
     private readonly List<InstalledModItemViewModel> _allItems = [];
     private int _refreshGeneration;
 
@@ -264,7 +281,9 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         IInstalledSourceStore sources,
         IFilePickerService filePicker,
         NexusManualMatchStore manualMatches,
-        ModGroupStore groupStore)
+        ModGroupStore groupStore,
+        INexusModsClient nexus,
+        ThumbnailService thumbnails)
     {
         _shell = shell;
         _operations = operations;
@@ -275,6 +294,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         _filePicker = filePicker;
         _manualMatches = manualMatches;
         _groupStore = groupStore;
+        _nexus = nexus;
+        _thumbnails = thumbnails;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
     }
 
@@ -351,7 +372,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 ? "插件目录还是空的。去「模组发现」看看，或手动放入 BepInEx/plugins。"
                 : string.Empty;
 
-            _ = MatchNexusAsync(generation);
+            _ = MatchAndLoadThumbnailsAsync(generation);
         }
         finally
         {
@@ -908,6 +929,31 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         LoadGroups(installation);
         IsModified = false;
         _shell.SetStatus($"已删除 Mod 组「{group.Name}」。", StatusKind.Success);
+    }
+
+    private async Task MatchAndLoadThumbnailsAsync(int generation)
+    {
+        await MatchNexusAsync(generation);
+        if (generation != _refreshGeneration) return;
+
+        foreach (var item in _allItems.ToList())
+        {
+            if (generation != _refreshGeneration) return;
+            if (item.NexusMatch is null || item.Thumbnail is not null) continue;
+
+            try
+            {
+                var details = await _nexus.GetModAsync(item.NexusDomain, item.NexusMatch.GameScopedId);
+                var url = details.Summary.ThumbnailUrl ?? details.GalleryUrls.FirstOrDefault();
+                var bitmap = await _thumbnails.LoadAsync(url);
+                if (bitmap is not null && generation == _refreshGeneration)
+                    item.Thumbnail = bitmap;
+            }
+            catch
+            {
+                // Thumbnails are cosmetic; Nexus failures must not break the list.
+            }
+        }
     }
 
     private async Task MatchNexusAsync(int generation)
