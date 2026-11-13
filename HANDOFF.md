@@ -1,10 +1,10 @@
 # 已知改装 / Modifications Known — 交接文档
 
 > 更新时间：2026-11-10  
-> 当前版本：`0.6.0`  
+> 当前版本：`0.6.1`  
 > 仓库：<https://github.com/HOPE-LGNF/modifications-known>  
-> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.6.0>  
-> 最新功能提交：`97c0819 fix: persistent instance list, delete countdown and settings polish`
+> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.6.1>  
+> 最新功能提交：`7c7b891 fix: compact version rows, centred toast and Nexus thumbnails`
 
 ---
 
@@ -27,6 +27,12 @@
 
 ### 尚未由用户实测完成
 
+- v0.6.1 的功能（作者已在 Linux 离屏渲染/编译检查，Windows 真机待确认）：
+  - 版本卡片单行 + 操作收进 ⋯；
+  - 页顶 Toast 居中、5 秒、淡入淡出；
+  - 已安装模组 Nexus 缩略图（需要 API Key/关联）；
+  - 模组操作改为菜单列表；
+  - PCL 风格预览图（仅设计，未改布局）。
 - v0.6.0 的功能（作者已在 Linux 离屏渲染/编译检查，Windows 真机待确认）：
   - 实例列表 v2 持久化：启动不再自动扫描 Steam，只有显式“重新探测”才更新；
   - 删除版本倒计时、Steam 目录提示；
@@ -66,11 +72,11 @@
 ### 最新产物
 
 ```text
-Release: ModificationsKnown-v0.6.0-win-x64.exe
-SHA-256: 288a4bf5ed28e31eed762ef72720a299528a9cfe455737ed4bc855f88188312b
+Release: ModificationsKnown-v0.6.1-win-x64.exe
+SHA-256: 49eb9164a065f6d8ec62d19a1a387b4cfb8416cafdfd8af3520707444273da85
 
 桌面:
-C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.6.0-win-x64.exe
+C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.6.1-win-x64.exe
 ```
 
 桌面目录应只保留最新版；旧版本 exe 删除。当前 `Downloads` 里的 v0.1.0 不属于桌面发布目录，未动。
@@ -339,7 +345,7 @@ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
 项目：/home/unauth-hope/projects/modifications-known
 远程：https://github.com/HOPE-LGNF/modifications-known
 当前版本：0.4.1
-最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.6.0
+最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.6.1
 最新功能提交：7a4b213 fix: repair overview layout, dialog overlays and mod-group toolbar
 桌面交付目录：C:\Users\liuchunyan\Desktop\Modifications Known
 
