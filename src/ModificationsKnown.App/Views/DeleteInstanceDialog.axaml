@@ -108,6 +108,13 @@
                     <CheckBox Name="DeleteFolderCheck"
                               Content="同时删除实例文件夹"
                               IsChecked="False" />
+                    <TextBlock Name="SteamWarning"
+                               IsVisible="False"
+                               FontSize="11"
+                               Foreground="{DynamicResource WarningBrush}"
+                               TextWrapping="Wrap"
+                               Margin="24,0,0,0"
+                               Text="该实例位于 Steam 库。直接删除文件夹会让 Steam 认为安装损坏；建议先关闭 MK，用 Steam 的“卸载”清理，或在 Steam 中验证文件。" />
                     <TextBlock Text="勾选后会连同游戏安装目录一起删除。该目录中的 BepInEx、模组和日志都会消失，且无法恢复。"
                                FontSize="11"
                                Foreground="{DynamicResource DangerBrush}"
@@ -163,7 +170,7 @@
                                 HorizontalAlignment="Right"
                                 Margin="0,6,0,0">
                         <Button Classes="Ghost" Content="返回" Click="OnBackClick" />
-                        <Button Classes="Danger" Content="确认删除" Click="OnConfirmClick" />
+                        <Button Name="ConfirmDeleteButton" Classes="Danger" Content="确认删除" Click="OnConfirmClick" />
                     </StackPanel>
                 </StackPanel>
             </Grid>

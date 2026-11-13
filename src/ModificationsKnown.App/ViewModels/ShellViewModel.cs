@@ -1,5 +1,6 @@
 using System.Reflection;
 using Avalonia.Media;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
@@ -46,6 +47,17 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     [ObservableProperty]
     private bool _isLaunching;
 
+    [ObservableProperty]
+    private bool _isToastVisible;
+
+    [ObservableProperty]
+    private string _toastMessage = string.Empty;
+
+    [ObservableProperty]
+    private IBrush _toastBrush = new SolidColorBrush(Color.Parse("#79C99E"));
+
+    private DispatcherTimer? _toastTimer;
+
     public bool CanLaunch => !IsLaunching;
 
     public string LaunchButtonText => IsLaunching ? "启动中…" : "启动游戏";
@@ -76,8 +88,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _dialogs = dialogs;
 
         var instanceStore = new GameInstanceStore();
-        var hiddenInstances = new HiddenInstanceStore();
-        Game = new GameContext(instanceStore, hiddenInstances);
+        Game = new GameContext(instanceStore);
         _saveIsolation = new SaveIsolationService(logger);
         NavigationItems =
         [
@@ -97,7 +108,6 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         var nxmRegistrar = new NxmProtocolRegistrar();
         var deletion = new InstanceDeletionService(
             instanceStore,
-            hiddenInstances,
             modGroups,
             manualMatches,
             sources,
@@ -147,8 +157,8 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _initialized = true;
 
         ThemeService.Apply(Settings.Current.ThemePreset);
-        SetStatus("正在检测游戏安装…");
-        await RefreshGameAsync();
+        SetStatus("正在加载版本列表…");
+        await LoadInstancesAsync(rediscover: false);
         await ActivateCurrentPageAsync();
     }
 
@@ -168,6 +178,24 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             _logger.Warn(message);
         else
             _logger.Info(message);
+
+        ShowToast(message);
+    }
+
+    private void ShowToast(string message)
+    {
+        ToastMessage = message;
+        ToastBrush = StatusBrush;
+        IsToastVisible = true;
+
+        _toastTimer?.Stop();
+        _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3.2) };
+        _toastTimer.Tick += (_, _) =>
+        {
+            _toastTimer?.Stop();
+            IsToastVisible = false;
+        };
+        _toastTimer.Start();
     }
 
     public async Task HandleNxmLinkAsync(string raw)
@@ -188,15 +216,25 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         if (item is not null) SelectedNavigation = item;
     }
 
-    public async Task RefreshGameAsync()
+    public Task RefreshGameAsync() => LoadInstancesAsync(rediscover: true);
+
+    private async Task LoadInstancesAsync(bool rediscover)
     {
         IsBusy = true;
         try
         {
-            await Game.RefreshAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
+            if (rediscover)
+                await Game.RefreshAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
+            else
+                await Game.InitializeAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
+
             if (Game.Selected is null)
             {
-                SetStatus("没有检测到《未知伤亡》。请在设置中手动选择游戏目录。", StatusKind.Warning);
+                SetStatus(
+                    rediscover
+                        ? "没有检测到《未知伤亡》。可以在设置中点击“添加实例”。"
+                        : "还没有添加版本。请在设置中点击“添加实例”。",
+                    rediscover ? StatusKind.Warning : StatusKind.Info);
                 return;
             }
 

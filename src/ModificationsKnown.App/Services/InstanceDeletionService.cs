@@ -57,7 +57,6 @@ public sealed record InstanceDeletionReport(IReadOnlyList<DeletionStepResult> St
 public sealed class InstanceDeletionService
 {
     private readonly GameInstanceStore _instances;
-    private readonly HiddenInstanceStore _hidden;
     private readonly ModGroupStore _groups;
     private readonly NexusManualMatchStore _manualMatches;
     private readonly IInstalledSourceStore _sources;
@@ -66,7 +65,6 @@ public sealed class InstanceDeletionService
 
     public InstanceDeletionService(
         GameInstanceStore instances,
-        HiddenInstanceStore hidden,
         ModGroupStore groups,
         NexusManualMatchStore manualMatches,
         IInstalledSourceStore sources,
@@ -74,7 +72,6 @@ public sealed class InstanceDeletionService
         IAppLogger? logger = null)
     {
         _instances = instances;
-        _hidden = hidden;
         _groups = groups;
         _manualMatches = manualMatches;
         _sources = sources;
@@ -248,16 +245,6 @@ public sealed class InstanceDeletionService
         catch (Exception exception)
         {
             steps.Add(new DeletionStepResult("移除版本记录", false, exception.Message));
-        }
-
-        try
-        {
-            _hidden.Hide(folder);
-            steps.Add(new DeletionStepResult("标记为已隐藏", true, "下次刷新不会再出现。"));
-        }
-        catch (Exception exception)
-        {
-            steps.Add(new DeletionStepResult("标记为已隐藏", false, exception.Message));
         }
 
         try

@@ -20,13 +20,17 @@
   - `BepInEx/plugins`（缺失时创建）
 - MK 不自动下载 loader，避免给错误的游戏版本安装不匹配的 loader。
 
-## 当前实现
+## 当前实现（0.6.0）
 
-- 设置 → 版本管理 → 每个未安装 BepInEx 的版本有“安装 BepInEx”；
-- 本地 zip 安装，复制前预检所有目标；
-- 提供 GitHub Releases、Thunderstore BepInExPack 搜索、Nexus BepInEx 搜索入口；
-- 安装完成后重新检测。
+- 设置 → 游戏与版本 → 每个未安装 BepInEx 的版本有“安装 BepInEx”；
+- 点击后弹出两个选项：
+  - **本地导入压缩包…**：本地 zip，复制前预检所有目标；
+  - **GitHub 下载最新稳定版**：打开 `https://github.com/BepInEx/BepInEx/releases/latest`
+    下载 zip，再回到“本地导入压缩包…”安装。
+- Thunderstore / Nexus 入口已移除；BepInEx 只从官方 GitHub 获取或由用户本地导入。
+- 安装完成后重新检测该实例的 BepInEx 状态。
 
-## Nexus 文件列表
+## 版本选择
 
-Nexus v1 `.../files.json` 和 v3 文件接口都能列文件；但 BepInEx 可能不在目标游戏域下，或作者关闭 mod manager download，因此只作为可选入口，不作为默认自动安装源。
+- CU 为 Mono Unity 游戏，使用 BepInEx 5（`winhttp.dll` + `BepInEx/core`）。
+- `/releases/latest` 会跳过 6.x 预发布，指向最新的 BepInEx 5 稳定版；若后续确认需要固定版本，在这里改成具体 tag 即可（只需改 `SettingsViewModel.OpenBepInExDownloadAsync` 一个 URL）。

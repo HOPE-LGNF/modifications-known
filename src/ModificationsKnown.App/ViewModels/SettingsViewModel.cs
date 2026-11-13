@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
@@ -24,6 +25,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private readonly IUserDialogService _dialogs;
     private readonly GameInstanceStore _instances;
     private readonly InstanceDeletionService _deletion;
+    private readonly DataLocationService _dataLocation = new();
     private readonly BepInExInstaller _bepInExInstaller;
     private bool _loadingSettings;
 
@@ -63,6 +65,15 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private string _accountStatus = "尚未检查账号类型。";
 
+    [ObservableProperty]
+    private string _dataRoot = string.Empty;
+
+    [ObservableProperty]
+    private bool _isCustomDataRoot;
+
+    [ObservableProperty]
+    private string _instanceHint = string.Empty;
+
     public ObservableCollection<GameVersionRow> GameVersions { get; } = [];
 
     partial void OnConfirmBeforeDeleteChanged(bool value)
@@ -94,6 +105,9 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         _instances = instances;
         _deletion = deletion;
         _bepInExInstaller = new BepInExInstaller(logger);
+        _shell.Game.Changed += OnGameChanged;
+        DataRoot = _dataLocation.CurrentRoot;
+        IsCustomDataRoot = _dataLocation.IsCustom;
         LoadFromSettings();
         RefreshNxmStatus();
         RefreshGameVersions();
@@ -108,6 +122,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         LoadFromSettings();
         RefreshNxmStatus();
         RefreshGameVersions();
+        DataRoot = _dataLocation.CurrentRoot;
+        IsCustomDataRoot = _dataLocation.IsCustom;
         return Task.CompletedTask;
     }
 
@@ -122,11 +138,21 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
                 installation,
                 string.Equals(_shell.Game.Selected?.GameDirectory, installation.GameDirectory, StringComparison.OrdinalIgnoreCase),
                 SaveVersionAliasAsync,
-                SelectVersionAsync,
                 InstallLoaderAsync,
+                OpenBepInExDownloadAsync,
                 DeleteVersionAsync));
         }
+
+        var current = _shell.Game.Selected;
+        InstanceHint = GameVersions.Count == 0
+            ? "还没有添加版本。点“添加实例”选择游戏目录或可执行文件。"
+            : current is null
+                ? $"{GameVersions.Count} 个版本；用顶部下拉栏选择当前版本。"
+                : $"{GameVersions.Count} 个版本；当前：{current.DisplayLabel}";
     }
+
+    private void OnGameChanged(object? sender, EventArgs e) =>
+        Dispatcher.UIThread.Post(RefreshGameVersions);
 
     private async Task SaveVersionAliasAsync(GameVersionRow row)
     {
@@ -213,19 +239,65 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         }
     }
 
-    private async Task SelectVersionAsync(GameVersionRow row)
+    private async Task AddInstanceAsync(string? path)
     {
-        if (!_shell.Game.SelectByPath(row.Path))
-        {
-            _shell.SetStatus("这个版本当前不可用。", StatusKind.Warning);
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(path)) return;
 
-        _shell.Settings.Current.PreferredGamePath = row.Path;
-        _shell.Settings.Current.PreferredInstallationId = row.Installation.Profile.Id;
-        await _shell.Settings.SaveAsync();
-        RefreshGameVersions();
-        _shell.SetStatus($"当前版本：{row.Installation.DisplayLabel}", StatusKind.Success);
+        IsBusy = true;
+        try
+        {
+            var installation = await _shell.Game.AddPathAsync(path, _locator);
+            if (installation is null)
+            {
+                _shell.SetStatus("没有在该路径找到《未知伤亡》的游戏数据目录。", StatusKind.Error);
+                return;
+            }
+
+            GamePath = installation.GameDirectory;
+            _settings.Current.GamePath = installation.GameDirectory;
+            _settings.Current.PreferredGamePath = installation.GameDirectory;
+            _settings.Current.PreferredInstallationId = installation.Profile.Id;
+            await _settings.SaveAsync();
+            RefreshGameVersions();
+            _shell.SetStatus($"已添加版本「{installation.DisplayLabel}」。", StatusKind.Success);
+        }
+        catch (Exception exception)
+        {
+            _shell.SetStatus($"添加实例失败：{exception.Message}", StatusKind.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddInstanceFromFileAsync()
+    {
+        var path = await _filePicker.PickExecutableAsync();
+        await AddInstanceAsync(path);
+    }
+
+    [RelayCommand]
+    private async Task AddInstanceFromFolderAsync()
+    {
+        var path = await _filePicker.PickFolderAsync();
+        await AddInstanceAsync(path);
+    }
+
+    [RelayCommand]
+    private async Task RediscoverInstancesAsync()
+    {
+        IsBusy = true;
+        try
+        {
+            await _shell.RefreshGameAsync();
+            RefreshGameVersions();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private async Task InstallLoaderAsync(GameVersionRow row)
@@ -263,15 +335,57 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         }
     }
 
-    [RelayCommand]
-    private void OpenBepInExPage() => OpenUrl("https://github.com/BepInEx/BepInEx/releases");
+    private Task OpenBepInExDownloadAsync(GameVersionRow row)
+    {
+        // BepInEx 5 is the stable line used by Mono Unity games; /latest skips
+        // the 6.x pre-releases, so this resolves to the newest BepInEx 5 build.
+        OpenUrl("https://github.com/BepInEx/BepInEx/releases/latest");
+        _shell.SetStatus(
+            "已打开 BepInEx 最新稳定版；下载 zip 后回到这里，用“本地导入压缩包”安装。",
+            StatusKind.Info);
+        return Task.CompletedTask;
+    }
 
     [RelayCommand]
-    private void OpenThunderstoreBepInEx() => OpenUrl("https://thunderstore.io/?q=BepInExPack");
+    private async Task ChangeDataRootAsync()
+    {
+        var path = await _filePicker.PickDataFolderAsync();
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        try
+        {
+            var root = _dataLocation.SetRoot(path);
+            DataRoot = root;
+            IsCustomDataRoot = _dataLocation.IsCustom;
+            await _dialogs.AlertAsync(
+                "需要重启",
+                $"数据目录已设置为：\n{root}\n\n设置与主题已复制到新目录；日志从下次启动起写入新目录。\n请关闭并重新启动 MK 后生效。",
+                "知道了");
+        }
+        catch (Exception exception)
+        {
+            _shell.SetStatus($"切换数据目录失败：{exception.Message}", StatusKind.Error);
+        }
+    }
 
     [RelayCommand]
-    private void OpenNexusBepInExSearch() =>
-        OpenUrl("https://www.nexusmods.com/scavprototype/search/?gsearch=BepInEx");
+    private async Task ResetDataRootAsync()
+    {
+        try
+        {
+            _dataLocation.Reset();
+            DataRoot = _dataLocation.DefaultRoot;
+            IsCustomDataRoot = false;
+            await _dialogs.AlertAsync(
+                "需要重启",
+                $"数据目录已恢复为默认位置：\n{DataRoot}\n\n请关闭并重新启动 MK 后生效。",
+                "知道了");
+        }
+        catch (Exception exception)
+        {
+            _shell.SetStatus($"恢复默认数据目录失败：{exception.Message}", StatusKind.Error);
+        }
+    }
 
     private void OpenUrl(string url)
     {
@@ -298,55 +412,6 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         catch (Exception exception)
         {
             _shell.SetStatus($"打开 API Key 页面失败：{exception.Message}", StatusKind.Error);
-        }
-    }
-
-    [RelayCommand]
-    private async Task BrowseGameAsync()
-    {
-        var path = await _filePicker.PickExecutableAsync();
-        if (!string.IsNullOrWhiteSpace(path)) GamePath = path;
-    }
-
-    [RelayCommand]
-    private async Task BrowseGameFolderAsync()
-    {
-        var path = await _filePicker.PickFolderAsync();
-        if (!string.IsNullOrWhiteSpace(path)) GamePath = path;
-    }
-
-    [RelayCommand]
-    private async Task DetectGameAsync()
-    {
-        if (string.IsNullOrWhiteSpace(GamePath))
-        {
-            _shell.SetStatus("请先填写游戏可执行文件或游戏目录。", StatusKind.Warning);
-            return;
-        }
-
-        IsBusy = true;
-        try
-        {
-            var installation = await _locator.InspectAsync(GamePath);
-            if (installation is null)
-            {
-                _shell.SetStatus("没有在该路径找到《未知伤亡》的游戏数据目录。", StatusKind.Error);
-                return;
-            }
-
-            GamePath = installation.GameDirectory;
-            _settings.Current.GamePath = GamePath;
-            await _shell.RefreshGameAsync();
-            RefreshGameVersions();
-            _shell.SetStatus($"已识别到 {installation.Profile.EditionLabel}。", StatusKind.Success);
-        }
-        catch (Exception exception)
-        {
-            _shell.SetStatus($"检测失败：{exception.Message}", StatusKind.Error);
-        }
-        finally
-        {
-            IsBusy = false;
         }
     }
 

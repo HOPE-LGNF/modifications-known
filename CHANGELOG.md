@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.6.0] - 2026-11-13
+
+### Fixed
+
+- Delete-version step 1: switching from “保持原位” back to “复制到指定目录” now
+  re-enables the target directory row (the radio handler trusted the stale
+  checked state instead of the radio that raised the event).
+- Instances added manually no longer disappear: the hidden-instance list was
+  removed, and detection is no longer run on every startup. `game-instances.json`
+  is now schema v2 (full records), migrated from the old path→alias map.
+  Startup loads the saved list; Steam is re-scanned only from 添加实例 → 重新探测.
+- Settings keeps the “当前” badge in sync when the top ComboBox switches
+  instances (subscribes to `Game.Changed`).
+- “打开日志目录” now aligns with the log path row instead of the delete toggle.
+
+### Added
+
+- Version deletion step 2 disables “确认删除” for five seconds and shows the
+  remaining seconds on the button.
+- “添加实例” menu: choose executable, choose folder, or re-scan Steam; manual
+  adds inspect only that path instead of re-detecting every version.
+- Optional data root (settings/logs/caches metadata) via a `location.json`
+  pointer; save profiles deliberately stay in the default AppData root so the
+  live junction cannot be orphaned. Restart required.
+- Hover-card “?” hints (no native tooltip) and a page-top transient toast that
+  mirrors the status bar.
+- Steam-library warning in the delete wizard; BepInEx management now only
+  offers GitHub latest stable + local zip import.
+- `docs/ONBOARDING_ANALYSIS.md` (analysis only) and `docs/DEFERRED.md` (unified
+  deferred list). Removed the per-version “设为当前” button.
 ## [0.5.0] - 2026-11-10
 
 ### Added

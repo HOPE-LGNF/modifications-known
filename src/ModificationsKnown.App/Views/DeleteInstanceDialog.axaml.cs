@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Games;
 
@@ -12,6 +13,8 @@ public partial class DeleteInstanceDialog : DialogWindow
     private readonly GameInstallation _installation;
     private readonly IReadOnlyList<InstanceSaveFile> _saves;
     private readonly string _profileDirectory;
+    private DispatcherTimer? _confirmTimer;
+    private int _confirmSeconds;
 
     public DeleteInstanceDialog()
         : this(
@@ -46,6 +49,9 @@ public partial class DeleteInstanceDialog : DialogWindow
             ? "没有找到存档文件。"
             : $"找到 {saves.Count} 个存档文件：";
         NoSavesLabel.IsVisible = saves.Count == 0;
+        SteamWarning.IsVisible = installation.GameDirectory.Contains(
+            "steamapps",
+            StringComparison.OrdinalIgnoreCase);
 
         KeyDown += OnWindowKeyDown;
         Opened += (_, _) => CopyRadio.Focus();
@@ -59,8 +65,12 @@ public partial class DeleteInstanceDialog : DialogWindow
 
     private void OnSaveModeChanged(object? sender, RoutedEventArgs e)
     {
-        if (TargetRow is null) return;
-        var keep = KeepRadio.IsChecked == true;
+        if (TargetRow is null || sender is not RadioButton radio) return;
+
+        // Use the radio that raised the event: while switching groups the old
+        // radio can still report IsChecked=true, which previously disabled the
+        // target row even after choosing Copy/Move.
+        var keep = ReferenceEquals(radio, KeepRadio);
         TargetRow.IsEnabled = !keep;
         BrowseButton.IsEnabled = !keep;
     }
@@ -116,6 +126,7 @@ public partial class DeleteInstanceDialog : DialogWindow
         SummaryText.Text = BuildSummary(disposition, target);
         StepOnePanel.IsVisible = false;
         StepTwoPanel.IsVisible = true;
+        StartConfirmCountdown();
     }
 
     private string BuildSummary(SaveDisposition disposition, string target)
@@ -158,8 +169,41 @@ public partial class DeleteInstanceDialog : DialogWindow
 
     private void OnBackClick(object? sender, RoutedEventArgs e)
     {
+        StopConfirmCountdown();
         StepTwoPanel.IsVisible = false;
         StepOnePanel.IsVisible = true;
+    }
+
+    /// <summary>Force a five-second pause on the destructive button so the
+    /// final step cannot be confirmed with a double-click reflex.</summary>
+    private void StartConfirmCountdown()
+    {
+        StopConfirmCountdown();
+        _confirmSeconds = 5;
+        ConfirmDeleteButton.IsEnabled = false;
+        ConfirmDeleteButton.Content = $"确认删除（{_confirmSeconds}）";
+
+        _confirmTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _confirmTimer.Tick += (_, _) =>
+        {
+            _confirmSeconds--;
+            if (_confirmSeconds > 0)
+            {
+                ConfirmDeleteButton.Content = $"确认删除（{_confirmSeconds}）";
+                return;
+            }
+
+            StopConfirmCountdown();
+            ConfirmDeleteButton.IsEnabled = true;
+            ConfirmDeleteButton.Content = "确认删除";
+        };
+        _confirmTimer.Start();
+    }
+
+    private void StopConfirmCountdown()
+    {
+        _confirmTimer?.Stop();
+        _confirmTimer = null;
     }
 
     private void OnConfirmClick(object? sender, RoutedEventArgs e)
@@ -175,13 +219,18 @@ public partial class DeleteInstanceDialog : DialogWindow
             DeleteFolderCheck.IsChecked == true));
     }
 
-    private void OnCancelClick(object? sender, RoutedEventArgs e) => Close(null);
+    private void OnCancelClick(object? sender, RoutedEventArgs e)
+    {
+        StopConfirmCountdown();
+        Close(null);
+    }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key != Key.Escape) return;
         if (StepTwoPanel.IsVisible)
         {
+            StopConfirmCountdown();
             StepTwoPanel.IsVisible = false;
             StepOnePanel.IsVisible = true;
             e.Handled = true;

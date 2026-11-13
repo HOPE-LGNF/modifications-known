@@ -25,7 +25,7 @@ public sealed class SaveIsolationService
         _logger = logger;
     }
 
-    public string ProfilesRoot => Path.Combine(AppPaths.RootDirectory, "save-profiles");
+    public string ProfilesRoot => AppPaths.SaveProfilesDirectory;
 
     public string GetLiveSaveDirectory() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),

@@ -21,8 +21,8 @@ public partial class GameVersionRow : ObservableObject
         GameInstallation installation,
         bool isCurrent,
         Func<GameVersionRow, Task> saveAlias,
-        Func<GameVersionRow, Task> select,
         Func<GameVersionRow, Task> installLoader,
+        Func<GameVersionRow, Task> openLoaderDownload,
         Func<GameVersionRow, Task> delete)
     {
         Installation = installation;
@@ -47,8 +47,8 @@ public partial class GameVersionRow : ObservableObject
             },
             () => CanSaveAlias);
 
-        SelectCommand = new AsyncRelayCommand(() => select(this));
         InstallLoaderCommand = new AsyncRelayCommand(() => installLoader(this));
+        OpenLoaderDownloadCommand = new AsyncRelayCommand(() => openLoaderDownload(this));
         DeleteCommand = new AsyncRelayCommand(() => delete(this));
     }
 
@@ -90,9 +90,9 @@ public partial class GameVersionRow : ObservableObject
 
     public IAsyncRelayCommand SaveAliasCommand { get; }
 
-    public IAsyncRelayCommand SelectCommand { get; }
-
     public IAsyncRelayCommand InstallLoaderCommand { get; }
+
+    public IAsyncRelayCommand OpenLoaderDownloadCommand { get; }
 
     public IAsyncRelayCommand DeleteCommand { get; }
 }
