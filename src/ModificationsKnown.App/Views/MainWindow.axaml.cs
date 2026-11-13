@@ -16,6 +16,15 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, OnDrop);
     }
 
+    private void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed && e.ClickCount == 1)
+            BeginMoveDrag(e);
+    }
+
+    private void OnTitleBarDoubleTapped(object? sender, TappedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
     private static List<string> GetArchivePaths(DragEventArgs e) =>
         (e.DataTransfer.TryGetFiles() ?? [])
         .Select(item => item.TryGetLocalPath())

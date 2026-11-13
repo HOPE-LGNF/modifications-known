@@ -95,12 +95,12 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _saveIsolation = new SaveIsolationService(logger);
         NavigationItems =
         [
-            new("home", "概览", "游戏状态与快捷启动", "⌂"),
-            new("discover", "模组发现", "从 Nexus Mods 浏览与安装", "⌕"),
-            new("installed", "已安装", "启用、停用与清理本地模组", "▣"),
-            new("appearance", "启动器外观", "主题变量与基础皮肤", "◈"),
-            new("gameskin", "游戏皮肤", "游戏内外观管理", "♧", "开发中", false),
-            new("settings", "设置", "游戏、版本与 Nexus", "⚙")
+            new("home", "概览", "游戏状态与快捷启动"),
+            new("discover", "模组发现", "从 Nexus Mods 浏览与安装"),
+            new("installed", "已安装", "启用、停用与清理本地模组"),
+            new("appearance", "启动器外观", "主题变量与基础皮肤"),
+            new("gameskin", "游戏皮肤", "游戏内外观管理", "开发中", false),
+            new("settings", "设置", "游戏、版本与 Nexus")
         ];
 
         var nexusMatch = new NexusMatchService(nexus, settings, logger);
@@ -128,11 +128,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
         SelectedNavigation = NavigationItems[0];
         CurrentPage = _pages["home"];
-        Game.Changed += (_, _) =>
-        {
-            OnPropertyChanged(nameof(CurrentGameLabel));
-            OnPropertyChanged(nameof(DropHint));
-        };
+        Game.Changed += (_, _) => OnPropertyChanged(nameof(DropHint));
     }
 
     public IAppSettingsService Settings { get; }
@@ -141,20 +137,17 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
     public IReadOnlyList<NavigationItem> NavigationItems { get; }
 
-    public string CurrentGameLabel => Game.Selected is null
-        ? "未检测到游戏"
-        : Game.Selected.DisplayLabel;
-
     /// <summary>The game-skin page is a placeholder; its veil lives in
     /// MainWindow so it also covers the header and the status bar.</summary>
     public bool IsGameSkinOverlayVisible => SelectedNavigation?.Key == "gameskin";
 
-    public string VersionText
+    public string FooterText
     {
         get
         {
             var version = Assembly.GetExecutingAssembly().GetName().Version;
-            return version is null ? "v0.1.0" : $"v{version.Major}.{version.Minor}.{version.Build}";
+            var label = version is null ? "v0.1.0" : $"v{version.Major}.{version.Minor}.{version.Build}";
+            return $"{label} · Apache-2.0";
         }
     }
 

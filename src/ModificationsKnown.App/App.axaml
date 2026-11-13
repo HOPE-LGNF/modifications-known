@@ -140,6 +140,48 @@
             <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
         </Style>
 
+        <Style Selector="Button.launch">
+            <Setter Property="Height" Value="56" />
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style Selector="Border.stat-pill">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="10,8" />
+        </Style>
+
+        <Style Selector="TextBlock.bepinex-state">
+            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+        </Style>
+
+        <Style Selector="TextBlock.bepinex-state.ready">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+        </Style>
+
+        <Style Selector="Border.step-marker">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <Style Selector="Border.step-marker TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        </Style>
+
+        <Style Selector="Border.step-marker.done">
+            <Setter Property="Background" Value="{DynamicResource SuccessBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SuccessBrush}" />
+        </Style>
+
+        <Style Selector="Border.step-marker.done TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource AccentContrastBrush}" />
+        </Style>
+
         <Style Selector="Border.card">
             <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
@@ -172,7 +214,7 @@
             <Setter Property="Padding" Value="10,7" />
         </Style>
 
-        <Style Selector="ListBox.nav">
+        <Style Selector="ListBox.tabs">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
         </Style>
@@ -204,20 +246,32 @@
             <Setter Property="Background" Value="Transparent" />
         </Style>
 
-        <Style Selector="ListBox.nav ListBoxItem">
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Margin" Value="0,2" />
-            <Setter Property="CornerRadius" Value="10" />
+        <Style Selector="ListBox.tabs ListBoxItem">
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="CornerRadius" Value="8" />
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Title}" />
         </Style>
 
-        <Style Selector="ListBox.nav ListBoxItem:pointerover">
+        <Style Selector="ListBox.tabs ListBoxItem TextBlock.tab-title">
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        </Style>
+
+        <Style Selector="ListBox.tabs ListBoxItem:pointerover">
             <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
         </Style>
 
-        <Style Selector="ListBox.nav ListBoxItem:selected">
+        <Style Selector="ListBox.tabs ListBoxItem:pointerover TextBlock.tab-title">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+
+        <Style Selector="ListBox.tabs ListBoxItem:selected">
             <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+        </Style>
+
+        <Style Selector="ListBox.tabs ListBoxItem:selected TextBlock.tab-title">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
 
         <Style Selector="ProgressBar">
