@@ -64,15 +64,20 @@ public sealed partial class SteamGameLocator : IGameLocator
                 if (manual is not null) AddIfValid(installations, manual.Profile, manual.GameDirectory);
             }
 
-            _logger?.Debug($"Game detection finished: {installations.Count} installation(s)");
-            foreach (var installation in installations)
-                _logger?.Debug($"Detected {installation.Profile.EditionLabel}: {installation.GameDirectory} (BepInEx={installation.HasBepInEx})");
-
-            return installations
+            // The same directory is usually found more than once (appmanifest
+            // plus the common/ fallback, and possibly several registry roots), so
+            // collapse duplicates before logging or returning.
+            var distinct = installations
                 .GroupBy(installation => installation.GameDirectory, StringComparer.OrdinalIgnoreCase)
                 .Select(group => group.OrderByDescending(installation => installation.Profile.Edition).First())
                 .OrderByDescending(installation => installation.Profile.Edition)
                 .ToList();
+
+            _logger?.Debug($"Game detection finished: {distinct.Count} installation(s) from {installations.Count} candidate(s)");
+            foreach (var installation in distinct)
+                _logger?.Debug($"Detected {installation.Profile.EditionLabel}: {installation.GameDirectory} (BepInEx={installation.HasBepInEx})");
+
+            return distinct;
         }, cancellationToken);
     }
 
@@ -115,6 +120,7 @@ public sealed partial class SteamGameLocator : IGameLocator
     {
         if (string.IsNullOrWhiteSpace(gameDirectory)) return;
 
+        gameDirectory = NormalizeDirectory(gameDirectory);
         var dataDirectory = Path.Combine(gameDirectory, profile.DataDirectoryName);
         if (!Directory.Exists(dataDirectory)) return;
 
@@ -182,13 +188,16 @@ public sealed partial class SteamGameLocator : IGameLocator
 
         if (OperatingSystem.IsWindows())
         {
-            foreach (var value in new[] { "SteamPath", "InstallPath" })
+            // InstallPath first: HKCU SteamPath is typically stored lower-cased
+            // with forward slashes (d:/program files (x86)/steam), so letting
+            // the properly cased value win keeps displayed/saved paths tidy.
+            foreach (var value in new[] { "InstallPath", "SteamPath" })
             {
-                var path = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", value, null) as string;
-                if (!string.IsNullOrWhiteSpace(path)) roots.Add(path);
+                var path = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Valve\Steam", value, null) as string;
+                AddRoot(roots, path);
 
-                path = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Valve\Steam", value, null) as string;
-                if (!string.IsNullOrWhiteSpace(path)) roots.Add(path);
+                path = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", value, null) as string;
+                AddRoot(roots, path);
             }
 
             foreach (var defaultPath in new[]
@@ -197,7 +206,7 @@ public sealed partial class SteamGameLocator : IGameLocator
                          @"C:\Program Files\Steam"
                      })
             {
-                if (Directory.Exists(defaultPath)) roots.Add(defaultPath);
+                if (Directory.Exists(defaultPath)) AddRoot(roots, defaultPath);
             }
         }
 
@@ -211,7 +220,7 @@ public sealed partial class SteamGameLocator : IGameLocator
                 foreach (Match match in LibraryPathRegex().Matches(File.ReadAllText(vdf)))
                 {
                     var path = match.Groups["path"].Value.Replace(@"\\", @"\");
-                    if (Directory.Exists(path)) roots.Add(path);
+                    if (Directory.Exists(path)) AddRoot(roots, path);
                 }
             }
             catch
@@ -222,6 +231,25 @@ public sealed partial class SteamGameLocator : IGameLocator
 
         return roots.Where(Directory.Exists).ToList();
     }
+
+    private static void AddRoot(ISet<string> roots, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        try
+        {
+            roots.Add(NormalizeDirectory(path));
+        }
+        catch
+        {
+            // An unusable registry/VDF value is skipped, not fatal.
+        }
+    }
+
+    /// <summary>Canonical directory form for comparisons: full path, native
+    /// separators, no trailing separator (drive roots keep theirs).</summary>
+    private static string NormalizeDirectory(string path) =>
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 
     private static string? ReadInstallDir(string manifestPath)
     {
