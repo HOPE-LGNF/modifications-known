@@ -1,10 +1,10 @@
 # 已知改装 / Modifications Known — 交接文档
 
 > 更新时间：2026-11-10  
-> 当前版本：`0.5.0`  
+> 当前版本：`0.6.0`  
 > 仓库：<https://github.com/HOPE-LGNF/modifications-known>  
-> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.5.0>  
-> 最新功能提交：`71cd78d feat: instance deletion, image lightbox and merged settings`
+> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.6.0>  
+> 最新功能提交：`97c0819 fix: persistent instance list, delete countdown and settings polish`
 
 ---
 
@@ -27,6 +27,13 @@
 
 ### 尚未由用户实测完成
 
+- v0.6.0 的功能（作者已在 Linux 离屏渲染/编译检查，Windows 真机待确认）：
+  - 实例列表 v2 持久化：启动不再自动扫描 Steam，只有显式“重新探测”才更新；
+  - 删除版本倒计时、Steam 目录提示；
+  - 添加实例菜单、移除“设为当前”、日志行对齐；
+  - 可选数据目录（存档 profile 固定在默认目录）；
+  - Hover Card 提示与页顶 Toast；
+  - BepInEx 仅 GitHub 最新稳定版 + 本地导入。
 - v0.5.0 的功能（作者已在 Linux 离屏渲染/编译检查，Windows 真机待确认）：
   - 版本删除两步向导、存档复制/移动/保持、可选删除实例文件夹；
   - 隐藏实例记录，刷新后不再复活；
@@ -59,11 +66,11 @@
 ### 最新产物
 
 ```text
-Release: ModificationsKnown-v0.5.0-win-x64.exe
-SHA-256: 8f33ae20a18b223b81e224f1da181265ae50fb6d78403c205100d21f17d28485
+Release: ModificationsKnown-v0.6.0-win-x64.exe
+SHA-256: 288a4bf5ed28e31eed762ef72720a299528a9cfe455737ed4bc855f88188312b
 
 桌面:
-C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.5.0-win-x64.exe
+C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.6.0-win-x64.exe
 ```
 
 桌面目录应只保留最新版；旧版本 exe 删除。当前 `Downloads` 里的 v0.1.0 不属于桌面发布目录，未动。
@@ -111,6 +118,8 @@ C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.5.0-win-x6
 6. 再测试 junction 创建失败/外部 junction 的拒绝路径。
 
 ---
+
+> 统一搁置清单见 `docs/DEFERRED.md`；新手引导分析见 `docs/ONBOARDING_ANALYSIS.md`。
 
 ## 3. 当前功能和关键文件
 
@@ -330,7 +339,7 @@ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
 项目：/home/unauth-hope/projects/modifications-known
 远程：https://github.com/HOPE-LGNF/modifications-known
 当前版本：0.4.1
-最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.5.0
+最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.6.0
 最新功能提交：7a4b213 fix: repair overview layout, dialog overlays and mod-group toolbar
 桌面交付目录：C:\Users\liuchunyan\Desktop\Modifications Known
 
