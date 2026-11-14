@@ -154,8 +154,7 @@
                                 <Grid>
                                     <!-- C: default information panel. -->
                                     <Border IsVisible="{Binding IsDetailedMode}"
-                                            Background="{DynamicResource SurfaceBrush}"
-                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            Classes="installed-row"
                                             BorderThickness="1"
                                             CornerRadius="10"
                                             Padding="14"
@@ -280,8 +279,7 @@
 
                                     <!-- A: compact row, used only when 紧凑列表 is on. -->
                                     <Border IsVisible="{Binding IsCompact}"
-                                            Background="{DynamicResource SurfaceBrush}"
-                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            Classes="installed-row"
                                             BorderThickness="1"
                                             CornerRadius="10"
                                             Padding="12"
