@@ -38,6 +38,21 @@ public partial class MainWindow : Window
     private void OnTitleBarDoubleTapped(object? sender, TappedEventArgs e) =>
         WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
+    private void OnMinimizeClick(object? sender, RoutedEventArgs e) =>
+        WindowState = WindowState.Minimized;
+
+    private void OnMaximizeClick(object? sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == WindowStateProperty && MaximizeGlyph is not null)
+            MaximizeGlyph.Text = WindowState == WindowState.Maximized ? "❐" : "□";
+    }
+
     private bool TabsOverflow => TitleTabsScroll.Extent.Width > TitleTabsScroll.Viewport.Width + 1;
 
     private void OnTabsPointerWheel(object? sender, PointerWheelEventArgs e)

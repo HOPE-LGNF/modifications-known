@@ -122,6 +122,7 @@ public static class ThemeService
         resources["SuccessBrush"] = Brush(palette.Success);
         resources["WarningBrush"] = Brush(palette.Warning);
         resources["DangerBrush"] = Brush(palette.Danger);
+        resources["DangerContrastBrush"] = Brush("#FFFFFF");
         resources["HeroStartBrush"] = Brush(palette.HeroStart);
         resources["HeroEndBrush"] = Brush(palette.HeroEnd);
         resources["CardShadow"] = BoxShadows.Parse(

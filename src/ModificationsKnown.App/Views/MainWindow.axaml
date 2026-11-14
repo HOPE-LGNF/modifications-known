@@ -9,6 +9,7 @@
         WindowStartupLocation="CenterScreen"
         DragDrop.AllowDrop="True"
         ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
         ExtendClientAreaTitleBarHeightHint="64"
         Background="{DynamicResource AppBackgroundBrush}">
 
@@ -142,6 +143,27 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
+                </StackPanel>
+
+                <StackPanel Grid.Column="3"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Stretch">
+                    <Button Classes="window-button"
+                            Click="OnMinimizeClick"
+                            ToolTip.Tip="最小化">
+                        <TextBlock Text="—" FontSize="12" />
+                    </Button>
+                    <Button Classes="window-button"
+                            Click="OnMaximizeClick"
+                            ToolTip.Tip="最大化 / 还原">
+                        <TextBlock Name="MaximizeGlyph" Text="□" FontSize="12" />
+                    </Button>
+                    <Button Classes="window-button close"
+                            Click="OnCloseClick"
+                            ToolTip.Tip="关闭">
+                        <TextBlock Text="✕" FontSize="12" />
+                    </Button>
                 </StackPanel>
             </Grid>
         </Grid>
