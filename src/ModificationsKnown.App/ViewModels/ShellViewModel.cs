@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.App.Theming;
+using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
@@ -150,6 +151,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         var modGroups = new ModGroupStore();
         var sources = new JsonInstalledSourceStore(logger);
         var operations = new ModOperationService(modManager, installer);
+        var updates = new PackageUpdateService(operations, logger);
         var nxmRegistrar = new NxmProtocolRegistrar();
         var deletion = new InstanceDeletionService(
             instanceStore,
@@ -161,8 +163,8 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _pages = new Dictionary<string, object>
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor),
-            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs),
-            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor),
+            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs, updates),
+            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor, downloader, updates),
             ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger, _processMonitor),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
@@ -439,9 +441,22 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             SetStatus($"正在启动 {installation.DisplayLabel}…");
             _logger.Info($"Launch requested for {installation.Profile.EditionLabel} at {installation.GameDirectory}");
 
-            var result = string.IsNullOrWhiteSpace(installation.ExecutablePath)
-                ? await _launcher.LaunchViaSteamAsync(installation.Profile)
-                : await _launcher.LaunchDirectAsync(installation);
+            // Steam paths may fall back to the steam:// protocol; manual/portable
+            // instances must launch their own executable instead.
+            var hasExecutable = !string.IsNullOrWhiteSpace(installation.ExecutablePath)
+                                && File.Exists(installation.ExecutablePath);
+            var isSteamPath = installation.GameDirectory
+                .Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .Any(part => string.Equals(part, "steamapps", StringComparison.OrdinalIgnoreCase));
+
+            OperationResult result;
+            if (isSteamPath)
+                result = await _launcher.LaunchViaSteamAsync(installation.Profile);
+            else if (hasExecutable)
+                result = await _launcher.LaunchDirectAsync(installation);
+            else
+                result = OperationResult.Fail(
+                    "这个版本是非 Steam 实例，但没有找到游戏可执行文件；请在设置中重新选择游戏目录或 exe。");
 
             if (result.Success)
             {

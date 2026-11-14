@@ -57,6 +57,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private readonly IInstalledSourceStore _sources;
     private readonly NxmProtocolRegistrar _nxmRegistrar;
     private readonly IUserDialogService _dialogs;
+    private readonly PackageUpdateService _updates;
 
     private bool _suppressFileSelection;
     private int _loadVersion;
@@ -190,7 +191,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         ThumbnailService thumbnails,
         IInstalledSourceStore sources,
         NxmProtocolRegistrar nxmRegistrar,
-        IUserDialogService dialogs)
+        IUserDialogService dialogs,
+        PackageUpdateService updates)
     {
         _shell = shell;
         _nexus = nexus;
@@ -201,6 +203,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         _sources = sources;
         _nxmRegistrar = nxmRegistrar;
         _dialogs = dialogs;
+        _updates = updates;
         Mods.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ShowListPlaceholder));
         ApiKeyMissing = string.IsNullOrWhiteSpace(settings.Current.NexusApiKey);
         _shell.Game.Changed += (_, _) => OnPropertyChanged(nameof(CanInstall));
@@ -334,9 +337,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         }
     }
 
-    private sealed record PackageBackup(string OriginalPath, string BackupPath, string PackageName);
-
-    private async Task<(bool Proceed, PackageBackup? Backup)> PrepareUpdateAsync(
+    private async Task<(bool Proceed, InstalledMod? Target, bool Backup)> PrepareUpdateAsync(
         GameInstallation installation,
         string nexusName,
         string gameScopedId,
@@ -349,7 +350,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         }
         catch
         {
-            return (true, null);
+            return (true, null, false);
         }
 
         var safeName = PathSafety.GetSafeFileName(nexusName);
@@ -358,7 +359,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             || string.Equals(mod.PackageId, safeName, StringComparison.OrdinalIgnoreCase)
             || string.Equals(mod.Name, nexusName, StringComparison.OrdinalIgnoreCase));
 
-        if (target is null) return (true, null);
+        if (target is null) return (true, null, false);
 
         var incoming = incomingVersion;
         if (!string.IsNullOrWhiteSpace(incoming)
@@ -367,7 +368,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             var message = $"已安装「{target.Name}」{target.VersionLabel}，不低于要安装的 {VersionText.Label(incoming)}，已跳过。";
             _shell.SetStatus(message, StatusKind.Info);
             DownloadStatus = message;
-            return (false, null);
+            return (false, null, false);
         }
 
         if (string.Equals(
@@ -377,58 +378,23 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         {
             _shell.SetStatus("散放在 plugins 根目录的 DLL 无法安全更新；请先手动处理。", StatusKind.Warning);
             DownloadStatus = "无法更新散放 DLL。";
-            return (false, null);
+            return (false, null, false);
         }
 
-        var backupRoot = Path.Combine(
-            AppPaths.RootDirectory,
-            "backups",
-            DateTime.Now.ToString("yyyyMMdd-HHmmss"));
-        var backupPath = Path.Combine(backupRoot, PathSafety.GetSafeFileName(target.PackageId));
         var incomingLabel = string.IsNullOrWhiteSpace(incoming)
             ? "未知版本"
             : VersionText.Label(incoming);
-
-        var confirmed = await _dialogs.ConfirmAsync(
+        var choice = await _dialogs.ConfirmUpdateAsync(
             "更新模组",
-            $"检测到已安装「{target.Name}」{target.VersionLabel}。\n\n将更新到 {incomingLabel}，旧版本会完整备份到：\n{backupPath}\n\n继续吗？",
-            "更新",
-            "取消");
-        if (!confirmed)
+            $"检测到已安装「{target.Name}」{target.VersionLabel}。\n\n将更新到 {incomingLabel}。旧版本会先移动到同盘暂存目录用于失败回滚；勾选备份时会再复制一份到 MK 数据目录。",
+            showBackupOption: true);
+        if (choice is null)
         {
             DownloadStatus = "已取消更新。";
-            return (false, null);
+            return (false, null, false);
         }
 
-        try
-        {
-            Directory.CreateDirectory(backupRoot);
-            Directory.Move(target.DirectoryPath, backupPath);
-            return (true, new PackageBackup(target.DirectoryPath, backupPath, target.PackageId));
-        }
-        catch (Exception exception)
-        {
-            _shell.SetStatus($"备份旧版本失败，未更新：{exception.Message}", StatusKind.Error);
-            DownloadStatus = "更新中止。";
-            return (false, null);
-        }
-    }
-
-    private void RestoreBackup(PackageBackup backup)
-    {
-        try
-        {
-            if (Directory.Exists(backup.OriginalPath))
-                Directory.Delete(backup.OriginalPath, recursive: true);
-            Directory.Move(backup.BackupPath, backup.OriginalPath);
-            _shell.SetStatus($"更新失败，已恢复旧版本「{backup.PackageName}」。", StatusKind.Warning);
-        }
-        catch (Exception exception)
-        {
-            _shell.SetStatus(
-                $"更新失败且恢复旧版本失败：{exception.Message}\n备份仍在 {backup.BackupPath}",
-                StatusKind.Error);
-        }
+        return (true, target, choice.Backup);
     }
 
     [RelayCommand]
@@ -489,14 +455,14 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                 return;
             }
 
-            var (proceed, backup) = await PrepareUpdateAsync(
+            var (proceed, updateTarget, backup) = await PrepareUpdateAsync(
                 installation,
                 card.Summary.Name,
                 card.Summary.GameScopedId,
                 version.Version);
             if (!proceed) return;
 
-            DownloadStatus = "正在安装…";
+            DownloadStatus = updateTarget is null ? "正在安装…" : "正在更新…";
             var source = PackageSource.Nexus(
                 card.Summary.Name,
                 _settings.Current.NexusGameDomain,
@@ -504,9 +470,27 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                 card.Summary.Id,
                 file?.Id,
                 card.Summary.Version);
-            var installed = await _operations.InstallArchiveAsync(installation, destination, source, progress);
-            if (!installed.Success && backup is not null)
-                RestoreBackup(backup);
+            ModInstallResult installed;
+            if (updateTarget is null)
+            {
+                installed = await _operations.InstallArchiveAsync(installation, destination, source, progress);
+            }
+            else
+            {
+                var update = await _updates.InstallReplacingAsync(
+                    installation,
+                    updateTarget,
+                    destination,
+                    source,
+                    backup,
+                    progress);
+                installed = new ModInstallResult(
+                    update.Success,
+                    update.Message,
+                    update.Success
+                        ? [new InstalledPackageResult(updateTarget.PackageId, true, update.Message)]
+                        : []);
+            }
 
             if (installed.Success)
             {
@@ -519,12 +503,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     card.Summary.Id,
                     card.Summary.Version,
                     file?.Id);
-                _shell.SetStatus(
-                    backup is null
-                        ? $"「{card.Name}」安装完成。"
-                        : $"「{card.Name}」已更新到 {VersionText.Label(version.Version)}；旧版本备份在 {backup.BackupPath}。",
-                    StatusKind.Success);
-                DownloadStatus = backup is null ? "安装完成。" : "更新完成。";
+                _shell.SetStatus(installed.Message, StatusKind.Success);
+                DownloadStatus = updateTarget is null ? "安装完成。" : "更新完成。";
             }
             else
             {
@@ -776,14 +756,14 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                 }
             }
 
-            var (proceed, backup) = await PrepareUpdateAsync(
+            var (proceed, updateTarget, backup) = await PrepareUpdateAsync(
                 installation,
                 nexusName,
                 nxm.ModId.ToString(),
                 nexusVersion);
             if (!proceed) return;
 
-            DownloadStatus = "正在安装 NXM 文件…";
+            DownloadStatus = updateTarget is null ? "正在安装 NXM 文件…" : "正在更新 NXM 文件…";
             var source = PackageSource.Nexus(
                 nexusName,
                 nxm.GameDomain,
@@ -791,9 +771,27 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                 modUid,
                 nxm.FileId.ToString(),
                 nexusVersion);
-            var installed = await _operations.InstallArchiveAsync(installation, destination, source, progress);
-            if (!installed.Success && backup is not null)
-                RestoreBackup(backup);
+            ModInstallResult installed;
+            if (updateTarget is null)
+            {
+                installed = await _operations.InstallArchiveAsync(installation, destination, source, progress);
+            }
+            else
+            {
+                var update = await _updates.InstallReplacingAsync(
+                    installation,
+                    updateTarget,
+                    destination,
+                    source,
+                    backup,
+                    progress);
+                installed = new ModInstallResult(
+                    update.Success,
+                    update.Message,
+                    update.Success
+                        ? [new InstalledPackageResult(updateTarget.PackageId, true, update.Message)]
+                        : []);
+            }
 
             if (installed.Success)
             {

@@ -8,8 +8,10 @@ using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Mods;
+using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Storage;
 
 namespace ModificationsKnown.App.ViewModels;
 
@@ -40,6 +42,10 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
     public string UpdateBadgeLabel => string.IsNullOrWhiteSpace(LatestVersionLabel)
         ? "可更新"
         : $"可更新 {LatestVersionLabel}";
+
+    public string UpdateMenuLabel => string.IsNullOrWhiteSpace(LatestVersionLabel)
+        ? "更新到最新版本…"
+        : $"更新到 {LatestVersionLabel}…";
 
     public bool HasThumbnail => Thumbnail is not null;
 
@@ -91,7 +97,8 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
         Func<InstalledMod, Task> uninstall,
         Func<InstalledMod, Task> deleteWhole,
         Func<InstalledMod, Task> adopt,
-        Func<InstalledMod, Task> linkNexus)
+        Func<InstalledMod, Task> linkNexus,
+        Func<InstalledModItemViewModel, Task> update)
     {
         Mod = mod;
         _toggle = toggle;
@@ -100,6 +107,7 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
         DeleteWholeCommand = new AsyncRelayCommand(() => deleteWhole(Mod));
         AdoptCommand = new AsyncRelayCommand(() => adopt(Mod));
         LinkNexusCommand = new AsyncRelayCommand(() => linkNexus(Mod));
+        UpdateCommand = new AsyncRelayCommand(() => update(this));
     }
 
     public InstalledMod Mod { get; }
@@ -185,6 +193,8 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
     public IAsyncRelayCommand AdoptCommand { get; }
 
     public IAsyncRelayCommand LinkNexusCommand { get; }
+
+    public IAsyncRelayCommand UpdateCommand { get; }
 }
 
 public partial class InstalledViewModel : ObservableObject, IAsyncPage
@@ -201,6 +211,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly INexusModsClient _nexus;
     private readonly ThumbnailService _thumbnails;
     private readonly GameProcessMonitor _processMonitor;
+    private readonly IFileDownloader _downloader;
+    private readonly PackageUpdateService _updates;
     private readonly List<InstalledModItemViewModel> _allItems = [];
     private readonly Dictionary<string, Bitmap?> _thumbnailCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (bool HasUpdate, string Label)> _updateCache = new(StringComparer.OrdinalIgnoreCase);
@@ -211,6 +223,9 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
     [ObservableProperty]
     private bool _isCheckingUpdates;
+
+    [ObservableProperty]
+    private bool _hasUpdates;
 
     [ObservableProperty]
     private string _updateSummary = string.Empty;
@@ -312,7 +327,9 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         ModGroupStore groupStore,
         INexusModsClient nexus,
         ThumbnailService thumbnails,
-        GameProcessMonitor processMonitor)
+        GameProcessMonitor processMonitor,
+        IFileDownloader downloader,
+        PackageUpdateService updates)
     {
         _shell = shell;
         _operations = operations;
@@ -326,6 +343,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         _nexus = nexus;
         _thumbnails = thumbnails;
         _processMonitor = processMonitor;
+        _downloader = downloader;
+        _updates = updates;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
     }
 
@@ -337,6 +356,198 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
     [RelayCommand]
     private Task RefreshAsync() => RefreshCoreAsync();
+
+    [RelayCommand]
+    private async Task UpdateAsync(InstalledModItemViewModel item)
+    {
+        if (IsBusy || !item.IsNexusMatched) return;
+        if (_shell.Game.Selected is not { } installation) return;
+        if (!EnsureGameNotRunning(installation, "更新模组")) return;
+
+        IsBusy = true;
+        try
+        {
+            var result = await UpdateItemCoreAsync(installation, item, askConfirmation: true, backup: true);
+            if (result)
+            {
+                _updateCache.Remove(item.Mod.PackageId);
+                item.HasUpdate = false;
+                await RefreshCoreAsync();
+                HasUpdates = _allItems.Any(candidate => candidate.HasUpdate);
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task UpdateAllAsync()
+    {
+        if (IsBusy) return;
+        if (_shell.Game.Selected is not { } installation) return;
+        if (!EnsureGameNotRunning(installation, "更新模组")) return;
+
+        var targets = _allItems.Where(item => item.HasUpdate && item.IsNexusMatched).ToList();
+        if (targets.Count == 0)
+        {
+            _shell.SetStatus("没有可更新的模组，请先检查更新。", StatusKind.Info);
+            return;
+        }
+
+        var choice = await _dialogs.ConfirmUpdateAsync(
+            "一键更新",
+            $"将依次更新 {targets.Count} 个模组：\n\n{string.Join(Environment.NewLine, targets.Select(item => "· " + item.Name + " → " + item.UpdateBadgeLabel))}\n\n免费账号若无法获取直链，会在浏览器中打开对应页面并跳过；其余模组继续。",
+            showBackupOption: true);
+        if (choice is null) return;
+
+        IsBusy = true;
+        var succeeded = 0;
+        var skipped = 0;
+        try
+        {
+            foreach (var item in targets)
+            {
+                if (await UpdateItemCoreAsync(installation, item, askConfirmation: false, choice.Backup))
+                {
+                    succeeded++;
+                    _updateCache.Remove(item.Mod.PackageId);
+                    item.HasUpdate = false;
+                }
+                else
+                {
+                    skipped++;
+                }
+            }
+
+            await RefreshCoreAsync();
+            HasUpdates = _allItems.Any(candidate => candidate.HasUpdate);
+            _shell.SetStatus(
+                $"一键更新完成：成功 {succeeded} 个" + (skipped > 0 ? $"，跳过/失败 {skipped} 个。" : "。"),
+                skipped == 0 ? StatusKind.Success : StatusKind.Warning);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task<bool> UpdateItemCoreAsync(
+        GameInstallation installation,
+        InstalledModItemViewModel item,
+        bool askConfirmation,
+        bool backup)
+    {
+        var match = item.NexusMatch;
+        if (match is null) return false;
+
+        var domain = _settings.Current.NexusGameDomain;
+        try
+        {
+            var files = await _nexus.GetFilesAsync(match.ModUid);
+            var file = files
+                .OrderByDescending(candidate => candidate.IsActive)
+                .ThenByDescending(candidate => candidate.LastUploadedAt)
+                .FirstOrDefault();
+            if (file is null)
+            {
+                _shell.SetStatus($"「{item.Name}」在 Nexus 上没有可用文件。", StatusKind.Warning);
+                return false;
+            }
+
+            var versions = await _nexus.GetFileVersionsAsync(file.Id);
+            var version = versions.FirstOrDefault(candidate => candidate.IsPrimary)
+                          ?? versions.OrderByDescending(candidate => candidate.UploadedAt).FirstOrDefault();
+            if (version is null)
+            {
+                _shell.SetStatus($"「{item.Name}」没有可下载的版本。", StatusKind.Warning);
+                return false;
+            }
+
+            if (!VersionText.IsNewer(version.Version, item.Mod.Version))
+            {
+                _shell.SetStatus($"「{item.Name}」已是最新版本。", StatusKind.Info);
+                return false;
+            }
+
+            var links = await _nexus.GetDownloadLinksAsync(domain, version.GameScopedId);
+            var link = links.FirstOrDefault(candidate =>
+                Uri.TryCreate(candidate.Url, UriKind.Absolute, out _));
+            if (link is null)
+            {
+                _shell.SetStatus(
+                    $"Nexus 没有为「{item.Name}」返回直链；免费账号请到模组发现用 NXM 或浏览器下载。",
+                    StatusKind.Warning);
+                OpenNexusPage(match, domain);
+                return false;
+            }
+
+            if (askConfirmation)
+            {
+                var choice = await _dialogs.ConfirmUpdateAsync(
+                    "更新模组",
+                    $"「{item.Name}」已安装 {item.Mod.VersionLabel}，将更新到 {VersionText.Label(version.Version)}。\n\n下载后替换旧包；更新失败会尝试回滚。",
+                    showBackupOption: true);
+                if (choice is null) return false;
+                backup = choice.Backup;
+            }
+
+            Directory.CreateDirectory(AppPaths.DownloadsDirectory);
+            var extension = Path.GetExtension(new Uri(link.Url).AbsolutePath);
+            if (string.IsNullOrWhiteSpace(extension) || extension.Length > 8) extension = ".zip";
+            var fileName = PathSafety.GetSafeFileName(
+                $"{item.Name}-{version.Version}-{DateTime.Now:HHmmss}{extension}");
+            var destination = Path.Combine(AppPaths.DownloadsDirectory, fileName);
+
+            _shell.SetStatus($"正在下载「{item.Name}」{VersionText.Label(version.Version)}…");
+            var download = await _downloader.DownloadAsync(link.Url, destination);
+            if (!download.Success)
+            {
+                _shell.SetStatus(download.Message, StatusKind.Error);
+                return false;
+            }
+
+            var source = PackageSource.Nexus(
+                item.Name,
+                domain,
+                match.GameScopedId,
+                match.ModUid,
+                file.Id,
+                version.Version);
+            var result = await _updates.InstallReplacingAsync(
+                installation,
+                item.Mod,
+                destination,
+                source,
+                backup);
+            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            return result.Success;
+        }
+        catch (NexusApiException exception)
+        {
+            _shell.SetStatus(exception.Message, StatusKind.Error);
+            if (exception.StatusCode is 401 or 403) OpenNexusPage(match, domain);
+            return false;
+        }
+        catch (Exception exception)
+        {
+            _shell.SetStatus($"更新「{item.Name}」失败：{exception.Message}", StatusKind.Error);
+            return false;
+        }
+    }
+
+    private static void OpenNexusPage(NexusMatch match, string domain)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(match.PageUrl(domain)) { UseShellExecute = true });
+        }
+        catch
+        {
+            // The status message already explains the fallback.
+        }
+    }
 
     [RelayCommand]
     private async Task CheckUpdatesAsync()
@@ -381,6 +592,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 }
             }
 
+            HasUpdates = updates > 0;
             UpdateSummary = checkedCount == 0
                 ? "没有可检查的 Nexus 模组；先关联模组或配置 API Key。"
                 : updates > 0
@@ -670,7 +882,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                     ? null
                     : new NexusMatch(sidecar.NexusName, sidecar.GameScopedId, sidecar.ModUid));
 
-        var item = new InstalledModItemViewModel(mod, ToggleAsync, UninstallAsync, DeleteWholeAsync, AdoptAsync, LinkNexusAsync)
+        var item = new InstalledModItemViewModel(mod, ToggleAsync, UninstallAsync, DeleteWholeAsync, AdoptAsync, LinkNexusAsync, UpdateAsync)
         {
             IsDetailed = IsDetailedView,
             IsCompact = IsCompactView,

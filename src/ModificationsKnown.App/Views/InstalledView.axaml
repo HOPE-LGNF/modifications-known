@@ -40,6 +40,11 @@
                             IsEnabled="{Binding !IsCheckingUpdates}"
                             Command="{Binding CheckUpdatesCommand}"
                             ToolTip.Tip="只检查已关联 Nexus 的模组；不自动下载" />
+                    <Button Classes="Ghost"
+                            Content="一键更新"
+                            IsVisible="{Binding HasUpdates}"
+                            Command="{Binding UpdateAllCommand}"
+                            ToolTip.Tip="依次更新所有检测到可更新的 Nexus 模组" />
                     <Button Classes="Primary"
                             Content="重新扫描"
                             Command="{Binding RefreshCommand}" />
@@ -271,6 +276,10 @@
                                                         ToolTip.Tip="更多操作">
                                                     <Button.Flyout>
                                                         <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                                            <MenuItem Header="{Binding UpdateMenuLabel}"
+                                                                      IsVisible="{Binding HasUpdate}"
+                                                                      Command="{Binding UpdateCommand}" />
+                                                            <Separator />
                                                             <MenuItem Header="在 Nexus 打开"
                                                                       IsVisible="{Binding IsNexusMatched}"
                                                                       Command="{Binding OpenNexusCommand}" />
@@ -334,6 +343,9 @@
                                                            TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                <Button Classes="Ghost" Content="更新"
+                                                        IsVisible="{Binding HasUpdate}"
+                                                        Command="{Binding UpdateCommand}" />
                                                 <Button Classes="Ghost" Content="Nexus"
                                                         IsVisible="{Binding IsNexusMatched}"
                                                         Command="{Binding OpenNexusCommand}" />

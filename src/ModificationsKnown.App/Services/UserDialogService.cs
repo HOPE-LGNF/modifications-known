@@ -6,6 +6,8 @@ using ModificationsKnown.Core.Nexus;
 
 namespace ModificationsKnown.App.Services;
 
+public sealed record UpdateModChoice(bool Backup);
+
 public interface IUserDialogService
 {
     Task<bool> ConfirmAsync(string title, string message, string confirmText = "确认", string cancelText = "取消");
@@ -21,6 +23,8 @@ public interface IUserDialogService
         string watermark = "名称");
 
     Task<NexusMatch?> PickNexusMatchAsync(string gameDomain, string suggestedName);
+
+    Task<UpdateModChoice?> ConfirmUpdateAsync(string title, string message, bool showBackupOption = true);
 
     Task<InstanceDeletionPlan?> PickInstanceDeletionAsync(
         GameInstallation installation,
@@ -51,6 +55,18 @@ public sealed class UserDialogService : IUserDialogService
 
         var dialog = new ConfirmDialog(title, message, confirmText, cancelText, showCancel: true);
         return await dialog.ShowDialog<bool>(owner);
+    }
+
+    public async Task<UpdateModChoice?> ConfirmUpdateAsync(
+        string title,
+        string message,
+        bool showBackupOption = true)
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var dialog = new UpdateModDialog(title, message, showBackupOption);
+        return await dialog.ShowDialog<UpdateModChoice?>(owner);
     }
 
     public async Task<bool> ConfirmDangerAsync(
