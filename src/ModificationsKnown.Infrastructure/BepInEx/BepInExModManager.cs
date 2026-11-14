@@ -401,7 +401,17 @@ public sealed class BepInExModManager : IModManager
                 continue;
             }
 
-            if (!File.Exists(path))
+            // A disabled plugin is stored as "foo.dll.disabled". The manifest
+            // still records "foo.dll", so check both names before calling the
+            // file missing; otherwise uninstall leaves the disabled DLL behind
+            // and the package reappears as an unmanaged folder.
+            var actualPath = File.Exists(path)
+                ? path
+                : File.Exists(path + ".disabled")
+                    ? path + ".disabled"
+                    : null;
+
+            if (actualPath is null)
             {
                 missing++;
                 continue;
@@ -409,9 +419,9 @@ public sealed class BepInExModManager : IModManager
 
             try
             {
-                if (string.Equals(HashFile(path), file.Sha256, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(HashFile(actualPath), file.Sha256, StringComparison.OrdinalIgnoreCase))
                 {
-                    File.Delete(path);
+                    File.Delete(actualPath);
                     deleted++;
                 }
                 else

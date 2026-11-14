@@ -78,6 +78,35 @@ public sealed class ManagedPackageLifecycleTests
     }
 
     [Fact]
+    public async Task UninstallRemovesDisabledManagedFiles()
+    {
+        using var temp = new TempDirectory();
+        var installation = CreateInstallation(temp.Path);
+        Directory.CreateDirectory(installation.PluginsDirectory);
+        var archive = CreateArchive(temp);
+
+        var installer = new ArchiveModInstaller();
+        await installer.InstallArchiveAsync(installation, archive);
+
+        var manager = new BepInExModManager();
+        var scanned = Assert.Single(await manager.ScanAsync(installation));
+        var disabled = await manager.SetEnabledAsync(installation, scanned, false);
+        Assert.True(disabled.Success, disabled.Message);
+
+        var package = Path.Combine(installation.PluginsDirectory, "ManagedMod");
+        var disabledDll = Path.Combine(package, "ManagedMod.dll.disabled");
+        Assert.True(File.Exists(disabledDll));
+
+        var after = Assert.Single(await manager.ScanAsync(installation));
+        var result = await manager.UninstallManagedAsync(installation, after);
+
+        Assert.True(result.Success, result.Message);
+        Assert.False(File.Exists(disabledDll));
+        Assert.False(Directory.Exists(package));
+        Assert.Empty(await manager.ScanAsync(installation));
+    }
+
+    [Fact]
     public async Task UninstallRemovesOnlyUnchangedManagedFiles()
     {
         using var temp = new TempDirectory();

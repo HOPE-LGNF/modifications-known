@@ -519,8 +519,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         if (_settings.Current.ConfirmBeforeDelete)
         {
             var confirmed = await _dialogs.ConfirmAsync(
-                "卸载模组",
-                $"将从「{mod.Name}」中移除安装清单记录的文件。\n用户后来新增或修改的文件会保留。\n\n{mod.DirectoryPath}",
+                "卸载托管文件",
+                $"将移除「{mod.Name}」安装清单记录的文件（包括 .disabled 状态的文件）。\n用户后来新增或修改的文件会保留；要连同用户文件一起删除，请用“删除整个目录”。\n\n{mod.DirectoryPath}",
                 "卸载",
                 "取消");
             if (!confirmed) return;
