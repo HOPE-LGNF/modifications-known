@@ -100,6 +100,13 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
 
     public ObservableCollection<ActivityEntry> RecentActivity { get; } = [];
 
+    public bool CanLaunch => _shell.CanLaunch;
+
+    public string LaunchButtonText => _shell.LaunchButtonText;
+
+    [RelayCommand]
+    private Task LaunchGame() => _shell.LaunchGameAsync();
+
     public bool HasActivity => RecentActivity.Count > 0;
 
     public bool HasNoActivity => !HasActivity;
@@ -127,6 +134,18 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         _shell.Game.Changed += OnGameChanged;
         _activity.Changed += (_, _) => Dispatcher.UIThread.Post(() => _ = RefreshAsync());
         _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(UpdateRunningState);
+
+        if (_shell is System.ComponentModel.INotifyPropertyChanged notifier)
+        {
+            notifier.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName is nameof(IAppShell.CanLaunch) or nameof(IAppShell.LaunchButtonText))
+                {
+                    OnPropertyChanged(nameof(CanLaunch));
+                    OnPropertyChanged(nameof(LaunchButtonText));
+                }
+            };
+        }
     }
 
     public Task OnActivatedAsync() => RefreshAsync();

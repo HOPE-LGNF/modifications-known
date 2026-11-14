@@ -154,7 +154,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _pages = new Dictionary<string, object>
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor),
-            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar),
+            ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor),
             ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger, _processMonitor),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
@@ -263,7 +263,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         StatusKind = kind;
         StatusBrush = new SolidColorBrush(Color.Parse(kind switch
         {
-            StatusKind.Success => ThemeService.Current.Success,
+            StatusKind.Success => ThemeService.Current.Accent,
             StatusKind.Warning => ThemeService.Current.Warning,
             StatusKind.Error => ThemeService.Current.Danger,
             _ => ThemeService.Current.Accent

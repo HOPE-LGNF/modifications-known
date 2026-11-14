@@ -56,6 +56,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private readonly ThumbnailService _thumbnails;
     private readonly IInstalledSourceStore _sources;
     private readonly NxmProtocolRegistrar _nxmRegistrar;
+    private readonly IUserDialogService _dialogs;
 
     private bool _suppressFileSelection;
     private int _loadVersion;
@@ -147,6 +148,28 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
     public bool NxmNotRegistered => !NxmRegistered;
 
+    [RelayCommand]
+    private async Task RegisterNxmAsync()
+    {
+        var status = _nxmRegistrar.GetStatus();
+        var hasOtherHandler = !status.RegisteredForCurrentExecutable
+                              && !string.IsNullOrWhiteSpace(status.CurrentCommand);
+
+        if (hasOtherHandler)
+        {
+            var confirmed = await _dialogs.ConfirmAsync(
+                "覆盖 NXM 关联",
+                $"当前 nxm:// 由以下程序处理：\n{status.CurrentCommand}\n\n是否让 MK 覆盖它？其他程序的关联会先备份，取消注册时尝试恢复。",
+                "覆盖",
+                "取消");
+            if (!confirmed) return;
+        }
+
+        var result = _nxmRegistrar.Register(overwriteExisting: hasOtherHandler);
+        _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+        RefreshNxmStatus();
+    }
+
     partial void OnNxmRegisteredChanged(bool value) => OnPropertyChanged(nameof(NxmNotRegistered));
 
     [ObservableProperty]
@@ -166,7 +189,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         ModOperationService operations,
         ThumbnailService thumbnails,
         IInstalledSourceStore sources,
-        NxmProtocolRegistrar nxmRegistrar)
+        NxmProtocolRegistrar nxmRegistrar,
+        IUserDialogService dialogs)
     {
         _shell = shell;
         _nexus = nexus;
@@ -176,6 +200,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         _thumbnails = thumbnails;
         _sources = sources;
         _nxmRegistrar = nxmRegistrar;
+        _dialogs = dialogs;
         Mods.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ShowListPlaceholder));
         ApiKeyMissing = string.IsNullOrWhiteSpace(settings.Current.NexusApiKey);
         _shell.Game.Changed += (_, _) => OnPropertyChanged(nameof(CanInstall));

@@ -194,7 +194,7 @@
         </Style>
 
         <Style Selector="TextBlock.bepinex-state.ready">
-            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
         </Style>
 
         <Style Selector="Border.step-marker">
@@ -207,8 +207,8 @@
         </Style>
 
         <Style Selector="Border.step-marker.done">
-            <Setter Property="Background" Value="{DynamicResource SuccessBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource SuccessBrush}" />
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
         </Style>
 
         <Style Selector="Border.step-marker.done TextBlock">

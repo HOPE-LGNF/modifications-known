@@ -20,6 +20,10 @@ public interface IAppShell
 
     Task RefreshGameAsync();
 
+    bool CanLaunch { get; }
+
+    string LaunchButtonText { get; }
+
     Task LaunchGameAsync();
 
     void NavigateTo(string key);

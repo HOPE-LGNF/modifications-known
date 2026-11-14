@@ -59,7 +59,7 @@
                                         <TextBlock Text="{Binding EnabledCountLabel, StringFormat='{}{0} 个'}"
                                                    FontSize="12"
                                                    FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource SuccessBrush}" />
+                                                   Foreground="{DynamicResource AccentBrush}" />
                                     </StackPanel>
                                 </Border>
                             </Grid>
@@ -109,9 +109,8 @@
 
                 <StackPanel Grid.Row="2" Spacing="8">
                     <Button Classes="Primary launch"
-                            Content="{Binding $parent[Window].DataContext.LaunchButtonText}"
-                            IsEnabled="{Binding $parent[Window].DataContext.CanLaunch}"
-                            Command="{Binding $parent[Window].DataContext.LaunchGameCommand}" />
+                            Content="{Binding LaunchButtonText}"
+                            Command="{Binding LaunchGameCommand}" />
                     <TextBlock Text="启动前会自动切换到该版本的独立存档。"
                                Classes="caption"
                                HorizontalAlignment="Center" />
@@ -136,7 +135,7 @@
                             <TextBlock Text="{Binding EnabledCountLabel}"
                                        FontSize="32"
                                        FontWeight="SemiBold"
-                                       Foreground="{DynamicResource SuccessBrush}" />
+                                       Foreground="{DynamicResource AccentBrush}" />
                             <TextBlock Text="会随游戏加载" Classes="caption" />
                         </StackPanel>
                     </Border>

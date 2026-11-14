@@ -263,7 +263,7 @@
                                             Classes="Ghost"
                                             Content="注册 NXM"
                                             IsVisible="{Binding NxmNotRegistered}"
-                                            Command="{Binding OpenSettingsCommand}" />
+                                            Command="{Binding RegisterNxmCommand}" />
                                 </Grid>
                                 <TextBlock Text="{Binding NxmRegistrationHint}"
                                            Classes="caption"
