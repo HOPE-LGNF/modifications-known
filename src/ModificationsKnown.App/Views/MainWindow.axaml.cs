@@ -50,8 +50,12 @@ public partial class MainWindow : Window
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == WindowStateProperty && MaximizeGlyph is not null)
-            MaximizeGlyph.Text = WindowState == WindowState.Maximized ? "❐" : "□";
+        if (change.Property == WindowStateProperty)
+        {
+            var maximized = WindowState == WindowState.Maximized;
+            if (MaximizeIcon is not null) MaximizeIcon.IsVisible = !maximized;
+            if (RestoreIcon is not null) RestoreIcon.IsVisible = maximized;
+        }
     }
 
     private bool TabsOverflow => TitleTabsScroll.Extent.Width > TitleTabsScroll.Viewport.Width + 1;
