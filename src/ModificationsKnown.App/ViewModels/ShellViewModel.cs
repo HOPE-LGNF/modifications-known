@@ -137,7 +137,12 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
         SelectedNavigation = NavigationItems[0];
         CurrentPage = _pages["home"];
-        Game.Changed += (_, _) => OnPropertyChanged(nameof(CurrentGameLabel));
+        Game.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(FooterText));
+            OnPropertyChanged(nameof(DropHint));
+            OnPropertyChanged(nameof(IsGameSkinOverlayVisible));
+        };
     }
 
     public IAppSettingsService Settings { get; }
@@ -170,9 +175,13 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         }
     }
 
-    public string DropHint => Game.Selected is { HasPluginsDirectory: true } installation
-        ? $"松开以安装到 {installation.DisplayLabel}"
-        : "当前版本没有 BepInEx/plugins，无法安装";
+    public string DropHint => Game.Selected switch
+    {
+        null => "当前未选择版本，无法安装",
+        { HasBepInEx: false } => "当前版本未安装 BepInEx，无法安装",
+        { HasPluginsDirectory: false } => "当前版本没有 BepInEx/plugins，无法安装",
+        var installation => $"松开以安装到 {installation.DisplayLabel}"
+    };
 
     public static readonly string[] ArchiveExtensions = [".zip", ".7z", ".rar"];
 

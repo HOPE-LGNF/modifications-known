@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     private bool _tabsCaptured;
     private Point _tabsStart;
     private double _tabsStartOffset;
+    private DateTime _lastDragOverUtc;
 
     public MainWindow()
     {
@@ -112,20 +113,23 @@ public partial class MainWindow : Window
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
+        _lastDragOverUtc = DateTime.UtcNow;
         e.DragEffects = GetArchivePaths(e).Count > 0 ? DragDropEffects.Copy : DragDropEffects.None;
         DropOverlay.IsVisible = e.DragEffects != DragDropEffects.None;
     }
 
     private void OnDragLeave(object? sender, DragEventArgs e)
     {
-        // Moving over a child can look like a DragLeave; only hide when the
-        // pointer actually left the window.
+        // DragLeave bubbles from child controls too. Only hide if no fresh
+        // DragOver arrived after a short grace period, which stops the overlay
+        // from flickering while the pointer crosses the card.
+        var stamp = _lastDragOverUtc;
         DispatcherTimer.RunOnce(
             () =>
             {
-                if (!IsPointerOver) DropOverlay.IsVisible = false;
+                if (stamp == _lastDragOverUtc) DropOverlay.IsVisible = false;
             },
-            TimeSpan.FromMilliseconds(60));
+            TimeSpan.FromMilliseconds(160));
     }
 
     private async void OnDrop(object? sender, DragEventArgs e)
