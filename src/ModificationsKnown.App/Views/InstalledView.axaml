@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:ModificationsKnown.App.Views"
              x:Class="ModificationsKnown.App.Views.InstalledView">
     <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12">
 
@@ -78,12 +79,12 @@
                                 Content="⋮ 更多操作">
                             <Button.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedRight">
-                                    <MenuItem Header="➕ 新建 Mod 组…"
+                                    <MenuItem Header="新建 Mod 组…"
                                               Command="{Binding CreateGroupCommand}" />
-                                    <MenuItem Header="✏️ 重命名当前组…"
+                                    <MenuItem Header="重命名当前组…"
                                               Command="{Binding RenameGroupCommand}" />
                                     <Separator />
-                                    <MenuItem Header="🗑️ 删除当前组"
+                                    <MenuItem Header="删除当前组"
                                               Foreground="{DynamicResource DangerBrush}"
                                               IsEnabled="{Binding CanDeleteGroup}"
                                               Command="{Binding DeleteGroupCommand}" />
@@ -166,9 +167,7 @@
                                                     ClipToBounds="True"
                                                     VerticalAlignment="Top">
                                                 <Grid>
-                                                    <Image Source="{Binding Thumbnail}"
-                                                           Stretch="UniformToFill"
-                                                           IsVisible="{Binding HasThumbnail}" />
+                                                    <views:CoverImage Source="{Binding Thumbnail}" />
                                                     <TextBlock Text="{Binding Monogram}"
                                                                FontSize="16"
                                                                FontWeight="SemiBold"
@@ -198,14 +197,14 @@
                                                             BorderThickness="1"
                                                             CornerRadius="4"
                                                             Padding="5,2">
-                                                        <TextBlock Text="{Binding SourceLabel}" FontSize="9" Classes="muted" />
+                                                        <TextBlock Text="{Binding SourceLabel}" FontSize="11" Classes="muted" />
                                                     </Border>
                                                     <Border Background="{DynamicResource SurfaceAltBrush}"
                                                             BorderBrush="{DynamicResource BorderBrush}"
                                                             BorderThickness="1"
                                                             CornerRadius="4"
                                                             Padding="5,2">
-                                                        <TextBlock Text="{Binding ManagementLabel}" FontSize="9" Classes="muted" />
+                                                        <TextBlock Text="{Binding ManagementLabel}" FontSize="11" Classes="muted" />
                                                     </Border>
                                                 </StackPanel>
 
@@ -222,7 +221,7 @@
                                                             CornerRadius="99"
                                                             Padding="7,2">
                                                         <TextBlock Text="{Binding FileStateLabel}"
-                                                                   FontSize="9"
+                                                                   FontSize="11"
                                                                    Classes="muted"
                                                                    ToolTip.Tip="{Binding FileStateTooltip}" />
                                                     </Border>
@@ -231,14 +230,14 @@
                                                             BorderThickness="1"
                                                             CornerRadius="99"
                                                             Padding="7,2">
-                                                        <TextBlock Text="{Binding PluginLabel}" FontSize="9" Classes="muted" />
+                                                        <TextBlock Text="{Binding PluginLabel}" FontSize="11" Classes="muted" />
                                                     </Border>
                                                     <Border Background="{DynamicResource SurfaceAltBrush}"
                                                             BorderBrush="{DynamicResource BorderBrush}"
                                                             BorderThickness="1"
                                                             CornerRadius="99"
                                                             Padding="7,2">
-                                                        <TextBlock Text="{Binding DependencyLabel}" FontSize="9" Classes="muted" />
+                                                        <TextBlock Text="{Binding DependencyLabel}" FontSize="11" Classes="muted" />
                                                     </Border>
                                                 </StackPanel>
                                             </StackPanel>
@@ -311,23 +310,36 @@
                                                            TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                                <Button Classes="Ghost" Content="Nexus"
-                                                        IsVisible="{Binding IsNexusMatched}"
-                                                        Command="{Binding OpenNexusCommand}" />
-                                                <Button Classes="Ghost" Content="关联"
-                                                        Command="{Binding LinkNexusCommand}" />
-                                                <Button Classes="Ghost" Content="接管"
-                                                        IsVisible="{Binding CanAdopt}"
-                                                        Command="{Binding AdoptCommand}" />
-                                                <Button Classes="Danger" Content="卸载"
-                                                        IsVisible="{Binding CanDelete}"
-                                                        Command="{Binding UninstallCommand}" />
-                                                <Button Classes="Danger" Content="删除"
-                                                        IsVisible="{Binding CanDeleteWhole}"
-                                                        Command="{Binding DeleteWholeCommand}" />
                                                 <CheckBox Content="启用"
                                                           IsChecked="{Binding IsEnabled, Mode=TwoWay}"
                                                           VerticalAlignment="Center" />
+                                                <Button Classes="Ghost"
+                                                        Content="⋯"
+                                                        FontSize="18"
+                                                        Padding="8,2"
+                                                        ToolTip.Tip="更多操作">
+                                                    <Button.Flyout>
+                                                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                                            <MenuItem Header="在 Nexus 打开"
+                                                                      IsVisible="{Binding IsNexusMatched}"
+                                                                      Command="{Binding OpenNexusCommand}" />
+                                                            <MenuItem Header="关联 Nexus"
+                                                                      Command="{Binding LinkNexusCommand}" />
+                                                            <MenuItem Header="接管为托管"
+                                                                      IsVisible="{Binding CanAdopt}"
+                                                                      Command="{Binding AdoptCommand}" />
+                                                            <Separator />
+                                                            <MenuItem Header="卸载"
+                                                                      Foreground="{DynamicResource DangerBrush}"
+                                                                      IsVisible="{Binding CanDelete}"
+                                                                      Command="{Binding UninstallCommand}" />
+                                                            <MenuItem Header="删除整个目录"
+                                                                      Foreground="{DynamicResource DangerBrush}"
+                                                                      IsVisible="{Binding CanDeleteWhole}"
+                                                                      Command="{Binding DeleteWholeCommand}" />
+                                                        </MenuFlyout>
+                                                    </Button.Flyout>
+                                                </Button>
                                             </StackPanel>
                                         </Grid>
                                     </Border>

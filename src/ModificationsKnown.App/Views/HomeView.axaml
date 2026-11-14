@@ -1,138 +1,174 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ModificationsKnown.App.Views.HomeView">
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Spacing="18">
+    <Grid ColumnDefinitions="340,*" ColumnSpacing="16">
 
-            <Border Classes="hero">
-                <Grid ColumnDefinitions="*,Auto">
-                    <StackPanel Spacing="6">
-                        <TextBlock Text="本地模组工作台"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource AccentBrush}"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding GameTitle}"
-                                   FontSize="30"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="{Binding GameSubtitle}"
-                                   Foreground="{DynamicResource TextSecondaryBrush}" />
-                        <TextBlock Text="{Binding GamePath}"
-                                   Classes="mono"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"
-                                   Margin="0,8,0,0"
-                                   TextTrimming="CharacterEllipsis" />
-                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,18,0,0">
-                            <Button Classes="Primary" Content="启动游戏" Command="{Binding LaunchCommand}" />
-                            <Button Classes="Ghost" Content="打开游戏目录" Command="{Binding OpenFolderCommand}" />
-                            <Button Classes="Ghost" Content="重新检测" Command="{Binding RefreshGameCommand}" />
-                        </StackPanel>
-                    </StackPanel>
+        <Border Classes="card" Padding="22">
+            <Grid RowDefinitions="Auto,*,Auto">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="本地模组工作台"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource AccentBrush}" />
+                    <TextBlock Text="{Binding GameTitle}"
+                               FontSize="28"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding GameSubtitle}"
+                               Classes="muted"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
 
-                    <Border Grid.Column="1"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            MinWidth="180"
+                    <Border Margin="0,12,0,0"
+                            Padding="14,12"
                             Background="{DynamicResource SurfaceAltBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1"
-                            CornerRadius="12"
-                            Padding="18,16">
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="当前版本"
+                            CornerRadius="10"
+                            IsVisible="{Binding HasGame}">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="{Binding GamePath}"
+                                       Classes="mono"
                                        FontSize="11"
-                                       Foreground="{DynamicResource TextSecondaryBrush}" />
-                            <TextBlock Text="{Binding EditionLabel}"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding GamePath}" />
+                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                                <Border Classes="stat-pill">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="BepInEx" Classes="caption" />
+                                        <TextBlock Text="{Binding BepInExShortLabel}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Classes="bepinex-state"
+                                                   Classes.ready="{Binding BepInExReady}" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Classes="stat-pill">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="已安装" Classes="caption" />
+                                        <TextBlock Text="{Binding ModCountLabel, StringFormat='{}{0} 个包'}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Classes="stat-pill">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="启用中" Classes="caption" />
+                                        <TextBlock Text="{Binding EnabledCountLabel, StringFormat='{}{0} 个'}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource SuccessBrush}" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="-8,4,0,0">
+                        <Button Classes="Ghost"
+                                Content="打开游戏目录"
+                                IsVisible="{Binding HasGame}"
+                                Command="{Binding OpenFolderCommand}" />
+                        <Button Classes="Ghost"
+                                Content="重新检测"
+                                ToolTip.Tip="重新检测 Steam 库和手动路径"
+                                Command="{Binding RefreshGameCommand}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Row="2" Spacing="8">
+                    <Button Classes="Primary launch"
+                            Content="{Binding $parent[Window].DataContext.LaunchButtonText}"
+                            IsEnabled="{Binding $parent[Window].DataContext.CanLaunch}"
+                            Command="{Binding $parent[Window].DataContext.LaunchGameCommand}" />
+                    <TextBlock Text="启动前会自动切换到该版本的独立存档。"
+                               Classes="caption"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="16">
+                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="16">
+                    <Border Classes="card">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="已安装模组" Classes="muted" FontSize="12" />
+                            <TextBlock Text="{Binding ModCountLabel}" FontSize="32" FontWeight="SemiBold" />
+                            <TextBlock Text="BepInEx/plugins 中的包" Classes="caption" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Classes="card">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="当前启用" Classes="muted" FontSize="12" />
+                            <TextBlock Text="{Binding EnabledCountLabel}"
+                                       FontSize="32"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource SuccessBrush}" />
+                            <TextBlock Text="会随游戏加载" Classes="caption" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Classes="card">
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Nexus 账号" Classes="muted" FontSize="12" />
+                            <TextBlock Text="{Binding NexusAccountLabel}"
                                        FontSize="22"
-                                       Foreground="{DynamicResource AccentBrush}"
-                                       FontWeight="SemiBold" />
-                            <Border Height="1"
-                                    Background="{DynamicResource BorderBrush}"
-                                    Margin="0,8,0,8" />
-                            <TextBlock Text="{Binding BepInExLabel}"
-                                       FontSize="12"
-                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                                       FontWeight="SemiBold"
+                                       Margin="0,6,0,4" />
+                            <TextBlock Text="{Binding NexusAccountDetail}"
+                                       Classes="caption"
+                                       TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
                 </Grid>
-            </Border>
 
-            <Grid ColumnDefinitions="*,*,*" Margin="0,2,0,0">
-                <Border Classes="card" Margin="0,0,12,0">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="已安装模组" Classes="muted" FontSize="12" />
-                        <TextBlock Text="{Binding ModCountLabel}" FontSize="36" FontWeight="SemiBold" />
-                        <TextBlock Text="BepInEx/plugins 中的包" Classes="caption" />
-                    </StackPanel>
-                </Border>
-                <Border Grid.Column="1" Classes="card" Margin="0,0,12,0">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="启用中" Classes="muted" FontSize="12" />
-                        <TextBlock Text="{Binding EnabledCountLabel}"
-                                   FontSize="36"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource SuccessBrush}" />
-                        <TextBlock Text="当前会随游戏加载" Classes="caption" />
-                    </StackPanel>
-                </Border>
-                <Border Grid.Column="2" Classes="card">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Nexus 状态" Classes="muted" FontSize="12" />
-                        <TextBlock Text="{Binding NexusLabel}"
-                                   FontSize="18"
-                                   FontWeight="SemiBold"
-                                   Margin="0,8,0,0" />
-                        <Border Background="{DynamicResource AccentSoftBrush}"
-                                CornerRadius="5"
-                                Padding="8,3"
-                                Margin="0,6,0,0"
-                                HorizontalAlignment="Left">
-                            <TextBlock Text="{Binding NexusAccountLabel}"
-                                       FontSize="11"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource AccentBrush}" />
-                        </Border>
-                        <TextBlock Text="{Binding NexusAccountDetail}"
-                                   Classes="caption"
-                                   TextWrapping="Wrap"
-                                   Margin="0,2,0,0" />
-                        <TextBlock Text="在设置中配置 API Key"
-                                   Classes="caption"
-                                   IsVisible="{Binding NexusNotConfigured}" />
-                    </StackPanel>
-                </Border>
-            </Grid>
-
-            <Grid ColumnDefinitions="2*,*">
-                <Border Classes="card" Margin="0,0,12,0">
-                    <StackPanel Spacing="12">
-                        <TextBlock Text="当前安装" Classes="h2" />
-                        <Grid ColumnDefinitions="120,*" RowDefinitions="Auto,Auto,Auto">
-                            <TextBlock Text="游戏目录" Classes="muted" FontSize="12" />
-                            <TextBlock Grid.Column="1" Text="{Binding GamePath}" Classes="mono" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Row="1" Text="BepInEx" Classes="muted" FontSize="12" Margin="0,7,0,0" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding BepInExLabel}" FontSize="12" Margin="0,7,0,0" />
-                            <TextBlock Grid.Row="2" Text="版本" Classes="muted" FontSize="12" Margin="0,7,0,0" />
-                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding EditionLabel}" FontSize="12" Margin="0,7,0,0" />
-                        </Grid>
-                        <TextBlock Text="安装或启用模组前，建议先关闭游戏。BepInEx 只会在启动时扫描 DLL。"
+                <Border Classes="card">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="从这里开始" Classes="h2" />
+                        <ItemsControl ItemsSource="{Binding Checklist}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,8"
+                                            Padding="14,10"
+                                            Background="{DynamicResource SurfaceAltBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                            <Border Width="24" Height="24"
+                                                    CornerRadius="12"
+                                                    VerticalAlignment="Center"
+                                                    Classes.done="{Binding IsDone}"
+                                                    Classes="step-marker">
+                                                <TextBlock Text="{Binding Marker}"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding Detail}" Classes="caption" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Button Grid.Column="2"
+                                                    Classes="Ghost"
+                                                    Content="{Binding ActionText}"
+                                                    IsVisible="{Binding IsPending}"
+                                                    VerticalAlignment="Center"
+                                                    Command="{Binding $parent[UserControl].DataContext.GoToCommand}"
+                                                    CommandParameter="{Binding TargetPage}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="安装或启用模组前，建议先关闭游戏：BepInEx 只在启动时扫描 DLL。"
                                    Classes="caption"
                                    TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
-
-                <Border Grid.Column="1" Classes="card">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="从这里开始" Classes="h2" />
-                        <TextBlock Text="1. 在设置里确认游戏路径和 Nexus API Key。" Classes="muted" FontSize="12" TextWrapping="Wrap" />
-                        <TextBlock Text="2. 到「模组发现」浏览并安装模组。" Classes="muted" FontSize="12" TextWrapping="Wrap" />
-                        <TextBlock Text="3. 在「已安装」里启用、停用或清理。" Classes="muted" FontSize="12" TextWrapping="Wrap" />
-                        <TextBlock Text="所有安装操作都会先校验压缩包路径；删除前默认二次确认。"
-                                   Classes="caption"
-                                   TextWrapping="Wrap"
-                                   Margin="0,4,0,0" />
-                    </StackPanel>
-                </Border>
-            </Grid>
-        </StackPanel>
-    </ScrollViewer>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </UserControl>

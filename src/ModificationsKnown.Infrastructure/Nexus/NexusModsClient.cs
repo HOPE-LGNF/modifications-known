@@ -131,7 +131,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         _logger?.Debug($"Nexus GraphQL search: HTTP {(int)response.StatusCode}");
         if (!response.IsSuccessStatusCode)
-            throw CreateException(response.StatusCode, body);
+            throw CreateException(response.StatusCode, body, !string.IsNullOrWhiteSpace(apiKey));
 
         var envelope = JsonSerializer.Deserialize<GraphQlEnvelope<GraphQlModsData>>(body, JsonOptions);
         if (envelope?.Errors is { Count: > 0 })
@@ -453,7 +453,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         _logger?.Debug($"Nexus account validate: HTTP {(int)response.StatusCode}");
 
         if (!response.IsSuccessStatusCode)
-            throw CreateException(response.StatusCode, body);
+            throw CreateException(response.StatusCode, body, !string.IsNullOrWhiteSpace(apiKey));
 
         try
         {
@@ -513,7 +513,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         if (!response.IsSuccessStatusCode)
         {
             _logger?.Warn($"NXM download link failed: HTTP {(int)response.StatusCode}");
-            throw CreateException(response.StatusCode, body);
+            throw CreateException(response.StatusCode, body, !string.IsNullOrWhiteSpace(apiKey));
         }
 
         try
@@ -557,7 +557,7 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         if (!response.IsSuccessStatusCode)
         {
             _logger?.Warn($"Nexus API failed: {(int)response.StatusCode} {method} {relativePath}");
-            throw CreateException(response.StatusCode, body);
+            throw CreateException(response.StatusCode, body, !string.IsNullOrWhiteSpace(apiKey));
         }
 
         try
@@ -571,11 +571,12 @@ public sealed class NexusModsClient : INexusModsClient, IDisposable
         }
     }
 
-    private static NexusApiException CreateException(HttpStatusCode status, string body)
+    private static NexusApiException CreateException(HttpStatusCode status, string body, bool sentApiKey)
     {
         var message = status switch
         {
             HttpStatusCode.BadRequest => "NXM 下载授权无效。请回到 Nexus 文件页重新点击“Mod manager download”。",
+            HttpStatusCode.Unauthorized when !sentApiKey => "此操作需要 Nexus API Key。请在设置中填写。",
             HttpStatusCode.Unauthorized => "Nexus API Key 无效或已过期。请在设置中重新填写。",
             HttpStatusCode.Forbidden => "Nexus 拒绝了该请求。免费账号通常无法直接生成下载链接；请使用“在 Nexus 打开”，或配置 Premium API Key。",
             HttpStatusCode.NotFound => "Nexus 上找不到该模组或文件。",
