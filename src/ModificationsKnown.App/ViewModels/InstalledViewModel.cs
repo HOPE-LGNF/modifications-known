@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Games;
+using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
@@ -24,9 +25,21 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
     private NexusMatch? _nexusMatch;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UpdateBadgeLabel))]
+    private bool _hasUpdate;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UpdateBadgeLabel))]
+    private string _latestVersionLabel = string.Empty;
+
+    [ObservableProperty]
     private Bitmap? _thumbnail;
 
     public bool IsNexusMatched => NexusMatch is not null;
+
+    public string UpdateBadgeLabel => string.IsNullOrWhiteSpace(LatestVersionLabel)
+        ? "可更新"
+        : $"可更新 {LatestVersionLabel}";
 
     public bool HasThumbnail => Thumbnail is not null;
 
@@ -190,10 +203,22 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly GameProcessMonitor _processMonitor;
     private readonly List<InstalledModItemViewModel> _allItems = [];
     private readonly Dictionary<string, Bitmap?> _thumbnailCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (bool HasUpdate, string Label)> _updateCache = new(StringComparer.OrdinalIgnoreCase);
     private int _refreshGeneration;
 
     [ObservableProperty]
     private bool _isBusy;
+
+    [ObservableProperty]
+    private bool _isCheckingUpdates;
+
+    [ObservableProperty]
+    private string _updateSummary = string.Empty;
+
+    public bool ShowUpdateSummary => !string.IsNullOrWhiteSpace(UpdateSummary);
+
+    partial void OnUpdateSummaryChanged(string value) =>
+        OnPropertyChanged(nameof(ShowUpdateSummary));
 
     [ObservableProperty]
     private bool _hasGame;
@@ -312,6 +337,62 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
     [RelayCommand]
     private Task RefreshAsync() => RefreshCoreAsync();
+
+    [RelayCommand]
+    private async Task CheckUpdatesAsync()
+    {
+        if (IsBusy || IsCheckingUpdates) return;
+
+        IsCheckingUpdates = true;
+        UpdateSummary = "正在检查更新…";
+        var updates = 0;
+        var checkedCount = 0;
+        var failed = 0;
+
+        try
+        {
+            foreach (var item in _allItems.ToList())
+            {
+                if (item.NexusMatch is null || string.IsNullOrWhiteSpace(item.NexusMatch.GameScopedId))
+                    continue;
+
+                checkedCount++;
+                try
+                {
+                    var details = await _nexus.GetModAsync(item.NexusDomain, item.NexusMatch.GameScopedId);
+                    var latest = details.Summary.Version;
+                    if (VersionText.IsNewer(latest, item.Mod.Version))
+                    {
+                        item.HasUpdate = true;
+                        item.LatestVersionLabel = VersionText.Label(latest);
+                        _updateCache[item.Mod.PackageId] = (true, item.LatestVersionLabel);
+                        updates++;
+                    }
+                    else
+                    {
+                        item.HasUpdate = false;
+                        item.LatestVersionLabel = string.Empty;
+                        _updateCache.Remove(item.Mod.PackageId);
+                    }
+                }
+                catch
+                {
+                    failed++;
+                }
+            }
+
+            UpdateSummary = checkedCount == 0
+                ? "没有可检查的 Nexus 模组；先关联模组或配置 API Key。"
+                : updates > 0
+                    ? $"发现 {updates} 个可更新" + (failed > 0 ? $"，{failed} 个检查失败" : "")
+                    : "已是最新版本" + (failed > 0 ? $"，{failed} 个检查失败" : "");
+            _shell.SetStatus(UpdateSummary, updates > 0 ? StatusKind.Warning : StatusKind.Success);
+        }
+        finally
+        {
+            IsCheckingUpdates = false;
+        }
+    }
 
     private async Task RefreshCoreAsync()
     {
@@ -599,6 +680,12 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
         if (match is not null && _thumbnailCache.TryGetValue(match.GameScopedId, out var cached))
             item.Thumbnail = cached;
+
+        if (_updateCache.TryGetValue(mod.PackageId, out var update))
+        {
+            item.HasUpdate = update.HasUpdate;
+            item.LatestVersionLabel = update.Label;
+        }
 
         return item;
     }

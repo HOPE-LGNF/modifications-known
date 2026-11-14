@@ -20,6 +20,10 @@
   does not re-fetch covers.
 - Toast lasts 5 s (success/info) or 6.5 s (warning/error).
 - Save page lists per-instance profiles with open/backup/delete actions.
+- Installed-page update check (manual, Nexus-linked packages only) with a
+  “可更新” badge; downloading a newer version from Discover now verifies the
+  installed version, backs up the old package and replaces it, restoring the
+  backup if install fails.
 ## [0.6.1] - 2026-11-13
 
 ### Fixed

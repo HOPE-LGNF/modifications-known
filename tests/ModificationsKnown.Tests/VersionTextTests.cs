@@ -12,4 +12,13 @@ public sealed class VersionTextTests
     [InlineData(null, "版本未知")]
     public void LabelAddsSinglePrefix(string? version, string expected) =>
         Assert.Equal(expected, VersionText.Label(version));
+
+    [Theory]
+    [InlineData("1.1.2", "1.1.1", true)]
+    [InlineData("v1.1.2", "1.1.2", false)]
+    [InlineData("1.2", "1.10", false)]
+    [InlineData("2.0.0", "1.9.9", true)]
+    [InlineData("1.0", null, true)]
+    public void IsNewerComparesNumericParts(string? candidate, string? current, bool expected) =>
+        Assert.Equal(expected, VersionText.IsNewer(candidate, current));
 }

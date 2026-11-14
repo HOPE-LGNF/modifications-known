@@ -17,6 +17,7 @@ public sealed class GameProcessMonitor : IDisposable
     private readonly IAppLogger? _logger;
     private readonly ConcurrentDictionary<string, int> _counts = new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource _cts = new();
+    private readonly object _scanGate = new();
     private Task? _loop;
 
     public GameProcessMonitor(GameContext game, IAppLogger? logger = null)
@@ -40,6 +41,31 @@ public sealed class GameProcessMonitor : IDisposable
 
     public int Count(GameInstallation installation) =>
         _counts.TryGetValue(Normalize(installation.GameDirectory), out var count) ? count : 0;
+
+    /// <summary>Fast poll used right after a launch command: scans every
+    /// 350 ms until the instance appears or the timeout expires.</summary>
+    public async Task<bool> WaitForRunningAsync(
+        GameInstallation installation,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!cancellationToken.IsCancellationRequested && DateTime.UtcNow < deadline)
+        {
+            Scan();
+            if (IsRunning(installation)) return true;
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(350), cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+
+        return IsRunning(installation);
+    }
 
     public bool IsRunningPath(string gameDirectory) =>
         _counts.TryGetValue(Normalize(gameDirectory), out var count) && count > 0;
@@ -166,6 +192,14 @@ public sealed class GameProcessMonitor : IDisposable
     }
 
     private void Scan()
+    {
+        lock (_scanGate)
+        {
+            ScanCore();
+        }
+    }
+
+    private void ScanCore()
     {
         var installations = _game.Installations.ToList();
         if (installations.Count == 0)

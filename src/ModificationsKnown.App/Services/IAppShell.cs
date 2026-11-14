@@ -24,6 +24,8 @@ public interface IAppShell
 
     string LaunchButtonText { get; }
 
+    bool IsCloseAction { get; }
+
     Task LaunchGameAsync();
 
     void NavigateTo(string key);

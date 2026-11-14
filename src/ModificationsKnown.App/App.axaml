@@ -172,6 +172,17 @@
             <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
         </Style>
 
+        <Style Selector="Button.launch.danger">
+            <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource DangerContrastBrush}" />
+        </Style>
+
+        <Style Selector="Button.launch.danger:pointerover">
+            <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerContrastBrush}" />
+        </Style>
+
         <Style Selector="Button.launch">
             <Setter Property="Height" Value="56" />
             <Setter Property="FontSize" Value="17" />

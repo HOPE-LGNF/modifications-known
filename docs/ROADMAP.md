@@ -24,7 +24,9 @@
 - [x] Install manifest per package (source, version, files, hashes)
 - [x] Managed/unmanaged package boundary
 - [x] Managed uninstall preserving user-added/modified files
-- [ ] Backup before overwrite; restore the last N operations
+- [x] Backup before overwrite (single-package update path)
+- [x] Read-only “可更新” check against Nexus
+- [ ] Restore the last N operations / one-click update all
 - [ ] Upgrade/downgrade a package without losing config
 - [ ] Package comparison and duplicate detection
 - [ ] Better text search: evaluate Nexus GraphQL or a local index without

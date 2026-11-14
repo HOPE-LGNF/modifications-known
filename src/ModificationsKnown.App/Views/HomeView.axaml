@@ -109,6 +109,7 @@
 
                 <StackPanel Grid.Row="2" Spacing="8">
                     <Button Classes="Primary launch"
+                            Classes.danger="{Binding IsCloseAction}"
                             Content="{Binding LaunchButtonText}"
                             Command="{Binding LaunchGameCommand}" />
                     <TextBlock Text="启动前会自动切换到该版本的独立存档。"

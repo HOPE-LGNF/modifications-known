@@ -74,22 +74,27 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     public bool IsSelectedInstanceRunning =>
         Game.Selected is { } installation && _processMonitor.IsRunning(installation);
 
+    public bool IsCloseAction =>
+        IsClosing || (!IsLaunching && Settings.Current.PreventMultipleInstances && IsSelectedInstanceRunning);
+
     public string LaunchButtonText =>
         IsClosing ? "关闭中…"
-        : IsLaunching ? "启动中…"
-        : Settings.Current.PreventMultipleInstances && IsSelectedInstanceRunning ? "关闭游戏"
+        : IsLaunching ? "正在启动…"
+        : IsCloseAction ? "关闭游戏"
         : "启动游戏";
 
     partial void OnIsLaunchingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanLaunch));
         OnPropertyChanged(nameof(LaunchButtonText));
+        OnPropertyChanged(nameof(IsCloseAction));
     }
 
     partial void OnIsClosingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanLaunch));
         OnPropertyChanged(nameof(LaunchButtonText));
+        OnPropertyChanged(nameof(IsCloseAction));
     }
 
     public ShellViewModel(
@@ -121,11 +126,13 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         {
             OnPropertyChanged(nameof(IsSelectedInstanceRunning));
             OnPropertyChanged(nameof(LaunchButtonText));
+            OnPropertyChanged(nameof(IsCloseAction));
         });
         Settings.Changed += (_, _) =>
         {
             OnPropertyChanged(nameof(LaunchButtonText));
             OnPropertyChanged(nameof(IsSelectedInstanceRunning));
+            OnPropertyChanged(nameof(IsCloseAction));
         };
 
         NavigationItems =
@@ -171,6 +178,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             OnPropertyChanged(nameof(IsGameSkinOverlayVisible));
             OnPropertyChanged(nameof(IsSelectedInstanceRunning));
             OnPropertyChanged(nameof(LaunchButtonText));
+            OnPropertyChanged(nameof(IsCloseAction));
         };
     }
 
@@ -437,16 +445,30 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
             if (result.Success)
             {
-                Settings.Current.LastLaunchAt = DateTimeOffset.Now;
-                await Settings.SaveAsync();
-                _activity.Add("launch", $"启动了「{installation.DisplayLabel}」", result.Message);
+                SetStatus($"正在等待「{installation.DisplayLabel}」启动…");
+                var detected = await _processMonitor.WaitForRunningAsync(
+                    installation,
+                    TimeSpan.FromSeconds(20));
+
+                if (detected)
+                {
+                    Settings.Current.LastLaunchAt = DateTimeOffset.Now;
+                    await Settings.SaveAsync();
+                    _activity.Add("launch", $"启动了「{installation.DisplayLabel}」", result.Message);
+                    SetStatus($"「{installation.DisplayLabel}」已启动。", StatusKind.Success);
+                }
+                else
+                {
+                    SetStatus(
+                        $"{result.Message} 暂未检测到游戏进程；如果游戏窗口已出现，请稍后刷新或查看日志。",
+                        StatusKind.Warning);
+                }
+            }
+            else
+            {
+                SetStatus(result.Message, StatusKind.Error);
             }
 
-            SetStatus(
-                result.Success
-                    ? $"{result.Message} 如果游戏窗口没有出现，请查看详细日志。"
-                    : result.Message,
-                result.Success ? StatusKind.Success : StatusKind.Error);
             _logger.Info($"Launch result: {result.Success} — {result.Message}");
         }
         catch (Exception exception)

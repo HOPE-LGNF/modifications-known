@@ -17,6 +17,11 @@
                         <TextBlock Text="{Binding EnabledLabel, StringFormat='已启用 {0}'}"
                                    Classes="caption"
                                    VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding UpdateSummary}"
+                                   Classes="caption"
+                                   Foreground="{DynamicResource WarningBrush}"
+                                   VerticalAlignment="Center"
+                                   IsVisible="{Binding ShowUpdateSummary}" />
                     </StackPanel>
                     <TextBlock Text="{Binding PluginsPath}"
                                Classes="mono"
@@ -30,6 +35,11 @@
                     <Button Classes="Ghost"
                             Content="打开插件目录"
                             Command="{Binding OpenPluginsFolderCommand}" />
+                    <Button Classes="Ghost"
+                            Content="检查更新"
+                            IsEnabled="{Binding !IsCheckingUpdates}"
+                            Command="{Binding CheckUpdatesCommand}"
+                            ToolTip.Tip="只检查已关联 Nexus 的模组；不自动下载" />
                     <Button Classes="Primary"
                             Content="重新扫描"
                             Command="{Binding RefreshCommand}" />
@@ -191,6 +201,14 @@
                                                                Foreground="{DynamicResource TextSecondaryBrush}"
                                                                IsVisible="{Binding IsDisabled}" />
                                                     <TextBlock Text="{Binding Version}" Classes="caption" VerticalAlignment="Center" />
+                                                    <Border Background="{DynamicResource AccentBrush}"
+                                                            CornerRadius="4"
+                                                            Padding="5,2"
+                                                            IsVisible="{Binding HasUpdate}">
+                                                        <TextBlock Text="{Binding UpdateBadgeLabel}"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource AccentContrastBrush}" />
+                                                    </Border>
                                                     <Border Background="{DynamicResource SurfaceAltBrush}"
                                                             BorderBrush="{DynamicResource BorderBrush}"
                                                             BorderThickness="1"
@@ -299,6 +317,14 @@
                                                                Foreground="{DynamicResource TextSecondaryBrush}"
                                                                IsVisible="{Binding IsDisabled}" />
                                                     <TextBlock Text="{Binding Version}" Classes="caption" VerticalAlignment="Center" />
+                                                    <Border Background="{DynamicResource AccentBrush}"
+                                                            CornerRadius="4"
+                                                            Padding="5,2"
+                                                            IsVisible="{Binding HasUpdate}">
+                                                        <TextBlock Text="{Binding UpdateBadgeLabel}"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource AccentContrastBrush}" />
+                                                    </Border>
                                                     <TextBlock Text="{Binding SourceLabel}" Classes="caption" VerticalAlignment="Center" />
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding PackagePath}"

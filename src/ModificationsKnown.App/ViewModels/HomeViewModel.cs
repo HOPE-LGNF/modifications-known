@@ -104,6 +104,8 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
 
     public string LaunchButtonText => _shell.LaunchButtonText;
 
+    public bool IsCloseAction => _shell.IsCloseAction;
+
     [RelayCommand]
     private Task LaunchGame() => _shell.LaunchGameAsync();
 
@@ -143,6 +145,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
                 {
                     OnPropertyChanged(nameof(CanLaunch));
                     OnPropertyChanged(nameof(LaunchButtonText));
+                    OnPropertyChanged(nameof(IsCloseAction));
                 }
             };
         }
