@@ -134,6 +134,18 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
+                <StackPanel IsVisible="{Binding ShowListPlaceholder}"
+                            IsHitTestVisible="False"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="10">
+                    <ProgressBar IsIndeterminate="True" Width="160" Height="3" />
+                    <TextBlock Text="正在加载模组列表…"
+                               Classes="muted"
+                               FontSize="12"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+
                 <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="0,8,0,0">
                     <Button Classes="Ghost" Content="‹ 上一页" Command="{Binding PreviousPageCommand}" />
                     <TextBlock Grid.Column="1"

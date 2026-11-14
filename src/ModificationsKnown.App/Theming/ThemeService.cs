@@ -117,8 +117,12 @@ public static class ThemeService
         resources["AccentHoverBrush"] = Brush(palette.AccentHover);
         resources["AccentSoftBrush"] = Brush(palette.AccentSoft);
         resources["AccentContrastBrush"] = Brush(palette.AccentContrast);
-        resources["ScrimBrush"] = new SolidColorBrush(Color.Parse("#CC080B09"));
-        resources["DialogScrimBrush"] = new SolidColorBrush(Color.Parse("#8C080B09"));
+        resources["ScrimBrush"] = new SolidColorBrush(
+            Color.Parse(isLight ? "#66000000" : "#CC080B09"));
+        resources["DialogScrimBrush"] = new SolidColorBrush(
+            Color.Parse(isLight ? "#52000000" : "#8C080B09"));
+        resources["ImageScrimBrush"] = new SolidColorBrush(
+            Color.Parse(isLight ? "#26000000" : "#40000000"));
         resources["SuccessBrush"] = Brush(palette.Success);
         resources["WarningBrush"] = Brush(palette.Warning);
         resources["DangerBrush"] = Brush(palette.Danger);

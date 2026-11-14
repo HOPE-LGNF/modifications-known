@@ -174,6 +174,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         _thumbnails = thumbnails;
         _sources = sources;
         _nxmRegistrar = nxmRegistrar;
+        Mods.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ShowListPlaceholder));
         ApiKeyMissing = string.IsNullOrWhiteSpace(settings.Current.NexusApiKey);
         _shell.Game.Changed += (_, _) => OnPropertyChanged(nameof(CanInstall));
     }
@@ -187,6 +188,11 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     public ObservableCollection<NexusFileVersion> Versions { get; } = [];
 
     public bool HasSelection => SelectedCard is not null;
+
+    public bool ShowListPlaceholder => IsLoading && Mods.Count == 0;
+
+    partial void OnIsLoadingChanged(bool value) =>
+        OnPropertyChanged(nameof(ShowListPlaceholder));
 
     public bool HasNoSelection => SelectedCard is null;
 

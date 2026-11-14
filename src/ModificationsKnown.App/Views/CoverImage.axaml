@@ -7,7 +7,7 @@
         <Image Name="Backdrop"
                Stretch="UniformToFill"
                RenderTransform="scale(1.25)" />
-        <Border Background="#40000000" />
+        <Border Background="{DynamicResource ImageScrimBrush}" />
         <Image Name="Picture"
                Stretch="Uniform"
                HorizontalAlignment="Center"

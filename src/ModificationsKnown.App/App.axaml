@@ -130,10 +130,6 @@
             <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
         </Style>
 
-        <Style Selector="Border.mod-card:pointerover">
-            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
-        </Style>
-
         <Style Selector="Border.card">
             <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
@@ -146,6 +142,13 @@
         <Style Selector="Border.mod-card">
             <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BoxShadow" Value="0 0 0 0 #00000000" />
+        </Style>
+
+        <Style Selector="Border.mod-card:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentSoftBrush}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource CardShadow}" />
         </Style>
 
         <Style Selector="Border.installed-row">
@@ -156,7 +159,7 @@
 
         <Style Selector="Border.installed-row:pointerover">
             <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentSoftBrush}" />
             <Setter Property="BoxShadow" Value="{DynamicResource CardShadow}" />
         </Style>
 
