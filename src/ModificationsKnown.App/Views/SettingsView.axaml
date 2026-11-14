@@ -98,6 +98,7 @@
                                                     <MenuFlyout Placement="BottomEdgeAlignedRight">
                                                         <MenuItem Header="安装 BepInEx…"
                                                                   IsVisible="{Binding CanInstallLoader}"
+                                                                  IsEnabled="{Binding IsNotRunning}"
                                                                   Command="{Binding InstallLoaderCommand}" />
                                                         <MenuItem Header="下载 BepInEx 最新稳定版"
                                                                   IsVisible="{Binding CanInstallLoader}"
@@ -105,6 +106,7 @@
                                                         <Separator />
                                                         <MenuItem Header="删除版本…"
                                                                   Foreground="{DynamicResource DangerBrush}"
+                                                                  IsEnabled="{Binding IsNotRunning}"
                                                                   Command="{Binding DeleteCommand}" />
                                                     </MenuFlyout>
                                                 </Button.Flyout>

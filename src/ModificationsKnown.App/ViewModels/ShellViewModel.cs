@@ -24,6 +24,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private readonly IUserDialogService _dialogs;
     private readonly SaveIsolationService _saveIsolation;
     private readonly ActivityLogService _activity;
+    private readonly GameProcessMonitor _processMonitor;
     private readonly Dictionary<string, object> _pages;
     private bool _initialized;
 
@@ -98,6 +99,8 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         Game = new GameContext(instanceStore);
         _saveIsolation = new SaveIsolationService(logger);
         _activity = new ActivityLogService();
+        _processMonitor = new GameProcessMonitor(Game, logger);
+        _processMonitor.Start();
         NavigationItems =
         [
             new("home", "概览", "游戏状态与快捷启动", "⌂"),
@@ -123,13 +126,13 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             logger);
         _pages = new Dictionary<string, object>
         {
-            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation),
+            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar),
-            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails),
-            ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger),
+            ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor),
+            ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger, _processMonitor),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
-            ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion)
+            ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion, _processMonitor)
         };
 
         SelectedNavigation = NavigationItems[0];
@@ -142,6 +145,10 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     public GameContext Game { get; }
 
     public ActivityLogService Activity => _activity;
+
+    public GameProcessMonitor ProcessMonitor => _processMonitor;
+
+    public void Shutdown() => _processMonitor.Dispose();
 
     public IReadOnlyList<NavigationItem> NavigationItems { get; }
 

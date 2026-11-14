@@ -17,6 +17,10 @@ public partial class GameVersionRow : ObservableObject
     [ObservableProperty]
     private bool _isSavingAlias;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsNotRunning))]
+    private bool _isRunning;
+
     public GameVersionRow(
         GameInstallation installation,
         bool isCurrent,
@@ -61,6 +65,8 @@ public partial class GameVersionRow : ObservableObject
     public string LoaderLabel => Installation.HasBepInEx ? "BepInEx 已安装" : "BepInEx 未安装";
 
     public bool CanInstallLoader => !Installation.HasBepInEx;
+
+    public bool IsNotRunning => !IsRunning;
 
     /// <summary>Show the save button only when the trimmed text really differs
     /// from the stored alias; an empty box is dirty but not savable.</summary>

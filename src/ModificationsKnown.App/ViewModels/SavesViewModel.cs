@@ -20,6 +20,7 @@ public partial class SaveInstanceItem : ObservableObject
         string sizeLabel,
         string updatedLabel,
         bool isLive,
+        bool isRunning,
         Func<SaveInstanceItem, Task> open,
         Func<SaveInstanceItem, Task> backup,
         Func<SaveInstanceItem, Task> delete)
@@ -31,6 +32,7 @@ public partial class SaveInstanceItem : ObservableObject
         SizeLabel = sizeLabel;
         UpdatedLabel = updatedLabel;
         IsLive = isLive;
+        IsRunning = isRunning;
         OpenCommand = new AsyncRelayCommand(() => open(this));
         BackupCommand = new AsyncRelayCommand(() => backup(this));
         DeleteCommand = new AsyncRelayCommand(() => delete(this));
@@ -54,6 +56,12 @@ public partial class SaveInstanceItem : ObservableObject
 
     public bool IsLive { get; }
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanDelete))]
+    private bool _isRunning;
+
+    public bool CanDelete => !IsLive && !IsRunning;
+
     public bool IsEmpty => Files.Count == 0;
 
     public string FileCountLabel => $"{Files.Count} 个文件";
@@ -72,6 +80,7 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
     private readonly IUserDialogService _dialogs;
     private readonly IFilePickerService _filePicker;
     private readonly IAppLogger _logger;
+    private readonly GameProcessMonitor _processMonitor;
 
     [ObservableProperty]
     private string _emptyMessage = string.Empty;
@@ -81,14 +90,17 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         SaveIsolationService saveIsolation,
         IUserDialogService dialogs,
         IFilePickerService filePicker,
-        IAppLogger logger)
+        IAppLogger logger,
+        GameProcessMonitor processMonitor)
     {
         _shell = shell;
         _saveIsolation = saveIsolation;
         _dialogs = dialogs;
         _filePicker = filePicker;
         _logger = logger;
+        _processMonitor = processMonitor;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
+        _processMonitor.Changed += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() => _ = RefreshAsync());
     }
 
     public ObservableCollection<SaveInstanceItem> Instances { get; } = [];
@@ -156,6 +168,7 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
                 FormatSize(total),
                 updated?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "—",
                 isLive,
+                _processMonitor.IsRunning(installation),
                 OpenAsync,
                 BackupAsync,
                 DeleteAsync));
@@ -226,6 +239,12 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
 
     private async Task DeleteAsync(SaveInstanceItem item)
     {
+        if (item.IsRunning)
+        {
+            _shell.SetStatus("游戏正在运行，先关闭再删除存档。", StatusKind.Warning);
+            return;
+        }
+
         if (item.IsLive)
         {
             await _dialogs.AlertAsync(

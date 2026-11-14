@@ -187,6 +187,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly ModGroupStore _groupStore;
     private readonly INexusModsClient _nexus;
     private readonly ThumbnailService _thumbnails;
+    private readonly GameProcessMonitor _processMonitor;
     private readonly List<InstalledModItemViewModel> _allItems = [];
     private readonly Dictionary<string, Bitmap?> _thumbnailCache = new(StringComparer.OrdinalIgnoreCase);
     private int _refreshGeneration;
@@ -285,7 +286,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         NexusManualMatchStore manualMatches,
         ModGroupStore groupStore,
         INexusModsClient nexus,
-        ThumbnailService thumbnails)
+        ThumbnailService thumbnails,
+        GameProcessMonitor processMonitor)
     {
         _shell = shell;
         _operations = operations;
@@ -298,6 +300,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         _groupStore = groupStore;
         _nexus = nexus;
         _thumbnails = thumbnails;
+        _processMonitor = processMonitor;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
     }
 
@@ -424,6 +427,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         {
             var installation = _shell.Game.Selected
                 ?? throw new InvalidOperationException("尚未选择游戏安装。");
+            if (!EnsureGameNotRunning(installation, "修改模组启用状态")) return;
+
             var action = mod.IsEnabled ? "禁用" : "启用";
             var result = await _operations.SetEnabledAsync(installation, mod, !mod.IsEnabled);
             if (result.Success) MarkModifiedIfNeeded();
@@ -526,6 +531,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         {
             var installation = _shell.Game.Selected
                 ?? throw new InvalidOperationException("尚未选择游戏安装。");
+            if (!EnsureGameNotRunning(installation, "卸载模组")) return;
+
             var result = await _operations.UninstallManagedAsync(installation, mod);
             _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
             await RefreshCoreAsync();
@@ -557,6 +564,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         {
             var installation = _shell.Game.Selected
                 ?? throw new InvalidOperationException("尚未选择游戏安装。");
+            if (!EnsureGameNotRunning(installation, "删除模组目录")) return;
+
             var result = await _operations.DeleteWholePackageAsync(installation, mod);
             _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
             await RefreshCoreAsync();
@@ -629,6 +638,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     public async Task InstallArchivesAsync(IReadOnlyList<string> paths)
     {
         if (IsBusy || paths.Count == 0 || !EnsureInstallTarget(out var installation)) return;
+        if (!EnsureGameNotRunning(installation, "安装模组")) return;
 
         IsBusy = true;
         try
@@ -664,6 +674,14 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         }
     }
 
+    private bool EnsureGameNotRunning(GameInstallation installation, string action)
+    {
+        if (!_processMonitor.IsRunning(installation)) return true;
+
+        _shell.SetStatus($"游戏正在运行，先关闭「{installation.DisplayLabel}」再{action}。", StatusKind.Warning);
+        return false;
+    }
+
     private bool EnsureInstallTarget([NotNullWhen(true)] out GameInstallation? installation)
     {
         installation = _shell.Game.Selected;
@@ -689,7 +707,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     {
         if (IsBusy) return;
         var installation = _shell.Game.Selected;
-        if (installation is null) return;
+        if (installation is null || !EnsureGameNotRunning(installation, "批量修改模组")) return;
 
         IsBusy = true;
         try
@@ -908,7 +926,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     {
         if (IsBusy || SelectedGroup is not { } group) return;
         var installation = _shell.Game.Selected;
-        if (installation is null) return;
+        if (installation is null || !EnsureGameNotRunning(installation, "应用 Mod 组")) return;
 
         var confirmed = await _dialogs.ConfirmAsync(
             "应用 Mod 组",

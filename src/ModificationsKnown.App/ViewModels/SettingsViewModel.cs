@@ -26,6 +26,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private readonly IUserDialogService _dialogs;
     private readonly GameInstanceStore _instances;
     private readonly InstanceDeletionService _deletion;
+    private readonly GameProcessMonitor _processMonitor;
     private readonly DataLocationService _dataLocation = new();
     private readonly BepInExInstaller _bepInExInstaller;
     private bool _loadingSettings;
@@ -130,7 +131,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         NxmProtocolRegistrar nxmRegistrar,
         IUserDialogService dialogs,
         GameInstanceStore instances,
-        InstanceDeletionService deletion)
+        InstanceDeletionService deletion,
+        GameProcessMonitor processMonitor)
     {
         _shell = shell;
         _settings = settings;
@@ -142,7 +144,9 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         _dialogs = dialogs;
         _instances = instances;
         _deletion = deletion;
+        _processMonitor = processMonitor;
         _bepInExInstaller = new BepInExInstaller(logger);
+        _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(UpdateRunningStates);
         _shell.Game.Changed += OnGameChanged;
         DataRoot = _dataLocation.CurrentRoot;
         IsCustomDataRoot = _dataLocation.IsCustom;
@@ -178,9 +182,13 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
                 SaveVersionAliasAsync,
                 InstallLoaderAsync,
                 OpenBepInExDownloadAsync,
-                DeleteVersionAsync));
+                DeleteVersionAsync)
+            {
+                IsRunning = _processMonitor.IsRunning(installation)
+            });
         }
 
+        UpdateRunningStates();
         var current = _shell.Game.Selected;
         InstanceHint = GameVersions.Count == 0
             ? "还没有添加版本。点“添加实例”选择游戏目录或可执行文件。"
@@ -191,6 +199,12 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
 
     private void OnGameChanged(object? sender, EventArgs e) =>
         Dispatcher.UIThread.Post(RefreshGameVersions);
+
+    private void UpdateRunningStates()
+    {
+        foreach (var row in GameVersions)
+            row.IsRunning = _processMonitor.IsRunning(row.Installation);
+    }
 
     private async Task SaveVersionAliasAsync(GameVersionRow row)
     {

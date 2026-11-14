@@ -34,6 +34,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private readonly INexusModsClient _nexus;
     private readonly ActivityLogService _activity;
     private readonly SaveIsolationService _saveIsolation;
+    private readonly GameProcessMonitor _processMonitor;
     private readonly ModGroupStore _groups = new();
     private DateTimeOffset _lastAccountCheck;
     private int _modCount;
@@ -89,6 +90,12 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private string _currentGroupLabel = "—";
 
+    [ObservableProperty]
+    private bool _isRunning;
+
+    [ObservableProperty]
+    private string _runningLabel = "未运行";
+
     public ObservableCollection<HomeChecklistItem> Checklist { get; } = [];
 
     public ObservableCollection<ActivityEntry> RecentActivity { get; } = [];
@@ -105,7 +112,8 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         IAppSettingsService settings,
         INexusModsClient nexus,
         ActivityLogService activity,
-        SaveIsolationService saveIsolation)
+        SaveIsolationService saveIsolation,
+        GameProcessMonitor processMonitor)
     {
         _shell = shell;
         _locator = locator;
@@ -115,8 +123,10 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         _nexus = nexus;
         _activity = activity;
         _saveIsolation = saveIsolation;
+        _processMonitor = processMonitor;
         _shell.Game.Changed += OnGameChanged;
         _activity.Changed += (_, _) => Dispatcher.UIThread.Post(() => _ = RefreshAsync());
+        _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(UpdateRunningState);
     }
 
     public Task OnActivatedAsync() => RefreshAsync();
@@ -143,6 +153,8 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
                 SaveIsolationLabel = "未选择版本";
                 SaveProfilePath = "—";
                 CurrentGroupLabel = "—";
+                IsRunning = false;
+                RunningLabel = "未运行";
                 await RefreshNexusAccountAsync();
                 return;
             }
@@ -157,6 +169,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             SaveProfilePath = _saveIsolation.GetProfileDirectory(installation);
             SaveIsolationLabel = DescribeIsolation(installation);
             CurrentGroupLabel = DescribeCurrentGroup(installation.GameDirectory);
+            UpdateRunningState();
             await RefreshNexusAccountAsync();
 
             if (installation.HasPluginsDirectory)
@@ -174,6 +187,25 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             RebuildChecklist();
             IsBusy = false;
         }
+    }
+
+    private void UpdateRunningState()
+    {
+        if (_shell.Game.Selected is not { } installation)
+        {
+            IsRunning = false;
+            RunningLabel = "未运行";
+            return;
+        }
+
+        var count = _processMonitor.Count(installation);
+        IsRunning = count > 0;
+        RunningLabel = count switch
+        {
+            0 => "未运行",
+            1 => "运行中",
+            _ => $"运行中 · {count} 个进程"
+        };
     }
 
     private void LoadActivity()

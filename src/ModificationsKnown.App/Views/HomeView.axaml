@@ -83,6 +83,13 @@
 
                     <StackPanel Spacing="8" IsVisible="{Binding HasGame}">
                         <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="运行状态" Classes="muted" FontSize="11" />
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding RunningLabel}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource AccentBrush}" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto">
                             <TextBlock Text="上次启动" Classes="muted" FontSize="11" />
                             <TextBlock Grid.Column="1" Text="{Binding LastLaunchLabel}" FontSize="11" />
                         </Grid>
@@ -147,54 +154,62 @@
                     </Border>
                 </Grid>
 
-                <Border Classes="card">
-                    <StackPanel Spacing="10">
-                        <TextBlock Text="从这里开始" Classes="h2" />
-                        <ItemsControl ItemsSource="{Binding Checklist}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Margin="0,0,0,8"
-                                            Padding="14,10"
-                                            Background="{DynamicResource SurfaceAltBrush}"
-                                            BorderBrush="{DynamicResource BorderBrush}"
-                                            BorderThickness="1"
-                                            CornerRadius="10">
-                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                                            <Border Width="24" Height="24"
-                                                    CornerRadius="12"
-                                                    VerticalAlignment="Center"
-                                                    Classes="step-marker"
-                                                    Classes.done="{Binding IsDone}">
-                                                <TextBlock Text="{Binding Marker}"
-                                                           FontSize="11"
-                                                           FontWeight="SemiBold"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center" />
-                                            </Border>
-                                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" />
-                                                <TextBlock Text="{Binding Detail}" Classes="caption" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                            <Button Grid.Column="2"
-                                                    Classes="Ghost"
-                                                    Content="{Binding ActionText}"
-                                                    IsVisible="{Binding IsPending}"
-                                                    VerticalAlignment="Center"
-                                                    Command="{Binding $parent[UserControl].DataContext.GoToCommand}"
-                                                    CommandParameter="{Binding TargetPage}" />
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <TextBlock Text="安装或启用模组前，建议先关闭游戏：BepInEx 只在启动时扫描 DLL。"
-                                   Classes="caption"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
+                <Grid Name="DashboardGrid"
+                      ColumnDefinitions="2*,*"
+                      RowDefinitions="Auto,Auto"
+                      ColumnSpacing="16"
+                      RowSpacing="16">
+                    <Border Name="ChecklistCard"
+                            Grid.RowSpan="2"
+                            Classes="card">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="从这里开始" Classes="h2" />
+                            <ItemsControl ItemsSource="{Binding Checklist}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,8"
+                                                Padding="14,10"
+                                                Background="{DynamicResource SurfaceAltBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="10">
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                                                <Border Width="24" Height="24"
+                                                        CornerRadius="12"
+                                                        VerticalAlignment="Center"
+                                                        Classes="step-marker"
+                                                        Classes.done="{Binding IsDone}">
+                                                    <TextBlock Text="{Binding Marker}"
+                                                               FontSize="11"
+                                                               FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Detail}" Classes="caption" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <Button Grid.Column="2"
+                                                        Classes="Ghost"
+                                                        Content="{Binding ActionText}"
+                                                        IsVisible="{Binding IsPending}"
+                                                        VerticalAlignment="Center"
+                                                        Command="{Binding $parent[UserControl].DataContext.GoToCommand}"
+                                                        CommandParameter="{Binding TargetPage}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="安装或启用模组前，建议先关闭游戏：BepInEx 只在启动时扫描 DLL。"
+                                       Classes="caption"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
 
-                <Grid ColumnDefinitions="1.1*,0.9*" ColumnSpacing="16">
-                    <Border Classes="card">
+                    <Border Name="ActivityCard"
+                            Grid.Column="1"
+                            Classes="card">
                         <StackPanel Spacing="10">
                             <TextBlock Text="最近活动" Classes="h2" />
                             <ItemsControl ItemsSource="{Binding RecentActivity}">
@@ -233,7 +248,10 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Grid.Column="1" Classes="card">
+                    <Border Name="DataCard"
+                            Grid.Column="1"
+                            Grid.Row="1"
+                            Classes="card">
                         <StackPanel Spacing="10">
                             <TextBlock Text="存档与数据" Classes="h2" />
                             <StackPanel Spacing="2">

@@ -262,6 +262,28 @@
             <Setter Property="CornerRadius" Value="18" />
             <Setter Property="Padding" Value="12,6" />
             <Setter Property="MinHeight" Value="36" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+        </Style>
+
+        <!-- The Fluent ComboBox switches to a near-black pointerover/focus frame
+             in the light theme; keep the pill border quiet and use the accent
+             only for keyboard focus. -->
+        <Style Selector="ComboBox.instance-pill:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+        </Style>
+
+        <Style Selector="ComboBox.instance-pill:pointerover /template/ Border#Background">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+        </Style>
+
+        <Style Selector="ComboBox.instance-pill:focus">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+
+        <Style Selector="ComboBox.instance-pill:focus /template/ Border#Background">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
         </Style>
 
         <Style Selector="ListBox.nav">

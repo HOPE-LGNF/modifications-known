@@ -44,13 +44,23 @@
                                                            VerticalAlignment="Center"
                                                            Foreground="{DynamicResource AccentBrush}" />
                                             </Border>
+                                            <Border Background="{DynamicResource WarningBrush}"
+                                                    CornerRadius="5"
+                                                    Padding="7,2"
+                                                    VerticalAlignment="Center"
+                                                    IsVisible="{Binding IsRunning}">
+                                                <TextBlock Text="游戏运行中"
+                                                           FontSize="10"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource AccentContrastBrush}" />
+                                            </Border>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                                             <Button Classes="Ghost" Content="打开目录" Command="{Binding OpenCommand}" />
                                             <Button Classes="Ghost" Content="备份…" Command="{Binding BackupCommand}" />
                                             <Button Classes="Danger"
                                                     Content="删除存档"
-                                                    IsEnabled="{Binding !IsLive}"
+                                                    IsEnabled="{Binding CanDelete}"
                                                     Command="{Binding DeleteCommand}" />
                                         </StackPanel>
                                     </Grid>

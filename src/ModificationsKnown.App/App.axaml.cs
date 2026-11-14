@@ -100,6 +100,7 @@ public class App : Application
         logger.Info("Main window created");
         desktop.Exit += (_, _) =>
         {
+            shell.Shutdown();
             _nexusClient.Dispose();
             _downloader.Dispose();
             _thumbnails.Dispose();
