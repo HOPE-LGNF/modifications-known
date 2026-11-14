@@ -214,6 +214,17 @@
                                       OffContent="关闭" />
                     </Grid>
 
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                        <TextBlock Text="阻止单实例多开" Classes="muted" VerticalAlignment="Center" />
+                        <ToggleSwitch Grid.Column="1"
+                                      IsChecked="{Binding PreventMultipleInstances, Mode=TwoWay}"
+                                      OnContent="开启"
+                                      OffContent="关闭" />
+                    </Grid>
+                    <TextBlock Text="开启后，当前版本正在运行时会显示“关闭游戏”，而不是再启动一份；关闭前会再次确认。"
+                               Classes="caption"
+                               TextWrapping="Wrap" />
+
                     <Border Height="1" Background="{DynamicResource BorderBrush}" Margin="0,2" />
 
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">

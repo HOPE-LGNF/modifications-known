@@ -24,6 +24,10 @@ public sealed class AppSettings
 
     public bool ConfirmBeforeDelete { get; set; } = true;
 
+    /// <summary>When true and the selected instance is already running, the
+    /// launch button offers to close the game instead of starting another copy.</summary>
+    public bool PreventMultipleInstances { get; set; } = true;
+
     public bool IncludeAdultMods { get; set; }
 
     public int PageSize { get; set; } = 24;

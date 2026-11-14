@@ -10,6 +10,8 @@ public interface IUserDialogService
 {
     Task<bool> ConfirmAsync(string title, string message, string confirmText = "确认", string cancelText = "取消");
 
+    Task<bool> ConfirmDangerAsync(string title, string message, string confirmText = "确认", string cancelText = "取消");
+
     Task AlertAsync(string title, string message, string closeText = "知道了");
 
     Task<string?> PromptAsync(
@@ -48,6 +50,19 @@ public sealed class UserDialogService : IUserDialogService
         if (owner is null) return false;
 
         var dialog = new ConfirmDialog(title, message, confirmText, cancelText, showCancel: true);
+        return await dialog.ShowDialog<bool>(owner);
+    }
+
+    public async Task<bool> ConfirmDangerAsync(
+        string title,
+        string message,
+        string confirmText = "确认",
+        string cancelText = "取消")
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return false;
+
+        var dialog = new ConfirmDialog(title, message, confirmText, cancelText, showCancel: true, danger: true);
         return await dialog.ShowDialog<bool>(owner);
     }
 

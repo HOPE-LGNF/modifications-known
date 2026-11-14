@@ -44,6 +44,103 @@ public sealed class GameProcessMonitor : IDisposable
     public bool IsRunningPath(string gameDirectory) =>
         _counts.TryGetValue(Normalize(gameDirectory), out var count) && count > 0;
 
+    /// <summary>Closes every process mapped to this installation. Tries a
+    /// graceful window close first, then kills the process tree. Steam has no
+    /// supported “stop game” URL, so this is the reliable route.</summary>
+    public async Task<int> CloseInstanceAsync(
+        GameInstallation installation,
+        CancellationToken cancellationToken = default)
+    {
+        var pids = FindProcessIds(installation);
+        var closed = 0;
+
+        foreach (var pid in pids)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+
+            try
+            {
+                using var process = Process.GetProcessById(pid);
+                if (process.HasExited) continue;
+
+                process.CloseMainWindow();
+                if (!await WaitForExitAsync(process, TimeSpan.FromMilliseconds(2500), cancellationToken))
+                {
+                    process.Kill(entireProcessTree: true);
+                    await WaitForExitAsync(process, TimeSpan.FromSeconds(3), cancellationToken);
+                }
+
+                closed++;
+            }
+            catch
+            {
+                // The process may have exited between enumeration and close.
+            }
+        }
+
+        await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+        Scan();
+        return closed;
+    }
+
+    private static async Task<bool> WaitForExitAsync(
+        Process process,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var exit = process.WaitForExitAsync(cancellationToken);
+            var delay = Task.Delay(timeout, cancellationToken);
+            return await Task.WhenAny(exit, delay).ConfigureAwait(false) == exit
+                   && process.HasExited;
+        }
+        catch
+        {
+            return process.HasExited;
+        }
+    }
+
+    private List<int> FindProcessIds(GameInstallation installation)
+    {
+        var root = Normalize(installation.GameDirectory);
+        var exe = string.IsNullOrWhiteSpace(installation.ExecutablePath)
+            ? null
+            : Normalize(installation.ExecutablePath);
+
+        var result = new List<int>();
+        var processes = Process.GetProcesses();
+        try
+        {
+            foreach (var process in processes)
+            {
+                string? path = null;
+                try
+                {
+                    path = process.MainModule?.FileName;
+                }
+                catch
+                {
+                    // Same limitation as detection: no path for elevated processes.
+                }
+
+                if (string.IsNullOrWhiteSpace(path)) continue;
+                var normalized = Normalize(path);
+                if ((exe is not null && string.Equals(normalized, exe, StringComparison.OrdinalIgnoreCase))
+                    || normalized.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add(process.Id);
+                }
+            }
+        }
+        finally
+        {
+            foreach (var process in processes) process.Dispose();
+        }
+
+        return result;
+    }
+
     private async Task LoopAsync(CancellationToken token)
     {
         while (!token.IsCancellationRequested)

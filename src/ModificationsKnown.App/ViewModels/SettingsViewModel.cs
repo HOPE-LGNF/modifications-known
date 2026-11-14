@@ -50,6 +50,9 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private bool _confirmBeforeDelete = true;
 
     [ObservableProperty]
+    private bool _preventMultipleInstances = true;
+
+    [ObservableProperty]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -85,7 +88,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         nameof(NexusDomain),
         nameof(PageSize),
         nameof(IncludeAdultMods),
-        nameof(ConfirmBeforeDelete)
+        nameof(ConfirmBeforeDelete),
+        nameof(PreventMultipleInstances)
     ];
 
     public bool HasUnsavedChanges
@@ -98,7 +102,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
                    || NormalizeDomain(NexusDomain) != saved.NexusGameDomain
                    || Math.Clamp(PageSize, 1, 100) != saved.PageSize
                    || IncludeAdultMods != saved.IncludeAdultMods
-                   || ConfirmBeforeDelete != saved.ConfirmBeforeDelete;
+                   || ConfirmBeforeDelete != saved.ConfirmBeforeDelete
+                   || PreventMultipleInstances != saved.PreventMultipleInstances;
         }
     }
 
@@ -479,6 +484,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
             _settings.Current.PageSize = Math.Clamp(PageSize, 1, 100);
             _settings.Current.IncludeAdultMods = IncludeAdultMods;
             _settings.Current.ConfirmBeforeDelete = ConfirmBeforeDelete;
+            _settings.Current.PreventMultipleInstances = PreventMultipleInstances;
             await _settings.SaveAsync();
             OnPropertyChanged(nameof(HasUnsavedChanges));
             _shell.SetStatus("设置已保存。", StatusKind.Success);
@@ -651,6 +657,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
             PageSize = _settings.Current.PageSize;
             IncludeAdultMods = _settings.Current.IncludeAdultMods;
             ConfirmBeforeDelete = _settings.Current.ConfirmBeforeDelete;
+            PreventMultipleInstances = _settings.Current.PreventMultipleInstances;
         }
         finally
         {

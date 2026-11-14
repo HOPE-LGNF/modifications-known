@@ -50,6 +50,9 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private bool _isLaunching;
 
     [ObservableProperty]
+    private bool _isClosing;
+
+    [ObservableProperty]
     private bool _isToastVisible;
 
     [ObservableProperty]
@@ -66,11 +69,24 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private static readonly TimeSpan ToastInfoDuration = TimeSpan.FromSeconds(3.5);
     private static readonly TimeSpan ToastAlertDuration = TimeSpan.FromSeconds(5);
 
-    public bool CanLaunch => !IsLaunching;
+    public bool CanLaunch => !IsLaunching && !IsClosing;
 
-    public string LaunchButtonText => IsLaunching ? "启动中…" : "启动游戏";
+    public bool IsSelectedInstanceRunning =>
+        Game.Selected is { } installation && _processMonitor.IsRunning(installation);
+
+    public string LaunchButtonText =>
+        IsClosing ? "关闭中…"
+        : IsLaunching ? "启动中…"
+        : Settings.Current.PreventMultipleInstances && IsSelectedInstanceRunning ? "关闭游戏"
+        : "启动游戏";
 
     partial void OnIsLaunchingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanLaunch));
+        OnPropertyChanged(nameof(LaunchButtonText));
+    }
+
+    partial void OnIsClosingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanLaunch));
         OnPropertyChanged(nameof(LaunchButtonText));
@@ -101,6 +117,17 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _activity = new ActivityLogService();
         _processMonitor = new GameProcessMonitor(Game, logger);
         _processMonitor.Start();
+        _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            OnPropertyChanged(nameof(IsSelectedInstanceRunning));
+            OnPropertyChanged(nameof(LaunchButtonText));
+        });
+        Settings.Changed += (_, _) =>
+        {
+            OnPropertyChanged(nameof(LaunchButtonText));
+            OnPropertyChanged(nameof(IsSelectedInstanceRunning));
+        };
+
         NavigationItems =
         [
             new("home", "概览", "游戏状态与快捷启动", "⌂"),
@@ -142,6 +169,8 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             OnPropertyChanged(nameof(FooterText));
             OnPropertyChanged(nameof(DropHint));
             OnPropertyChanged(nameof(IsGameSkinOverlayVisible));
+            OnPropertyChanged(nameof(IsSelectedInstanceRunning));
+            OnPropertyChanged(nameof(LaunchButtonText));
         };
     }
 
@@ -342,13 +371,50 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     }
 
     [RelayCommand]
+    private async Task CloseGameAsync(GameInstallation installation)
+    {
+        var confirmed = await _dialogs.ConfirmDangerAsync(
+            "关闭游戏",
+            $"将结束「{installation.DisplayLabel}」的所有游戏进程。\n\n未保存的游戏进度会丢失，且无法恢复。确定要关闭吗？",
+            "结束游戏",
+            "取消");
+        if (!confirmed) return;
+
+        IsClosing = true;
+        try
+        {
+            SetStatus($"正在关闭「{installation.DisplayLabel}」…", StatusKind.Info);
+            var closed = await _processMonitor.CloseInstanceAsync(installation);
+            SetStatus(
+                closed > 0
+                    ? $"已结束「{installation.DisplayLabel}」的 {closed} 个进程。"
+                    : "没有找到可结束的进程，游戏可能已经退出。",
+                closed > 0 ? StatusKind.Success : StatusKind.Warning);
+        }
+        catch (Exception exception)
+        {
+            _logger.Error("Close game failed", exception);
+            SetStatus($"关闭游戏失败：{exception.Message}", StatusKind.Error);
+        }
+        finally
+        {
+            IsClosing = false;
+        }
+    }
+
     public async Task LaunchGameAsync()
     {
-        if (IsLaunching) return;
+        if (IsLaunching || IsClosing) return;
 
         if (Game.Selected is not { } installation)
         {
             SetStatus("请先检测游戏或手动选择游戏目录。", StatusKind.Warning);
+            return;
+        }
+
+        if (Settings.Current.PreventMultipleInstances && _processMonitor.IsRunning(installation))
+        {
+            await CloseGameAsync(installation);
             return;
         }
 

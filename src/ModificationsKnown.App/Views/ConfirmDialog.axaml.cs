@@ -11,7 +11,13 @@ public partial class ConfirmDialog : DialogWindow
         KeyDown += OnWindowKeyDown;
     }
 
-    public ConfirmDialog(string title, string message, string confirmText, string cancelText, bool showCancel)
+    public ConfirmDialog(
+        string title,
+        string message,
+        string confirmText,
+        string cancelText,
+        bool showCancel,
+        bool danger = false)
         : this()
     {
         Title = title;
@@ -20,6 +26,13 @@ public partial class ConfirmDialog : DialogWindow
         ConfirmButton.Content = confirmText;
         CancelButton.Content = cancelText;
         CancelButton.IsVisible = showCancel;
+        if (danger)
+        {
+            TitleText.Classes.Add("danger-title");
+            ConfirmButton.Classes.Remove("Primary");
+            ConfirmButton.Classes.Add("Danger");
+        }
+
         Opened += (_, _) => ConfirmButton.Focus();
     }
 
