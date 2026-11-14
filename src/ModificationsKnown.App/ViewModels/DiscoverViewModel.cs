@@ -263,6 +263,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         Versions.Clear();
         SelectedFile = null;
         SelectedVersion = null;
+        ShowFreeDownloadWhy = false;
 
         IsDetailLoading = true;
         var version = ++_loadVersion;
@@ -575,6 +576,9 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
         if (matchesPending) _pendingFreeDownload = null;
 
+        // The free-download explanation belongs to the 403 state only; once an
+        // NXM link is accepted (or a download starts) it must disappear.
+        ShowFreeDownloadWhy = false;
         IsDownloading = true;
         HasNxmFallback = false;
         _nxmFallbackUrl = null;

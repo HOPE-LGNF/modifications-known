@@ -374,6 +374,12 @@
             <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
         </Style>
 
+        <!-- Desktop scrollbars should stop when the pointer is released; touch
+             inertia made the thumb continue with a small drift. -->
+        <Style Selector="ScrollViewer">
+            <Setter Property="IsScrollInertiaEnabled" Value="False" />
+        </Style>
+
         <Style Selector="ProgressBar">
             <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
             <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
