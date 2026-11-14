@@ -62,6 +62,9 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
     private int _toastGeneration;
 
+    private static readonly TimeSpan ToastInfoDuration = TimeSpan.FromSeconds(3.5);
+    private static readonly TimeSpan ToastAlertDuration = TimeSpan.FromSeconds(5);
+
     public bool CanLaunch => !IsLaunching;
 
     public string LaunchButtonText => IsLaunching ? "启动中…" : "启动游戏";
@@ -99,10 +102,9 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         [
             new("home", "概览", "游戏状态与快捷启动", "⌂"),
             new("discover", "模组发现", "从 Nexus Mods 浏览与安装", "⌕"),
-            new("installed", "已安装", "启用、停用与清理本地模组", "▣"),
-            new("saves", "存档", "各版本的存档与备份", "▤"),
+            new("installed", "已安装模组", "启用、停用与清理本地模组", "▣"),
+            new("saves", "存档管理", "各版本的存档与备份", "▤"),
             new("appearance", "启动器外观", "主题变量与基础皮肤", "◈"),
-            new("gameskin", "游戏皮肤", "游戏内外观管理", "♧", "开发中", false),
             new("settings", "设置", "游戏、版本与 Nexus", "⚙")
         ];
 
@@ -251,7 +253,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         if (generation != _toastGeneration) return;
         ToastOpacity = 1;
 
-        await Task.Delay(kind is StatusKind.Error or StatusKind.Warning ? 6500 : 5000);
+        await Task.Delay(kind is StatusKind.Error or StatusKind.Warning ? ToastAlertDuration : ToastInfoDuration);
         if (generation != _toastGeneration) return;
         ToastOpacity = 0;
 

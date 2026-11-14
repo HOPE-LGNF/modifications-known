@@ -27,5 +27,8 @@ public sealed record GameInstallation(
 
     public string BepInExLabel => HasBepInEx ? "BepInEx 已安装" : "BepInEx 未安装";
 
+    /// <summary>Single-line label used by the title-bar instance pill.</summary>
+    public string PillLabel => $"{DisplayLabel} · {(HasBepInEx ? "已安装 BepInEx" : "未安装 BepInEx")}";
+
     public string LaunchTarget => ExecutablePath ?? GameDirectory;
 }

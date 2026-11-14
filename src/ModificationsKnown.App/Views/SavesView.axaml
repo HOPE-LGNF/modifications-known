@@ -4,7 +4,7 @@
     <Grid RowDefinitions="Auto,*" RowSpacing="12">
         <Grid ColumnDefinitions="*,Auto">
             <StackPanel Spacing="3">
-                <TextBlock Text="存档" Classes="h2" />
+                <TextBlock Text="存档管理" Classes="h2" />
                 <TextBlock Text="每个版本都有独立的托管存档目录；正式版与试玩版不会串档。备份会把文件复制到你选择的目录。"
                            Classes="muted"
                            FontSize="12"
@@ -29,13 +29,20 @@
                             <Border Classes="card" Margin="0,0,0,10" Padding="16">
                                 <StackPanel Spacing="10">
                                     <Grid ColumnDefinitions="*,Auto">
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}"
+                                                       FontSize="15"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Center" />
                                             <Border Background="{DynamicResource AccentSoftBrush}"
                                                     CornerRadius="5"
                                                     Padding="7,2"
+                                                    VerticalAlignment="Center"
                                                     IsVisible="{Binding IsLive}">
-                                                <TextBlock Text="当前存档" FontSize="10" Foreground="{DynamicResource AccentBrush}" />
+                                                <TextBlock Text="当前存档"
+                                                           FontSize="10"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource AccentBrush}" />
                                             </Border>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
