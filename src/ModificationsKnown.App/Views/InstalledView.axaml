@@ -316,7 +316,7 @@
                                                 <Button Classes="Ghost" Content="接管"
                                                         IsVisible="{Binding CanAdopt}"
                                                         Command="{Binding AdoptCommand}" />
-                                                <Button Classes="Danger" Content="卸载"
+                                                <Button Classes="Danger" Content="卸载托管"
                                                         IsVisible="{Binding CanDelete}"
                                                         Command="{Binding UninstallCommand}" />
                                                 <Button Classes="Danger" Content="删除"
