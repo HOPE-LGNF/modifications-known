@@ -61,6 +61,12 @@ public sealed record NexusModSummary(
         ? "更新时间未知"
         : $"更新于 {UpdatedAt.Value.LocalDateTime:yyyy-MM-dd}";
 
+    /// <summary>Short “latest release” label shown on cards/details so users can
+    /// judge age before picking a download.</summary>
+    public string ReleaseDateLabel => UpdatedAt is null
+        ? "发布日期未知"
+        : $"最近更新 {UpdatedAt.Value.LocalDateTime:yyyy-MM-dd}";
+
     private static string FormatCount(long value) => value switch
     {
         >= 1_000_000 => $"{value / 1_000_000.0:F1}M",
@@ -122,6 +128,10 @@ public sealed record NexusFileVersion(
     bool IsPrimary)
 {
     public string VersionLabel => VersionText.Label(Version);
+
+    public string UploadedLabel => UploadedAt is null
+        ? "日期未知"
+        : UploadedAt.Value.LocalDateTime.ToString("yyyy-MM-dd");
 
     public string CategoryLabel => Category switch
     {

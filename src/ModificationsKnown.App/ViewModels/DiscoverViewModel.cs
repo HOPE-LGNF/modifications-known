@@ -42,6 +42,8 @@ public partial class ModCardViewModel : ObservableObject
     public string FileSize => Summary.FileSizeLabel;
 
     public string Category => string.IsNullOrWhiteSpace(Summary.Category) ? "未分类" : Summary.Category;
+
+    public string ReleaseDate => Summary.ReleaseDateLabel;
 }
 
 public partial class DiscoverViewModel : ObservableObject, IAsyncPage
@@ -751,7 +753,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
     public string SelectedVersionLabel => SelectedVersion is null
         ? "尚未选择版本"
-        : $"{SelectedVersion.VersionLabel} · {SelectedVersion.CategoryLabel}";
+        : $"{SelectedVersion.VersionLabel} · {SelectedVersion.CategoryLabel} · {SelectedVersion.UploadedLabel}";
 
     partial void OnSelectedFileChanged(NexusModFile? value)
     {

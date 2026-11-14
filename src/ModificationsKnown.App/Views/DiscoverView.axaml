@@ -126,6 +126,10 @@
                                             <TextBlock Text="{Binding Downloads}"
                                                        FontSize="10"
                                                        Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <TextBlock Text="{Binding ReleaseDate}"
+                                                       FontSize="10"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       ToolTip.Tip="Nexus 最近更新时间；不等于与正式版/试玩版兼容" />
                                         </StackPanel>
                                     </StackPanel>
                                 </Grid>
@@ -204,6 +208,10 @@
                                         <TextBlock Text="{Binding SelectedCard.Category}" FontSize="10" Foreground="{DynamicResource AccentBrush}" />
                                     </Border>
                                     <TextBlock Text="{Binding SelectedCard.Version}" Classes="caption" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding SelectedCard.ReleaseDate}"
+                                               Classes="caption"
+                                               VerticalAlignment="Center"
+                                               ToolTip.Tip="Nexus 最近更新时间；不等于与正式版/试玩版兼容" />
                                     <TextBlock Text="{Binding SelectedCard.Downloads}" Classes="caption" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding SelectedCard.FileSize}" Classes="caption" VerticalAlignment="Center" />
                                 </StackPanel>
