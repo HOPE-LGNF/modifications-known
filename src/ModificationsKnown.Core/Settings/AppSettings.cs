@@ -13,7 +13,10 @@ public sealed class AppSettings
 
     public string NexusGameDomain { get; set; } = "scavprototype";
 
-    public string ThemePreset { get; set; } = "moss";
+    public string ThemePreset { get; set; } = "daylight";
+
+    /// <summary>Once true, the user's theme choice is never migrated again.</summary>
+    public bool ThemePresetMigrated { get; set; }
 
     public string? PreferredInstallationId { get; set; }
 
@@ -24,4 +27,6 @@ public sealed class AppSettings
     public bool IncludeAdultMods { get; set; }
 
     public int PageSize { get; set; } = 24;
+
+    public DateTimeOffset? LastLaunchAt { get; set; }
 }

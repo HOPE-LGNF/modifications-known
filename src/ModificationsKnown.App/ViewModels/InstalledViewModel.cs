@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -187,6 +188,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly INexusModsClient _nexus;
     private readonly ThumbnailService _thumbnails;
     private readonly List<InstalledModItemViewModel> _allItems = [];
+    private readonly Dictionary<string, Bitmap?> _thumbnailCache = new(StringComparer.OrdinalIgnoreCase);
     private int _refreshGeneration;
 
     [ObservableProperty]
@@ -578,13 +580,18 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                     ? null
                     : new NexusMatch(sidecar.NexusName, sidecar.GameScopedId, sidecar.ModUid));
 
-        return new InstalledModItemViewModel(mod, ToggleAsync, UninstallAsync, DeleteWholeAsync, AdoptAsync, LinkNexusAsync)
+        var item = new InstalledModItemViewModel(mod, ToggleAsync, UninstallAsync, DeleteWholeAsync, AdoptAsync, LinkNexusAsync)
         {
             IsDetailed = IsDetailedView,
             IsCompact = IsCompactView,
             NexusDomain = _settings.Current.NexusGameDomain,
             NexusMatch = match
         };
+
+        if (match is not null && _thumbnailCache.TryGetValue(match.GameScopedId, out var cached))
+            item.Thumbnail = cached;
+
+        return item;
     }
 
     private void ApplyFilter()
@@ -611,27 +618,59 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     [RelayCommand]
     private async Task InstallLocalArchiveAsync()
     {
-        if (IsBusy) return;
-        if (_shell.Game.Selected is not { } installation || !installation.HasPluginsDirectory)
-        {
-            _shell.SetStatus("请先选择已安装 BepInEx 的游戏。", StatusKind.Warning);
-            return;
-        }
+        if (IsBusy || !EnsureInstallTarget(out _)) return;
 
         var path = await _filePicker.PickArchiveAsync();
         if (string.IsNullOrWhiteSpace(path)) return;
 
+        await InstallArchivesAsync([path]);
+    }
+
+    public async Task InstallArchivesAsync(IReadOnlyList<string> paths)
+    {
+        if (IsBusy || paths.Count == 0 || !EnsureInstallTarget(out var installation)) return;
+
         IsBusy = true;
         try
         {
-            var result = await _operations.InstallArchiveAsync(installation, path);
-            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            var failures = new List<string>();
+            ModInstallResult? last = null;
+            foreach (var path in paths)
+            {
+                last = await _operations.InstallArchiveAsync(installation, path);
+                if (!last.Success) failures.Add($"{Path.GetFileName(path)}：{last.Message}");
+            }
+
+            if (paths.Count == 1)
+            {
+                _shell.SetStatus(last!.Message, last.Success ? StatusKind.Success : StatusKind.Error);
+            }
+            else if (failures.Count == 0)
+            {
+                _shell.SetStatus($"已安装 {paths.Count} 个压缩包。", StatusKind.Success);
+            }
+            else
+            {
+                _shell.SetStatus(
+                    $"{paths.Count - failures.Count}/{paths.Count} 个压缩包安装成功。失败：{string.Join("；", failures)}",
+                    StatusKind.Error);
+            }
+
             await RefreshCoreAsync();
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    private bool EnsureInstallTarget([NotNullWhen(true)] out GameInstallation? installation)
+    {
+        installation = _shell.Game.Selected;
+        if (installation is { HasPluginsDirectory: true }) return true;
+
+        _shell.SetStatus("请先选择已安装 BepInEx 的游戏。", StatusKind.Warning);
+        return false;
     }
 
     [RelayCommand]
@@ -941,17 +980,27 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             if (generation != _refreshGeneration) return;
             if (item.NexusMatch is null || item.Thumbnail is not null) continue;
 
+            var key = item.NexusMatch.GameScopedId;
+            if (_thumbnailCache.TryGetValue(key, out var cached))
+            {
+                if (cached is not null) item.Thumbnail = cached;
+                continue;
+            }
+
             try
             {
-                var details = await _nexus.GetModAsync(item.NexusDomain, item.NexusMatch.GameScopedId);
+                var details = await _nexus.GetModAsync(item.NexusDomain, key);
                 var url = details.Summary.ThumbnailUrl ?? details.GalleryUrls.FirstOrDefault();
                 var bitmap = await _thumbnails.LoadAsync(url);
+                _thumbnailCache[key] = bitmap;
                 if (bitmap is not null && generation == _refreshGeneration)
                     item.Thumbnail = bitmap;
             }
             catch
             {
-                // Thumbnails are cosmetic; Nexus failures must not break the list.
+                // Cache the failure for this window session so toggling a mod
+                // does not re-hit Nexus for every cover again.
+                _thumbnailCache[key] = null;
             }
         }
     }

@@ -1,3 +1,5 @@
+using ModificationsKnown.Core.Common;
+
 namespace ModificationsKnown.Core.Mods;
 
 /// <summary>
@@ -72,5 +74,5 @@ public sealed class InstalledMod
 
     public string StateLabel => IsEnabled ? "已启用" : "已禁用";
 
-    public string VersionLabel => string.IsNullOrWhiteSpace(Version) ? "版本未知" : $"v{Version}";
+    public string VersionLabel => VersionText.Label(Version);
 }

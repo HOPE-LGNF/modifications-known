@@ -18,7 +18,7 @@ namespace ModificationsKnown.App.Views;
 /// </summary>
 public partial class ImageLightboxWindow : Window
 {
-    private const double Padding = 24;
+    private const double ViewportPadding = 24;
     private readonly Bitmap? _bitmap;
     private readonly ScaleTransform _scaleTransform = new();
     private readonly TranslateTransform _translateTransform = new();
@@ -89,8 +89,8 @@ public partial class ImageLightboxWindow : Window
         var height = _bitmap.Size.Height;
         if (width <= 0 || height <= 0) return;
 
-        var availableWidth = Math.Max(1, Viewport.Bounds.Width - Padding * 2);
-        var availableHeight = Math.Max(1, Viewport.Bounds.Height - Padding * 2);
+        var availableWidth = Math.Max(1, Viewport.Bounds.Width - ViewportPadding * 2);
+        var availableHeight = Math.Max(1, Viewport.Bounds.Height - ViewportPadding * 2);
         _fitScale = Math.Min(1, Math.Min(availableWidth / width, availableHeight / height));
         if (_fitScale <= 0) _fitScale = 0.01;
 

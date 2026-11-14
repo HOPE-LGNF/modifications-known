@@ -107,6 +107,8 @@ public interface IFilePickerService
     Task<string?> PickThemeFileAsync();
 
     Task<string?> PickDataFolderAsync();
+
+    Task<string?> PickBackupFolderAsync();
 }
 
 public sealed class FilePickerService : IFilePickerService
@@ -178,6 +180,20 @@ public sealed class FilePickerService : IFilePickerService
         var folders = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             Title = "选择 MK 数据目录（设置、日志与缓存）",
+            AllowMultiple = false
+        });
+
+        return folders.Count == 0 ? null : folders[0].Path.LocalPath;
+    }
+
+    public async Task<string?> PickBackupFolderAsync()
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var folders = await owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "选择存档备份目录",
             AllowMultiple = false
         });
 

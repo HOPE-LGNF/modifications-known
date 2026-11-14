@@ -77,7 +77,7 @@
                                                 CornerRadius="4"
                                                 Padding="5,2"
                                                 VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding CategoryLabel}" FontSize="9" Classes="muted" />
+                                            <TextBlock Text="{Binding CategoryLabel}" FontSize="11" Classes="muted" />
                                         </Border>
                                     </Grid>
                                 </DataTemplate>

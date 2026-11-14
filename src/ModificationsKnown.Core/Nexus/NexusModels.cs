@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.RegularExpressions;
+using ModificationsKnown.Core.Common;
 
 namespace ModificationsKnown.Core.Nexus;
 
@@ -44,7 +45,7 @@ public sealed record NexusModSummary(
     bool Adult,
     bool SupportsVortex)
 {
-    public string VersionLabel => string.IsNullOrWhiteSpace(Version) ? "版本未知" : $"v{Version}";
+    public string VersionLabel => VersionText.Label(Version);
 
     public string DownloadsLabel => FormatCount(Downloads);
 
@@ -120,7 +121,7 @@ public sealed record NexusFileVersion(
     DateTimeOffset? UploadedAt,
     bool IsPrimary)
 {
-    public string VersionLabel => string.IsNullOrWhiteSpace(Version) ? "版本未知" : $"v{Version}";
+    public string VersionLabel => VersionText.Label(Version);
 
     public string CategoryLabel => Category switch
     {

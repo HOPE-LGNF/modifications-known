@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:ModificationsKnown.App.Views"
              x:Class="ModificationsKnown.App.Views.InstalledView">
     <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12">
 
@@ -166,9 +167,7 @@
                                                     ClipToBounds="True"
                                                     VerticalAlignment="Top">
                                                 <Grid>
-                                                    <Image Source="{Binding Thumbnail}"
-                                                           Stretch="UniformToFill"
-                                                           IsVisible="{Binding HasThumbnail}" />
+                                                    <views:CoverImage Source="{Binding Thumbnail}" />
                                                     <TextBlock Text="{Binding Monogram}"
                                                                FontSize="16"
                                                                FontWeight="SemiBold"
@@ -198,14 +197,14 @@
                                                             BorderThickness="1"
                                                             CornerRadius="4"
                                                             Padding="5,2">
-                                                        <TextBlock Text="{Binding SourceLabel}" FontSize="9" Classes="muted" />
+                                                        <TextBlock Text="{Binding SourceLabel}" FontSize="11" Classes="muted" />
                                                     </Border>
                                                     <Border Background="{DynamicResource SurfaceAltBrush}"
                                                             BorderBrush="{DynamicResource BorderBrush}"
                                                             BorderThickness="1"
                                                             CornerRadius="4"
                                                             Padding="5,2">
-                                                        <TextBlock Text="{Binding ManagementLabel}" FontSize="9" Classes="muted" />
+                                                        <TextBlock Text="{Binding ManagementLabel}" FontSize="11" Classes="muted" />
                                                     </Border>
                                                 </StackPanel>
 
@@ -222,7 +221,7 @@
                                                             CornerRadius="99"
                                                             Padding="7,2">
                                                         <TextBlock Text="{Binding FileStateLabel}"
-                                                                   FontSize="9"
+                                                                   FontSize="11"
                                                                    Classes="muted"
                                                                    ToolTip.Tip="{Binding FileStateTooltip}" />
                                                     </Border>
@@ -231,14 +230,14 @@
                                                             BorderThickness="1"
                                                             CornerRadius="99"
                                                             Padding="7,2">
-                                                        <TextBlock Text="{Binding PluginLabel}" FontSize="9" Classes="muted" />
+                                                        <TextBlock Text="{Binding PluginLabel}" FontSize="11" Classes="muted" />
                                                     </Border>
                                                     <Border Background="{DynamicResource SurfaceAltBrush}"
                                                             BorderBrush="{DynamicResource BorderBrush}"
                                                             BorderThickness="1"
                                                             CornerRadius="99"
                                                             Padding="7,2">
-                                                        <TextBlock Text="{Binding DependencyLabel}" FontSize="9" Classes="muted" />
+                                                        <TextBlock Text="{Binding DependencyLabel}" FontSize="11" Classes="muted" />
                                                     </Border>
                                                 </StackPanel>
                                             </StackPanel>

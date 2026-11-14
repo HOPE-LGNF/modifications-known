@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.0] - 2026-11-14
+
+### Added
+
+- Light “日光” palette as the new default theme (existing explicit ember/slate/
+  custom choices are preserved; the old moss default is migrated once).
+- A-style shell: 64 px title bar with centred, horizontally scrollable tabs
+  (wheel/drag, no scrollbar), launcher column + dashboard, persisted activity
+  trail, save-profile management page, dynamic first-run checklist.
+- Drag-and-drop archive install with an explicit multi-file confirmation.
+- Settings sticky save bar with unsaved-change detection and discard.
+
+### Changed
+
+- Cherry-picked from the UI PR: `CoverImage` blurred-backdrop covers, selected
+  mod-card state, 11 px minimum labels, category ComboBox fix, 401 message,
+  single-`v` version labels, and in-memory thumbnail cache so toggling a mod
+  does not re-fetch covers.
+- Toast lasts 5 s (success/info) or 6.5 s (warning/error).
+- Save page lists per-instance profiles with open/backup/delete actions.
 ## [0.6.1] - 2026-11-13
 
 ### Fixed

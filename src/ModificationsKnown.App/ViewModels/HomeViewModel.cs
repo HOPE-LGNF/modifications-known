@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
@@ -5,8 +7,22 @@ using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Storage;
 
 namespace ModificationsKnown.App.ViewModels;
+
+public sealed record HomeChecklistItem(
+    int Number,
+    string Title,
+    string Detail,
+    bool IsDone,
+    string ActionText,
+    string TargetPage)
+{
+    public bool IsPending => !IsDone;
+
+    public string Marker => IsDone ? "✓" : Number.ToString();
+}
 
 public partial class HomeViewModel : ObservableObject, IAsyncPage
 {
@@ -16,7 +32,11 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private readonly IGameLauncher _launcher;
     private readonly IAppSettingsService _settings;
     private readonly INexusModsClient _nexus;
+    private readonly ActivityLogService _activity;
+    private readonly SaveIsolationService _saveIsolation;
+    private readonly ModGroupStore _groups = new();
     private DateTimeOffset _lastAccountCheck;
+    private int _modCount;
 
     [ObservableProperty]
     private bool _hasGame;
@@ -28,16 +48,16 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private string _gameSubtitle = "安装游戏后，启动器会自动找到正式版或试玩版。";
 
     [ObservableProperty]
-    private string _editionLabel = "未知版本";
-
-    [ObservableProperty]
     private string _gamePath = "—";
 
     [ObservableProperty]
-    private string _bepInExLabel = "未检测 BepInEx";
+    private bool _isBusy;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BepInExShortLabel))]
     private bool _bepInExReady;
+
+    public string BepInExShortLabel => BepInExReady ? "已就绪" : "未安装";
 
     [ObservableProperty]
     private string _modCountLabel = "0";
@@ -46,24 +66,36 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private string _enabledCountLabel = "0";
 
     [ObservableProperty]
-    private string _nexusLabel = "未配置 API Key";
-
-    [ObservableProperty]
     private string _nexusAccountLabel = "账号类型未知";
 
     [ObservableProperty]
     private string _nexusAccountDetail = "配置 API Key 后可检查";
 
     [ObservableProperty]
-    private bool _isBusy;
-
-    [ObservableProperty]
     private bool _nexusConfigured;
 
-    public bool NexusNotConfigured => !NexusConfigured;
+    [ObservableProperty]
+    private string _lastLaunchLabel = "尚未通过 MK 启动";
 
-    partial void OnNexusConfiguredChanged(bool value) =>
-        OnPropertyChanged(nameof(NexusNotConfigured));
+    [ObservableProperty]
+    private string _saveIsolationLabel = "未检测存档隔离";
+
+    [ObservableProperty]
+    private string _saveProfilePath = "—";
+
+    [ObservableProperty]
+    private string _dataRoot = "—";
+
+    [ObservableProperty]
+    private string _currentGroupLabel = "—";
+
+    public ObservableCollection<HomeChecklistItem> Checklist { get; } = [];
+
+    public ObservableCollection<ActivityEntry> RecentActivity { get; } = [];
+
+    public bool HasActivity => RecentActivity.Count > 0;
+
+    public bool HasNoActivity => !HasActivity;
 
     public HomeViewModel(
         IAppShell shell,
@@ -71,7 +103,9 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         IModManager modManager,
         IGameLauncher launcher,
         IAppSettingsService settings,
-        INexusModsClient nexus)
+        INexusModsClient nexus,
+        ActivityLogService activity,
+        SaveIsolationService saveIsolation)
     {
         _shell = shell;
         _locator = locator;
@@ -79,7 +113,10 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         _launcher = launcher;
         _settings = settings;
         _nexus = nexus;
+        _activity = activity;
+        _saveIsolation = saveIsolation;
         _shell.Game.Changed += OnGameChanged;
+        _activity.Changed += (_, _) => Dispatcher.UIThread.Post(() => _ = RefreshAsync());
     }
 
     public Task OnActivatedAsync() => RefreshAsync();
@@ -90,19 +127,22 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         IsBusy = true;
         try
         {
+            DataRoot = AppPaths.RootDirectory;
+            LoadActivity();
+
             if (_shell.Game.Selected is not { } installation)
             {
                 HasGame = false;
                 GameTitle = "尚未检测到游戏";
-                GameSubtitle = "请在设置中手动选择游戏目录，或安装 Steam 版《未知伤亡》。";
-                EditionLabel = "未知版本";
+                GameSubtitle = "请在设置中添加游戏实例，或安装 Steam 版《未知伤亡》。";
                 GamePath = "—";
-                BepInExLabel = "未检测 BepInEx";
                 BepInExReady = false;
-                ModCountLabel = "0";
-                EnabledCountLabel = "0";
+                SetModCounts(0, 0);
                 NexusConfigured = !string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey);
-                NexusLabel = NexusConfigured ? "API Key 已配置" : "未配置 API Key";
+                LastLaunchLabel = "尚未通过 MK 启动";
+                SaveIsolationLabel = "未选择版本";
+                SaveProfilePath = "—";
+                CurrentGroupLabel = "—";
                 await RefreshNexusAccountAsync();
                 return;
             }
@@ -110,31 +150,121 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             HasGame = true;
             GameTitle = installation.DisplayLabel;
             GameSubtitle = $"{installation.Profile.EditionLabel} · {installation.Profile.SteamAppId}";
-            EditionLabel = installation.Profile.EditionLabel;
             GamePath = installation.GameDirectory;
-            BepInExLabel = installation.HasBepInEx ? "BepInEx 已就绪" : "BepInEx 未安装";
             BepInExReady = installation.HasBepInEx;
             NexusConfigured = !string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey);
-            NexusLabel = NexusConfigured ? "API Key 已配置" : "未配置 API Key";
+            LastLaunchLabel = FormatLastLaunch(_settings.Current.LastLaunchAt);
+            SaveProfilePath = _saveIsolation.GetProfileDirectory(installation);
+            SaveIsolationLabel = DescribeIsolation(installation);
+            CurrentGroupLabel = DescribeCurrentGroup(installation.GameDirectory);
             await RefreshNexusAccountAsync();
 
             if (installation.HasPluginsDirectory)
             {
                 var mods = await _modManager.ScanAsync(installation);
-                ModCountLabel = mods.Count.ToString();
-                EnabledCountLabel = mods.Count(mod => mod.IsEnabled).ToString();
+                SetModCounts(mods.Count, mods.Count(mod => mod.IsEnabled));
             }
             else
             {
-                ModCountLabel = "0";
-                EnabledCountLabel = "0";
+                SetModCounts(0, 0);
             }
         }
         finally
         {
+            RebuildChecklist();
             IsBusy = false;
         }
     }
+
+    private void LoadActivity()
+    {
+        RecentActivity.Clear();
+        foreach (var entry in _activity.Recent(4))
+            RecentActivity.Add(entry);
+        OnPropertyChanged(nameof(HasActivity));
+        OnPropertyChanged(nameof(HasNoActivity));
+    }
+
+    private void SetModCounts(int total, int enabled)
+    {
+        _modCount = total;
+        ModCountLabel = total.ToString();
+        EnabledCountLabel = enabled.ToString();
+    }
+
+    private void RebuildChecklist()
+    {
+        Checklist.Clear();
+        Checklist.Add(new(1, "选择游戏版本",
+            HasGame ? GameTitle : "在设置中添加游戏实例",
+            HasGame, "去设置", "settings"));
+        Checklist.Add(new(2, "安装 BepInEx",
+            BepInExReady ? "BepInEx 已就绪" : "在设置的版本列表里点 ⋯ 安装",
+            BepInExReady, "去设置", "settings"));
+        Checklist.Add(new(3, "配置 Nexus API Key",
+            NexusConfigured ? NexusAccountDetail : "浏览可匿名，查看文件和下载需要 API Key",
+            NexusConfigured, "去设置", "settings"));
+        Checklist.Add(new(4, "安装第一个模组",
+            _modCount > 0 ? $"已安装 {_modCount} 个包" : "到模组发现浏览，或把压缩包拖进窗口",
+            _modCount > 0, "去模组发现", "discover"));
+    }
+
+    private string DescribeIsolation(GameInstallation installation)
+    {
+        if (!OperatingSystem.IsWindows()) return "非 Windows：跳过存档隔离";
+
+        var live = _saveIsolation.GetLiveSaveDirectory();
+        var profile = _saveIsolation.GetProfileDirectory(installation);
+        try
+        {
+            if (!Directory.Exists(live)) return "首次启动时创建存档隔离";
+            var info = new DirectoryInfo(live);
+            if (!info.Attributes.HasFlag(FileAttributes.ReparsePoint)) return "当前存档目录未隔离";
+
+            var target = info.LinkTarget;
+            if (string.IsNullOrWhiteSpace(target)) return "存档链接不可读";
+            return string.Equals(
+                Path.GetFullPath(target).TrimEnd(Path.DirectorySeparatorChar),
+                Path.GetFullPath(profile).TrimEnd(Path.DirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase)
+                ? "已隔离到当前版本"
+                : "存档链接指向其他版本";
+        }
+        catch
+        {
+            return "存档链接状态未知";
+        }
+    }
+
+    private string DescribeCurrentGroup(string gameDirectory)
+    {
+        try
+        {
+            var groups = _groups.Get(gameDirectory);
+            return groups.FirstOrDefault(group => group.IsDefault)?.Name
+                   ?? groups.FirstOrDefault()?.Name
+                   ?? "未创建";
+        }
+        catch
+        {
+            return "未创建";
+        }
+    }
+
+    private static string FormatLastLaunch(DateTimeOffset? timestamp)
+    {
+        if (timestamp is null) return "尚未通过 MK 启动";
+
+        var delta = DateTimeOffset.Now - timestamp.Value;
+        if (delta < TimeSpan.FromMinutes(1)) return "刚刚启动";
+        if (delta < TimeSpan.FromHours(1)) return $"{(int)delta.TotalMinutes} 分钟前启动";
+        if (delta < TimeSpan.FromDays(1)) return $"{(int)delta.TotalHours} 小时前启动";
+        if (delta < TimeSpan.FromDays(2)) return "昨天启动";
+        return timestamp.Value.ToLocalTime().ToString("MM-dd HH:mm") + " 启动";
+    }
+
+    [RelayCommand]
+    private void GoTo(string page) => _shell.NavigateTo(page);
 
     private async Task RefreshNexusAccountAsync()
     {
@@ -145,8 +275,6 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             return;
         }
 
-        // The home page is re-activated often; a five-minute cache avoids
-        // hammering /users/validate on every navigation.
         if (DateTimeOffset.UtcNow - _lastAccountCheck < TimeSpan.FromMinutes(5)) return;
 
         try
@@ -169,9 +297,6 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     }
 
     [RelayCommand]
-    private Task LaunchAsync() => _shell.LaunchGameAsync();
-
-    [RelayCommand]
     private async Task OpenFolderAsync()
     {
         if (_shell.Game.Selected is not { } installation)
@@ -185,11 +310,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     }
 
     [RelayCommand]
-    private async Task RefreshGameAsync()
-    {
-        await _shell.RefreshGameAsync();
-        await RefreshAsync();
-    }
+    private Task RefreshGameAsync() => _shell.RefreshGameAsync();
 
     private void OnGameChanged(object? sender, EventArgs e) => _ = RefreshAsync();
 }

@@ -23,6 +23,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private readonly IGameLauncher _launcher;
     private readonly IUserDialogService _dialogs;
     private readonly SaveIsolationService _saveIsolation;
+    private readonly ActivityLogService _activity;
     private readonly Dictionary<string, object> _pages;
     private bool _initialized;
 
@@ -93,11 +94,13 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         var instanceStore = new GameInstanceStore();
         Game = new GameContext(instanceStore);
         _saveIsolation = new SaveIsolationService(logger);
+        _activity = new ActivityLogService();
         NavigationItems =
         [
             new("home", "概览", "游戏状态与快捷启动", "⌂"),
             new("discover", "模组发现", "从 Nexus Mods 浏览与安装", "⌕"),
             new("installed", "已安装", "启用、停用与清理本地模组", "▣"),
+            new("saves", "存档", "各版本的存档与备份", "▤"),
             new("appearance", "启动器外观", "主题变量与基础皮肤", "◈"),
             new("gameskin", "游戏皮肤", "游戏内外观管理", "♧", "开发中", false),
             new("settings", "设置", "游戏、版本与 Nexus", "⚙")
@@ -118,9 +121,10 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             logger);
         _pages = new Dictionary<string, object>
         {
-            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus),
+            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails),
+            ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion)
@@ -135,6 +139,8 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
     public GameContext Game { get; }
 
+    public ActivityLogService Activity => _activity;
+
     public IReadOnlyList<NavigationItem> NavigationItems { get; }
 
     public string CurrentGameLabel => Game.Selected is null
@@ -144,6 +150,45 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     /// <summary>The game-skin page is a placeholder; its veil lives in
     /// MainWindow so it also covers the header and the status bar.</summary>
     public bool IsGameSkinOverlayVisible => SelectedNavigation?.Key == "gameskin";
+
+    public string FooterText
+    {
+        get
+        {
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            var label = version is null ? "v0.1.0" : $"v{version.Major}.{version.Minor}.{version.Build}";
+            return $"{label} · Apache-2.0";
+        }
+    }
+
+    public string DropHint => Game.Selected is { HasPluginsDirectory: true } installation
+        ? $"松开以安装到 {installation.DisplayLabel}"
+        : "当前版本没有 BepInEx/plugins，无法安装";
+
+    public static readonly string[] ArchiveExtensions = [".zip", ".7z", ".rar"];
+
+    public async Task InstallDroppedArchivesAsync(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0) return;
+        if (_pages.GetValueOrDefault("installed") is not InstalledViewModel installed) return;
+
+        if (Game.Selected is not { HasPluginsDirectory: true } installation)
+        {
+            SetStatus(DropHint, StatusKind.Warning);
+            return;
+        }
+
+        var names = string.Join(Environment.NewLine, paths.Select(path => "· " + Path.GetFileName(path)));
+        var confirmed = await _dialogs.ConfirmAsync(
+            "安装拖入的压缩包",
+            $"将把 {paths.Count} 个压缩包安装到「{installation.DisplayLabel}」：\n\n{names}\n\n安装前会逐个校验压缩包路径；完成后可在“已安装”中启用。",
+            "安装",
+            "取消");
+        if (!confirmed) return;
+
+        NavigateTo("installed");
+        await installed.InstallArchivesAsync(paths);
+    }
 
     public string VersionText
     {
@@ -182,10 +227,18 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         else
             _logger.Info(message);
 
-        ShowToast(message);
+        if (kind is not StatusKind.Info
+            && !message.StartsWith("正在", StringComparison.Ordinal)
+            && !message.StartsWith("准备", StringComparison.Ordinal)
+            && !message.StartsWith("已检测到", StringComparison.Ordinal))
+        {
+            _activity.Add(kind == StatusKind.Error ? "error" : "success", message);
+        }
+
+        ShowToast(message, kind);
     }
 
-    private async void ShowToast(string message)
+    private async void ShowToast(string message, StatusKind kind)
     {
         var generation = ++_toastGeneration;
         ToastMessage = message;
@@ -198,7 +251,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         if (generation != _toastGeneration) return;
         ToastOpacity = 1;
 
-        await Task.Delay(5000);
+        await Task.Delay(kind is StatusKind.Error or StatusKind.Warning ? 6500 : 5000);
         if (generation != _toastGeneration) return;
         ToastOpacity = 0;
 
@@ -297,6 +350,13 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             var result = string.IsNullOrWhiteSpace(installation.ExecutablePath)
                 ? await _launcher.LaunchViaSteamAsync(installation.Profile)
                 : await _launcher.LaunchDirectAsync(installation);
+
+            if (result.Success)
+            {
+                Settings.Current.LastLaunchAt = DateTimeOffset.Now;
+                await Settings.SaveAsync();
+                _activity.Add("launch", $"启动了「{installation.DisplayLabel}」", result.Message);
+            }
 
             SetStatus(
                 result.Success

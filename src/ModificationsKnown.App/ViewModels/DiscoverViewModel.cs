@@ -180,7 +180,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
     public ObservableCollection<ModCardViewModel> Mods { get; } = [];
 
-    public ObservableCollection<string> Categories { get; } = [];
+    public ObservableCollection<string> Categories { get; } = [AllCategories];
 
     public ObservableCollection<NexusModFile> Files { get; } = [];
 
@@ -802,11 +802,14 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                 .OrderBy(category => category, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            Categories.Clear();
-            Categories.Add(AllCategories);
+            // Keep the "all" entry in place instead of clearing: clearing leaves
+            // the ComboBox without a selection while SelectedCategory is set.
+            var previous = SelectedCategory;
+            while (Categories.Count > 1) Categories.RemoveAt(Categories.Count - 1);
             foreach (var category in categories) Categories.Add(category);
-            if (!Categories.Contains(SelectedCategory)) SelectedCategory = AllCategories;
-            else ApplyCategoryFilter();
+            var next = Categories.Contains(previous) ? previous : AllCategories;
+            if (SelectedCategory == next) ApplyCategoryFilter();
+            else SelectedCategory = next;
 
             TotalCount = result.TotalCount;
             TotalPages = result.TotalPages;

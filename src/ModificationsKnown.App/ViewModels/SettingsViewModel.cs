@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -76,6 +77,43 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
 
     public ObservableCollection<GameVersionRow> GameVersions { get; } = [];
 
+    private static readonly HashSet<string> EditableSettings =
+    [
+        nameof(GamePath),
+        nameof(NexusApiKey),
+        nameof(NexusDomain),
+        nameof(PageSize),
+        nameof(IncludeAdultMods),
+        nameof(ConfirmBeforeDelete)
+    ];
+
+    public bool HasUnsavedChanges
+    {
+        get
+        {
+            var saved = _settings.Current;
+            return NormalizeGamePath(GamePath) != saved.GamePath
+                   || NexusApiKey.Trim() != (saved.NexusApiKey ?? string.Empty)
+                   || NormalizeDomain(NexusDomain) != saved.NexusGameDomain
+                   || Math.Clamp(PageSize, 1, 100) != saved.PageSize
+                   || IncludeAdultMods != saved.IncludeAdultMods
+                   || ConfirmBeforeDelete != saved.ConfirmBeforeDelete;
+        }
+    }
+
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.PropertyName is not null && EditableSettings.Contains(e.PropertyName))
+            base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(HasUnsavedChanges)));
+    }
+
+    private static string? NormalizeGamePath(string path) =>
+        string.IsNullOrWhiteSpace(path) ? null : path.Trim();
+
+    private static string NormalizeDomain(string domain) =>
+        string.IsNullOrWhiteSpace(domain) ? "scavprototype" : domain.Trim();
+
     partial void OnConfirmBeforeDeleteChanged(bool value)
     {
         if (_loadingSettings || value) return;
@@ -119,7 +157,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
 
     public Task OnActivatedAsync()
     {
-        LoadFromSettings();
+        if (!HasUnsavedChanges) LoadFromSettings();
         RefreshNxmStatus();
         RefreshGameVersions();
         DataRoot = _dataLocation.CurrentRoot;
@@ -421,15 +459,14 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         IsBusy = true;
         try
         {
-            _settings.Current.GamePath = string.IsNullOrWhiteSpace(GamePath) ? null : GamePath.Trim();
+            _settings.Current.GamePath = NormalizeGamePath(GamePath);
             _settings.Current.NexusApiKey = NexusApiKey.Trim();
-            _settings.Current.NexusGameDomain = string.IsNullOrWhiteSpace(NexusDomain)
-                ? "scavprototype"
-                : NexusDomain.Trim();
+            _settings.Current.NexusGameDomain = NormalizeDomain(NexusDomain);
             _settings.Current.PageSize = Math.Clamp(PageSize, 1, 100);
             _settings.Current.IncludeAdultMods = IncludeAdultMods;
             _settings.Current.ConfirmBeforeDelete = ConfirmBeforeDelete;
             await _settings.SaveAsync();
+            OnPropertyChanged(nameof(HasUnsavedChanges));
             _shell.SetStatus("设置已保存。", StatusKind.Success);
             await _shell.RefreshGameAsync();
         }
@@ -580,6 +617,13 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
                 : string.IsNullOrWhiteSpace(status.CurrentCommand)
                     ? "尚未注册；只能手动粘贴 NXM 链接。"
                     : $"nxm:// 当前由其他程序处理：{status.CurrentCommand}";
+    }
+
+    [RelayCommand]
+    private void DiscardChanges()
+    {
+        LoadFromSettings();
+        _shell.SetStatus("已撤销未保存的修改。");
     }
 
     private void LoadFromSettings()

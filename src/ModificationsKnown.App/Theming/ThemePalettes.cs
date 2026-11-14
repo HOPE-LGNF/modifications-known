@@ -31,6 +31,26 @@ public static class ThemePalettes
     public static IReadOnlyList<ThemePalette> All { get; } =
     [
         new(
+            "daylight",
+            "日光",
+            "浅色白卡与柔和绿，适合白天长时间整理模组。",
+            "#EEF1EF",
+            "#F5F7F6",
+            "#FFFFFF",
+            "#F7F9F8",
+            "#DFE6E2",
+            "#1E2A24",
+            "#6D7F76",
+            "#3F9D6F",
+            "#4FB37F",
+            "#E5F3EC",
+            "#FFFFFF",
+            "#2F8F5B",
+            "#B57A25",
+            "#C25B5B",
+            "#E8F4ED",
+            "#DDF0E6"),
+        new(
             "moss",
             "苔原",
             "深绿与暖灰，安静、耐看，适合长时间整理模组。",

@@ -100,7 +100,10 @@ public static class ThemeService
         Current = palette;
         if (Application.Current is null) return;
 
-        Application.Current.RequestedThemeVariant = ThemeVariant.Dark;
+        var background = Color.Parse(palette.Background);
+        var luminance = (0.299 * background.R + 0.587 * background.G + 0.114 * background.B) / 255;
+        var isLight = luminance > 0.55;
+        Application.Current.RequestedThemeVariant = isLight ? ThemeVariant.Light : ThemeVariant.Dark;
 
         var resources = Application.Current.Resources;
         resources["AppBackgroundBrush"] = Brush(palette.Background);
@@ -121,6 +124,8 @@ public static class ThemeService
         resources["DangerBrush"] = Brush(palette.Danger);
         resources["HeroStartBrush"] = Brush(palette.HeroStart);
         resources["HeroEndBrush"] = Brush(palette.HeroEnd);
+        resources["CardShadow"] = BoxShadows.Parse(
+            isLight ? "0 10 28 0 #12000000" : "0 0 0 0 #00000000");
 
         // Avalonia's FluentTheme reads the platform accent color for checks,
         // sliders and selection. Without overriding these, a Windows accent
