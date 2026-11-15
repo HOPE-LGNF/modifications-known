@@ -28,6 +28,8 @@ public interface IUserDialogService
 
     Task<bool> PromptNxmAsync();
 
+    Task<bool> ConfirmBepInExUninstallAsync(GameInstallation installation);
+
     Task<InstanceDeletionPlan?> PickInstanceDeletionAsync(
         GameInstallation installation,
         IReadOnlyList<InstanceSaveFile> saves,
@@ -56,6 +58,15 @@ public sealed class UserDialogService : IUserDialogService
         if (owner is null) return false;
 
         var dialog = new ConfirmDialog(title, message, confirmText, cancelText, showCancel: true);
+        return await dialog.ShowDialog<bool>(owner);
+    }
+
+    public async Task<bool> ConfirmBepInExUninstallAsync(GameInstallation installation)
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return false;
+
+        var dialog = new UninstallBepInExDialog(installation);
         return await dialog.ShowDialog<bool>(owner);
     }
 

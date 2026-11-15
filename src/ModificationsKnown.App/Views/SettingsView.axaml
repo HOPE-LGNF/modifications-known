@@ -104,6 +104,11 @@
                                                         <MenuItem Header="下载 BepInEx 最新稳定版"
                                                                   IsVisible="{Binding CanInstallLoader}"
                                                                   Command="{Binding OpenLoaderDownloadCommand}" />
+                                                        <MenuItem Header="卸载 BepInEx…"
+                                                                  Foreground="{DynamicResource DangerBrush}"
+                                                                  IsVisible="{Binding CanUninstallLoader}"
+                                                                  IsEnabled="{Binding IsNotRunning}"
+                                                                  Command="{Binding UninstallLoaderCommand}" />
                                                         <Separator />
                                                         <MenuItem Header="删除版本…"
                                                                   Foreground="{DynamicResource DangerBrush}"

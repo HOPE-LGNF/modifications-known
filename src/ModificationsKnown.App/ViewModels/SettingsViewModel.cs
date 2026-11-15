@@ -69,6 +69,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private string _appUpdateStatus = "检查 GitHub Release 是否有新版本。";
 
     private string? _pendingUpdateAssetUrl;
+    private string? _pendingUpdateSha256;
     private string _pendingReleaseUrl = string.Empty;
 
     public string CurrentAppVersion => $"v{_appUpdates.CurrentVersion}";
@@ -218,6 +219,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
                 isCurrent,
                 SaveVersionAliasAsync,
                 InstallLoaderAsync,
+                UninstallBepInExAsync,
                 OpenBepInExDownloadAsync,
                 DeleteVersionAsync)
             {
@@ -413,6 +415,44 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         try
         {
             var result = await _bepInExInstaller.InstallAsync(row.Path, archive);
+            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            if (result.Success)
+            {
+                await _shell.RefreshGameAsync();
+                RefreshGameVersions();
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task UninstallBepInExAsync(GameVersionRow row)
+    {
+        var installation = row.Installation;
+        if (InstanceDeletionService.IsInstanceRunning(installation))
+        {
+            await _dialogs.AlertAsync(
+                "无法卸载 BepInEx",
+                $"「{installation.DisplayLabel}」正在运行。\n\n请先关闭游戏，再回来卸载。");
+            return;
+        }
+
+        if (!await _dialogs.ConfirmBepInExUninstallAsync(installation)) return;
+
+        if (InstanceDeletionService.IsInstanceRunning(installation))
+        {
+            await _dialogs.AlertAsync(
+                "无法卸载 BepInEx",
+                "实例在确认过程中启动了。请先关闭游戏；本次没有做任何修改。");
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var result = await _bepInExInstaller.UninstallAsync(installation.GameDirectory);
             _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
             if (result.Success)
             {
@@ -652,6 +692,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         {
             var check = await _appUpdates.CheckAsync();
             _pendingUpdateAssetUrl = check.AssetUrl;
+            _pendingUpdateSha256 = check.AssetSha256;
             _pendingReleaseUrl = check.ReleaseUrl;
             AppUpdateAvailable = check.HasUpdate;
             AppUpdateStatus = check.Message;
@@ -669,6 +710,13 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
 
         if (string.IsNullOrWhiteSpace(_pendingUpdateAssetUrl))
         {
+            OpenReleasePage();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_pendingUpdateSha256))
+        {
+            AppUpdateStatus = "Release 未提供 SHA-256 校验值，已打开 Release 页，请手动下载并核对。";
             OpenReleasePage();
             return;
         }
@@ -693,9 +741,9 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         var downloaded = Path.Combine(downloadDirectory, $"ModificationsKnown-{DateTime.Now:HHmmss}.exe");
 
         AppUpdateStatus = "正在下载更新…";
-        if (!await _appUpdates.DownloadAsync(_pendingUpdateAssetUrl, downloaded))
+        if (!await _appUpdates.DownloadAsync(_pendingUpdateAssetUrl, downloaded, _pendingUpdateSha256))
         {
-            AppUpdateStatus = "下载更新失败，请打开 Release 页手动下载。";
+            AppUpdateStatus = "下载校验失败（SHA-256 不匹配或网络失败），已打开 Release 页。";
             OpenReleasePage();
             return;
         }

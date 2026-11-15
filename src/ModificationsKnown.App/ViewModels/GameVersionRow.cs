@@ -29,6 +29,7 @@ public partial class GameVersionRow : ObservableObject
         bool isCurrent,
         Func<GameVersionRow, Task> saveAlias,
         Func<GameVersionRow, Task> installLoader,
+        Func<GameVersionRow, Task> uninstallLoader,
         Func<GameVersionRow, Task> openLoaderDownload,
         Func<GameVersionRow, Task> delete)
     {
@@ -55,6 +56,7 @@ public partial class GameVersionRow : ObservableObject
             () => CanSaveAlias);
 
         InstallLoaderCommand = new AsyncRelayCommand(() => installLoader(this));
+        UninstallLoaderCommand = new AsyncRelayCommand(() => uninstallLoader(this));
         OpenLoaderDownloadCommand = new AsyncRelayCommand(() => openLoaderDownload(this));
         DeleteCommand = new AsyncRelayCommand(() => delete(this));
     }
@@ -68,6 +70,8 @@ public partial class GameVersionRow : ObservableObject
     public string LoaderLabel => Installation.HasBepInEx ? "BepInEx 已安装" : "BepInEx 未安装";
 
     public bool CanInstallLoader => !Installation.HasBepInEx;
+
+    public bool CanUninstallLoader => Installation.HasBepInEx;
 
     public bool IsNotRunning => !IsRunning;
 
@@ -100,6 +104,8 @@ public partial class GameVersionRow : ObservableObject
     public IAsyncRelayCommand SaveAliasCommand { get; }
 
     public IAsyncRelayCommand InstallLoaderCommand { get; }
+
+    public IAsyncRelayCommand UninstallLoaderCommand { get; }
 
     public IAsyncRelayCommand OpenLoaderDownloadCommand { get; }
 

@@ -11,6 +11,7 @@ public sealed record AppUpdateCheck(
     string LatestVersion,
     string ReleaseUrl,
     string? AssetUrl,
+    string? AssetSha256,
     string Message);
 
 /// <summary>Checks the public GitHub release feed. Network failures and rate
@@ -49,7 +50,7 @@ public sealed class AppUpdateService
             if (!response.IsSuccessStatusCode)
             {
                 return new AppUpdateCheck(
-                    false, CurrentVersion, CurrentVersion, string.Empty, null,
+                    false, CurrentVersion, CurrentVersion, string.Empty, null, null,
                     response.StatusCode == System.Net.HttpStatusCode.Forbidden
                         ? "GitHub API 限流，暂时无法检查更新；请稍后再试。"
                         : $"GitHub 返回 {(int)response.StatusCode}，暂时无法检查更新。");
@@ -66,40 +67,49 @@ public sealed class AppUpdateService
                 : string.Empty;
 
             string? assetUrl = null;
+            string? assetSha256 = null;
             if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
             {
                 var candidates = assets.EnumerateArray()
                     .Select(asset => new
                     {
                         Url = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null,
-                        Name = asset.TryGetProperty("name", out var n) ? n.GetString() ?? string.Empty : string.Empty
+                        Name = asset.TryGetProperty("name", out var n) ? n.GetString() ?? string.Empty : string.Empty,
+                        Digest = asset.TryGetProperty("digest", out var d) ? d.GetString() : null
                     })
                     .Where(asset => !string.IsNullOrWhiteSpace(asset.Url)
                                     && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
-                assetUrl = candidates
+                var selected = candidates
                     .FirstOrDefault(asset => asset.Name.Contains("win-x64", StringComparison.OrdinalIgnoreCase))
-                    ?.Url
-                    ?? candidates.FirstOrDefault()?.Url;
+                    ?? candidates.FirstOrDefault();
+                assetUrl = selected?.Url;
+                assetSha256 = selected?.Digest?.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) == true
+                    ? selected.Digest["sha256:".Length..]
+                    : null;
             }
 
             if (!VersionText.IsNewer(latest, CurrentVersion))
             {
                 return new AppUpdateCheck(
-                    false, CurrentVersion, CurrentVersion, releaseUrl, null,
+                    false, CurrentVersion, CurrentVersion, releaseUrl, null, null,
                     $"已是最新版本（v{CurrentVersion}）。");
             }
 
             return new AppUpdateCheck(
-                true, CurrentVersion, latest, releaseUrl, assetUrl,
+                true, CurrentVersion, latest, releaseUrl, assetUrl, assetSha256,
                 $"发现新版本 v{latest}（当前 v{CurrentVersion}）。" +
-                (assetUrl is null ? " 这个 Release 没有可自动安装的 exe，请打开 Release 页。" : string.Empty));
+                (assetUrl is null
+                    ? " 这个 Release 没有可自动安装的 exe，请打开 Release 页。"
+                    : assetSha256 is null
+                        ? " Release 未提供 SHA-256，自动安装已禁用，请手动下载。"
+                        : string.Empty));
         }
         catch (Exception exception)
         {
             return new AppUpdateCheck(
-                false, CurrentVersion, CurrentVersion, string.Empty, null,
+                false, CurrentVersion, CurrentVersion, string.Empty, null, null,
                 $"检查更新失败：{exception.Message}");
         }
     }
@@ -107,6 +117,7 @@ public sealed class AppUpdateService
     public async Task<bool> DownloadAsync(
         string url,
         string destination,
+        string? expectedSha256 = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -121,11 +132,26 @@ public sealed class AppUpdateService
             var buffer = new byte[81920];
             long copied = 0;
             int read;
+            using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(
+                System.Security.Cryptography.HashAlgorithmName.SHA256);
             while ((read = await input.ReadAsync(buffer, cancellationToken)) > 0)
             {
                 await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                hash.AppendData(buffer, 0, read);
                 copied += read;
                 if (total is > 0) progress?.Report(copied / (double)total.Value);
+            }
+
+            await output.FlushAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(expectedSha256))
+            {
+                var actual = Convert.ToHexString(hash.GetHashAndReset());
+                if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { File.Delete(destination); } catch { }
+                    return false;
+                }
             }
 
             return true;

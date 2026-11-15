@@ -135,4 +135,53 @@ public sealed class BepInExInstaller
             entry.WriteToFile(target, new ExtractionOptions { ExtractFullPath = false, Overwrite = true });
         }
     }
+
+    /// <summary>Removes the loader directory and its root loader files. This
+    /// necessarily removes every mod/plugin/config under BepInEx.</summary>
+    public Task<OperationResult> UninstallAsync(
+        string gameDirectory,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() =>
+        {
+            if (!Directory.Exists(gameDirectory))
+                return OperationResult.Fail("游戏目录不存在。");
+
+            var removed = new List<string>();
+            try
+            {
+                var bepInEx = Path.Combine(gameDirectory, "BepInEx");
+                if (Directory.Exists(bepInEx))
+                {
+                    Directory.Delete(bepInEx, recursive: true);
+                    removed.Add("BepInEx/");
+                }
+
+                foreach (var name in new[] { "winhttp.dll", "doorstop_config.ini", ".doorstop_version" })
+                {
+                    var path = Path.Combine(gameDirectory, name);
+                    if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                        removed.Add(name);
+                    }
+                }
+
+                if (removed.Count == 0)
+                    return OperationResult.Ok("没有找到 BepInEx 文件，可能已经卸载。");
+
+                _logger?.Info($"BepInEx uninstalled from {gameDirectory}: {string.Join(", ", removed)}");
+                return OperationResult.Ok(
+                    $"已卸载 BepInEx，并删除该实例下的所有模组、插件和配置（{string.Join("、", removed)}）。");
+            }
+            catch (Exception exception)
+            {
+                _logger?.Warn($"BepInEx uninstall failed: {exception.Message}");
+                return OperationResult.Fail(
+                    $"卸载 BepInEx 失败：{exception.Message}" +
+                    (removed.Count > 0 ? $" 已删除：{string.Join("、", removed)}" : string.Empty));
+            }
+        }, cancellationToken);
+    }
+
 }
