@@ -52,6 +52,39 @@ public partial class ModCardViewModel : ObservableObject
     /// release may only have been built/tested against the demo.</summary>
     public bool MayBeDemoOnly =>
         Summary.UpdatedAt is { } updated && updated.ToLocalTime().Date < FullReleaseDate;
+
+    /// <summary>Author text mention only. This is deliberately *not* treated as
+    /// proof of demo-only support: sentences such as “no longer only for the
+    /// demo” exist, so the UI says “mentioned”, never “confirmed”.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowDemoHint))]
+    [NotifyPropertyChangedFor(nameof(DemoHintLabel))]
+    [NotifyPropertyChangedFor(nameof(DemoHintTooltip))]
+    private bool _descriptionMentionsDemo;
+
+    public bool MentionsDemo =>
+        ContainsDemoMention(Summary.Summary) || DescriptionMentionsDemo;
+
+    public static bool ContainsDemoMention(string? text) =>
+        !string.IsNullOrWhiteSpace(text)
+        && System.Text.RegularExpressions.Regex.IsMatch(
+            text,
+            @"\b(demo|试玩|演示版|demo\s*版)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    public bool ShowDemoHint => MayBeDemoOnly || MentionsDemo;
+
+    public string DemoHintLabel =>
+        MayBeDemoOnly && MentionsDemo ? "Demo 提示"
+        : MayBeDemoOnly ? "可能 Demo"
+        : "作者提到 Demo";
+
+    public string DemoHintTooltip =>
+        MayBeDemoOnly && MentionsDemo
+            ? "最近更新在正式版发布（2026-11-09）之前，且作者说明提到 Demo。这仍不是“仅支持 Demo”的证明，请阅读原文确认。"
+            : MayBeDemoOnly
+                ? "最近更新在正式版发布（2026-11-09）之前，可能仅适配 Demo；请查看作者说明。"
+                : "作者说明提到 Demo，但不代表明确仅支持 Demo；请阅读原文确认。";
 }
 
 public partial class DiscoverViewModel : ObservableObject, IAsyncPage
@@ -301,6 +334,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             if (version != _loadVersion) return;
 
             Details = details;
+            card.DescriptionMentionsDemo = ModCardViewModel.ContainsDemoMention(details.DescriptionText);
             HasLongDescription = details.DescriptionText.Length > 240;
             IsDescriptionExpanded = false;
             var imageUrl = details.GalleryUrls.FirstOrDefault() ?? card.Summary.ThumbnailUrl;

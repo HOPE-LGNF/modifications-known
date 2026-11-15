@@ -104,9 +104,9 @@
                                             BorderThickness="1"
                                             CornerRadius="4"
                                             Padding="5,2"
-                                            IsVisible="{Binding MayBeDemoOnly}"
-                                            ToolTip.Tip="最近更新在正式版发布（2026-11-09）之前，可能仅适配 Demo；请查看作者说明。">
-                                        <TextBlock Text="可能 Demo"
+                                            IsVisible="{Binding ShowDemoHint}"
+                                            ToolTip.Tip="{Binding DemoHintTooltip}">
+                                        <TextBlock Text="{Binding DemoHintLabel}"
                                                    FontSize="9"
                                                    Foreground="{DynamicResource WarningBrush}" />
                                     </Border>
@@ -231,9 +231,9 @@
                                             BorderThickness="1"
                                             CornerRadius="5"
                                             Padding="7,3"
-                                            IsVisible="{Binding SelectedCard.MayBeDemoOnly}"
-                                            ToolTip.Tip="最近更新在正式版发布（2026-11-09）之前，可能仅适配 Demo；请查看作者说明。">
-                                        <TextBlock Text="可能仅适配 Demo"
+                                            IsVisible="{Binding SelectedCard.ShowDemoHint}"
+                                            ToolTip.Tip="{Binding SelectedCard.DemoHintTooltip}">
+                                        <TextBlock Text="{Binding SelectedCard.DemoHintLabel}"
                                                    FontSize="10"
                                                    Foreground="{DynamicResource WarningBrush}" />
                                     </Border>
