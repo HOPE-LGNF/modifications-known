@@ -433,6 +433,9 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
         await EnsureNxmReadyAsync();
 
+        // Get the current NXM status for log.
+        var nxmReady = NxmRegistered;
+
         // Pin the operation inputs. The user may change the selection while a
         // long download is running; the installation must still belong to the
         // mod/file that was chosen when the command started.
@@ -540,7 +543,9 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     card.Summary.Version,
                     card.Summary.Id,
                     file?.Id);
-                DownloadStatus = "普通 API Key 无法获取直链。已打开 Nexus 文件页，请完成 Slow download，MK 会继续。";
+DownloadStatus = nxmReady
+    ? "普通 API Key 无法获取直链。已打开 Nexus 文件页，请点击页面上的 “Slow download”，并允许浏览器打开 MK，MK 会接管 NXM 下载。"
+    : "普通 API Key 无法获取直链，且 NXM 尚未注册，MK 无法自动接管下载。已打开 Nexus 文件页，请点击页面上的 “Slow download” 下载模组包后手动添加；到 设置 → 浏览器集成（NXM）注册后即可自动接管。";
                 ShowFreeDownloadWhy = true;
                 await OpenNexusFilePageAsync(card, version, file);
                 _shell.SetStatus(DownloadStatus, StatusKind.Warning);
