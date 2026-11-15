@@ -45,6 +45,13 @@ public partial class ModCardViewModel : ObservableObject
     public string Category => string.IsNullOrWhiteSpace(Summary.Category) ? "未分类" : Summary.Category;
 
     public string ReleaseDate => Summary.ReleaseDateLabel;
+
+    private static readonly DateTime FullReleaseDate = new(2026, 11, 9);
+
+    /// <summary>Conservative heuristic: a mod last updated before the full
+    /// release may only have been built/tested against the demo.</summary>
+    public bool MayBeDemoOnly =>
+        Summary.UpdatedAt is { } updated && updated.ToLocalTime().Date < FullReleaseDate;
 }
 
 public partial class DiscoverViewModel : ObservableObject, IAsyncPage

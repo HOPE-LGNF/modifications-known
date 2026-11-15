@@ -96,6 +96,20 @@
                                     CornerRadius="10"
                                     Padding="10">
                                 <Grid ColumnDefinitions="64,*" ColumnSpacing="10">
+                                    <Border Grid.ColumnSpan="2"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Top"
+                                            Background="{DynamicResource SurfaceBrush}"
+                                            BorderBrush="{DynamicResource WarningBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="5,2"
+                                            IsVisible="{Binding MayBeDemoOnly}"
+                                            ToolTip.Tip="最近更新在正式版发布（2026-11-09）之前，可能仅适配 Demo；请查看作者说明。">
+                                        <TextBlock Text="可能 Demo"
+                                                   FontSize="9"
+                                                   Foreground="{DynamicResource WarningBrush}" />
+                                    </Border>
                                     <Border Width="64" Height="64"
                                             CornerRadius="7"
                                             Background="{DynamicResource SurfaceAltBrush}"
@@ -212,6 +226,17 @@
                                                Classes="caption"
                                                VerticalAlignment="Center"
                                                ToolTip.Tip="Nexus 最近更新时间；不等于与正式版/试玩版兼容" />
+                                    <Border Background="{DynamicResource SurfaceBrush}"
+                                            BorderBrush="{DynamicResource WarningBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="5"
+                                            Padding="7,3"
+                                            IsVisible="{Binding SelectedCard.MayBeDemoOnly}"
+                                            ToolTip.Tip="最近更新在正式版发布（2026-11-09）之前，可能仅适配 Demo；请查看作者说明。">
+                                        <TextBlock Text="可能仅适配 Demo"
+                                                   FontSize="10"
+                                                   Foreground="{DynamicResource WarningBrush}" />
+                                    </Border>
                                     <TextBlock Text="{Binding SelectedCard.Downloads}" Classes="caption" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding SelectedCard.FileSize}" Classes="caption" VerticalAlignment="Center" />
                                 </StackPanel>
