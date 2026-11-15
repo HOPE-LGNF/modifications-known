@@ -216,6 +216,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly List<InstalledModItemViewModel> _allItems = [];
     private readonly Dictionary<string, Bitmap?> _thumbnailCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (bool HasUpdate, string Label)> _updateCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, LatestFile> _latestFiles = new(StringComparer.OrdinalIgnoreCase);
     private int _refreshGeneration;
 
     [ObservableProperty]
@@ -413,6 +414,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 {
                     succeeded++;
                     _updateCache.Remove(item.Mod.PackageId);
+                    _latestFiles.Remove(item.Mod.PackageId);
                     item.HasUpdate = false;
                 }
                 else
@@ -445,28 +447,24 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         var domain = _settings.Current.NexusGameDomain;
         try
         {
-            var files = await _nexus.GetFilesAsync(match.ModUid);
-            var file = files
-                .OrderByDescending(candidate => candidate.IsActive)
-                .ThenByDescending(candidate => candidate.LastUploadedAt)
-                .FirstOrDefault();
-            if (file is null)
+            if (!_latestFiles.TryGetValue(item.Mod.PackageId, out var latest))
             {
-                _shell.SetStatus($"「{item.Name}」在 Nexus 上没有可用文件。", StatusKind.Warning);
-                return false;
+                latest = await ResolveLatestAsync(match);
+                if (latest is null)
+                {
+                    _shell.SetStatus($"「{item.Name}」没有可下载的 Nexus 文件。", StatusKind.Warning);
+                    return false;
+                }
+
+                _latestFiles[item.Mod.PackageId] = latest;
             }
 
-            var versions = await _nexus.GetFileVersionsAsync(file.Id);
-            var version = versions.FirstOrDefault(candidate => candidate.IsPrimary)
-                          ?? versions.OrderByDescending(candidate => candidate.UploadedAt).FirstOrDefault();
-            if (version is null)
-            {
-                _shell.SetStatus($"「{item.Name}」没有可下载的版本。", StatusKind.Warning);
-                return false;
-            }
-
+            var file = latest.File;
+            var version = latest.Version;
             if (!VersionText.IsNewer(version.Version, item.Mod.Version))
             {
+                ClearUpdate(item);
+                UpdateSummary = "已是最新版本。";
                 _shell.SetStatus($"「{item.Name}」已是最新版本。", StatusKind.Info);
                 return false;
             }
@@ -549,6 +547,40 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         }
     }
 
+    private sealed record LatestFile(NexusModFile File, NexusFileVersion Version);
+
+    /// <summary>The single source of truth for “latest” is the newest Nexus
+    /// file and its primary version, not the mod-page display version. Check
+    /// and update both use this so badges cannot disagree with the action.</summary>
+    private async Task<LatestFile?> ResolveLatestAsync(
+        NexusMatch match,
+        CancellationToken cancellationToken = default)
+    {
+        var files = await _nexus.GetFilesAsync(match.ModUid, cancellationToken);
+        var file = files
+                       .Where(candidate => candidate.IsActive)
+                       .OrderByDescending(candidate => candidate.LastUploadedAt)
+                       .FirstOrDefault()
+                   ?? files.OrderByDescending(candidate => candidate.LastUploadedAt).FirstOrDefault();
+        if (file is null) return null;
+
+        var versions = await _nexus.GetFileVersionsAsync(file.Id, cancellationToken);
+        var version = versions.FirstOrDefault(candidate => candidate.IsPrimary)
+                      ?? versions.OrderByDescending(candidate => candidate.UploadedAt).FirstOrDefault();
+        if (version is null) return null;
+
+        return new LatestFile(file, version);
+    }
+
+    private void ClearUpdate(InstalledModItemViewModel item)
+    {
+        item.HasUpdate = false;
+        item.LatestVersionLabel = string.Empty;
+        _updateCache.Remove(item.Mod.PackageId);
+        _latestFiles.Remove(item.Mod.PackageId);
+        HasUpdates = _allItems.Any(candidate => candidate.HasUpdate);
+    }
+
     [RelayCommand]
     private async Task CheckUpdatesAsync()
     {
@@ -570,20 +602,19 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 checkedCount++;
                 try
                 {
-                    var details = await _nexus.GetModAsync(item.NexusDomain, item.NexusMatch.GameScopedId);
-                    var latest = details.Summary.Version;
-                    if (VersionText.IsNewer(latest, item.Mod.Version))
+                    var latest = await ResolveLatestAsync(item.NexusMatch);
+                    if (latest is not null
+                        && VersionText.IsNewer(latest.Version.Version, item.Mod.Version))
                     {
                         item.HasUpdate = true;
-                        item.LatestVersionLabel = VersionText.Label(latest);
+                        item.LatestVersionLabel = VersionText.Label(latest.Version.Version);
                         _updateCache[item.Mod.PackageId] = (true, item.LatestVersionLabel);
+                        _latestFiles[item.Mod.PackageId] = latest;
                         updates++;
                     }
                     else
                     {
-                        item.HasUpdate = false;
-                        item.LatestVersionLabel = string.Empty;
-                        _updateCache.Remove(item.Mod.PackageId);
+                        ClearUpdate(item);
                     }
                 }
                 catch
