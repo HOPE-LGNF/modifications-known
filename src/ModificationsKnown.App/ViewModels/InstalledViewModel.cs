@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Common;
+using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
@@ -215,6 +216,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly IFileDownloader _downloader;
     private readonly PackageUpdateService _updates;
     private readonly NxmProtocolRegistrar _nxmRegistrar;
+    private readonly IAppLogger _logger;
     private readonly List<InstalledModItemViewModel> _allItems = [];
     private readonly Dictionary<string, Bitmap?> _thumbnailCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (bool HasUpdate, string Label)> _updateCache = new(StringComparer.OrdinalIgnoreCase);
@@ -333,7 +335,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         GameProcessMonitor processMonitor,
         IFileDownloader downloader,
         PackageUpdateService updates,
-        NxmProtocolRegistrar nxmRegistrar)
+        NxmProtocolRegistrar nxmRegistrar,
+        IAppLogger logger)
     {
         _shell = shell;
         _operations = operations;
@@ -350,6 +353,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         _downloader = downloader;
         _updates = updates;
         _nxmRegistrar = nxmRegistrar;
+        _logger = logger;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
     }
 
@@ -474,6 +478,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         if (match is null) return false;
 
         var domain = _settings.Current.NexusGameDomain;
+        LatestFile? latestForPage = null;
+        _logger.Info($"[Update] start package={item.Mod.PackageId} installed={item.Mod.Version ?? "unknown"} match={match.GameScopedId}/{match.ModUid}");
         try
         {
             if (!_latestFiles.TryGetValue(item.Mod.PackageId, out var latest))
@@ -488,8 +494,10 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 _latestFiles[item.Mod.PackageId] = latest;
             }
 
+            latestForPage = latest;
             var file = latest.File;
             var version = latest.Version;
+            _logger.Info($"[Update] candidate file={file.Id} version={version.Version} fileVersionId={version.GameScopedId}");
             if (!VersionText.IsNewer(version.Version, item.Mod.Version))
             {
                 ClearUpdate(item);
@@ -499,6 +507,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             }
 
             var links = await _nexus.GetDownloadLinksAsync(domain, version.GameScopedId);
+            _logger.Info($"[Update] download links for fileVersion={version.GameScopedId}: {links.Count}");
             var link = links.FirstOrDefault(candidate =>
                 Uri.TryCreate(candidate.Url, UriKind.Absolute, out _));
             if (link is null)
@@ -506,7 +515,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 _shell.SetStatus(
                     $"Nexus 没有为「{item.Name}」返回直链；免费账号请到模组发现用 NXM 或浏览器下载。",
                     StatusKind.Warning);
-                OpenNexusPage(match, domain);
+                await OpenNexusFilePageAsync(match, domain, latest);
                 return false;
             }
 
@@ -528,7 +537,9 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             var destination = Path.Combine(AppPaths.DownloadsDirectory, fileName);
 
             _shell.SetStatus($"正在下载「{item.Name}」{VersionText.Label(version.Version)}…");
+            _logger.Info($"[Update] downloading {link.Url} -> {destination}");
             var download = await _downloader.DownloadAsync(link.Url, destination);
+            _logger.Info($"[Update] download success={download.Success} message={download.Message}");
             if (!download.Success)
             {
                 _shell.SetStatus(download.Message, StatusKind.Error);
@@ -548,13 +559,16 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 destination,
                 source,
                 backup);
+            _logger.Info($"[Update] install success={result.Success} backup={result.BackupPath ?? "none"} message={result.Message}");
             _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
             return result.Success;
         }
         catch (NexusApiException exception)
         {
+            _logger.Warn($"[Update] Nexus API failed status={exception.StatusCode} message={exception.Message}");
             _shell.SetStatus(exception.Message, StatusKind.Error);
-            if (exception.StatusCode is 401 or 403) OpenNexusPage(match, domain);
+            if (exception.StatusCode is 401 or 403)
+                await OpenNexusFilePageAsync(match, domain, latestForPage);
             return false;
         }
         catch (Exception exception)
@@ -564,15 +578,57 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         }
     }
 
-    private static void OpenNexusPage(NexusMatch match, string domain)
+    private async Task OpenNexusFilePageAsync(
+        NexusMatch match,
+        string domain,
+        LatestFile? latest)
     {
+        var url = $"https://www.nexusmods.com/{domain}/mods/{match.GameScopedId}?tab=files";
+        long? legacyFileId = null;
         try
         {
-            Process.Start(new ProcessStartInfo(match.PageUrl(domain)) { UseShellExecute = true });
+            if (latest is not null)
+            {
+                legacyFileId = await _nexus.GetLegacyFileIdAsync(
+                    domain,
+                    match.GameScopedId,
+                    latest.Version.Name,
+                    latest.Version.Version,
+                    latest.Version.UploadedAt);
+
+                if (legacyFileId is null)
+                {
+                    legacyFileId = await _nexus.GetLegacyFileIdAsync(
+                        domain,
+                        match.GameScopedId,
+                        latest.File.Name,
+                        latest.Version.Version,
+                        latest.File.LastUploadedAt);
+                }
+            }
         }
-        catch
+        catch (Exception exception)
         {
-            // The status message already explains the fallback.
+            _logger.Warn($"[Update] legacy file id lookup failed: {exception.Message}");
+        }
+
+        if (legacyFileId is not null)
+            url += $"&file_id={legacyFileId.Value}";
+        else
+            _logger.Warn("[Update] no legacy file id; opening file page without file_id");
+
+        url += "&nmm=1";
+        _logger.Info($"[Update] opening {url}");
+
+        try
+        {
+            var process = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            _logger.Info($"[Update] Process.Start returned pid={process?.Id.ToString() ?? "null"}");
+        }
+        catch (Exception exception)
+        {
+            _logger.Error("[Update] failed to open Nexus file page", exception);
+            _shell.SetStatus($"打开浏览器失败：{exception.Message}", StatusKind.Error);
         }
     }
 
