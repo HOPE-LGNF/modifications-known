@@ -527,7 +527,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     file?.Id);
                 DownloadStatus = "普通 API Key 无法获取直链。已打开 Nexus 文件页，请完成 Slow download，MK 会继续。";
                 ShowFreeDownloadWhy = true;
-                await OpenNexusFilePageAsync();
+                await OpenNexusFilePageAsync(card, version, file);
                 _shell.SetStatus(DownloadStatus, StatusKind.Warning);
                 return;
             }
@@ -560,50 +560,64 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     }
 
     [RelayCommand]
-    private async Task OpenNexusFilePageAsync()
+    private Task OpenNexusFilePageAsync() =>
+        OpenNexusFilePageAsync(SelectedCard, SelectedVersion, SelectedFile);
+
+    private async Task OpenNexusFilePageAsync(
+        ModCardViewModel? card,
+        NexusFileVersion? version,
+        NexusModFile? file)
     {
-        if (SelectedCard is null) return;
+        card ??= SelectedCard;
+        version ??= SelectedVersion;
+        file ??= SelectedFile;
+        if (card is null) return;
+
+        // NXM registration is not required just to *view* the file page. Keep
+        // the page openable with the file/nmm parameters even if the protocol
+        // is not registered yet; downloading still needs NXM or a manual click.
         if (!NxmRegistered)
         {
-            _shell.SetStatus("还未注册 NXM 链接。请到设置 → 浏览器集成（NXM）注册。", StatusKind.Warning);
-            return;
+            _shell.SetStatus(
+                "还未注册 NXM 链接；已打开文件页，可手动完成 Slow download，或先到设置注册 NXM。",
+                StatusKind.Warning);
         }
 
         var domain = _settings.Current.NexusGameDomain;
-        var url = $"https://www.nexusmods.com/{domain}/mods/{SelectedCard.Summary.GameScopedId}?tab=files";
+        var modId = card.Summary.GameScopedId;
+        var url = $"https://www.nexusmods.com/{domain}/mods/{modId}?tab=files";
 
         // v3 file ids are not the legacy ids the website expects. Resolve the
-        // v1 file id by version name first, then by the file name. If neither
-        // matches, omit the parameter rather than opening an unrelated file.
+        // v1 file id by version name first, then by the file name. A failed
+        // lookup must not prevent opening the page with &nmm=1.
         long? legacyFileId = null;
-        if (SelectedVersion is { } version)
+        try
         {
-            legacyFileId = await _nexus.GetLegacyFileIdAsync(
-                domain,
-                SelectedCard.Summary.GameScopedId,
-                version.Name,
-                version.Version,
-                version.UploadedAt);
-        }
+            if (version is not null)
+            {
+                legacyFileId = await _nexus.GetLegacyFileIdAsync(
+                    domain, modId, version.Name, version.Version, version.UploadedAt);
+            }
 
-        if (legacyFileId is null && SelectedFile is { } file)
+            if (legacyFileId is null && file is not null)
+            {
+                legacyFileId = await _nexus.GetLegacyFileIdAsync(
+                    domain,
+                    modId,
+                    file.Name,
+                    version?.Version ?? card.Summary.Version ?? string.Empty,
+                    file.LastUploadedAt);
+            }
+        }
+        catch
         {
-            legacyFileId = await _nexus.GetLegacyFileIdAsync(
-                domain,
-                SelectedCard.Summary.GameScopedId,
-                file.Name,
-                SelectedVersion?.Version ?? string.Empty,
-                file.LastUploadedAt);
+            // Fall through: open the page without file_id.
         }
 
         if (legacyFileId is not null)
-        {
             url += $"&file_id={legacyFileId.Value}";
-        }
         else
-        {
-            _shell.SetStatus("未能解析这个文件的网站 file_id，已打开模组文件页；请手动选择文件。", StatusKind.Warning);
-        }
+            _shell.SetStatus("未能解析这个文件的网站 file_id，已打开文件页；请手动选择文件。", StatusKind.Warning);
 
         url += "&nmm=1";
 
