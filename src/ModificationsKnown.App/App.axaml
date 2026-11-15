@@ -21,6 +21,7 @@
         <SolidColorBrush x:Key="SuccessBrush" Color="#7DCE9A" />
         <SolidColorBrush x:Key="WarningBrush" Color="#E5B567" />
         <SolidColorBrush x:Key="DangerBrush" Color="#E07A7A" />
+        <SolidColorBrush x:Key="DangerDeepBrush" Color="#B04C4C" />
         <SolidColorBrush x:Key="DangerContrastBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="HeroStartBrush" Color="#1B3A2B" />
         <SolidColorBrush x:Key="HeroEndBrush" Color="#274D38" />
@@ -173,14 +174,40 @@
         </Style>
 
         <Style Selector="Button.launch.danger">
-            <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
+            <Setter Property="Background" Value="{DynamicResource DangerDeepBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerDeepBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource DangerContrastBrush}" />
         </Style>
 
         <Style Selector="Button.launch.danger:pointerover">
             <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
+        </Style>
+
+        <!-- Fluent's Button template paints its own pointerover state; override
+             the inner presenter so the close button never turns grey. -->
+        <Style Selector="Button.launch.danger /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DangerDeepBrush}" />
+        </Style>
+
+        <Style Selector="Button.launch.danger:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+        </Style>
+
+        <Style Selector="Button.launch.danger /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DangerDeepBrush}" />
+        </Style>
+
+        <Style Selector="Button.launch.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+        </Style>
+
+        <Style Selector="Button.launch.danger /template/ Border#PART_Background">
+            <Setter Property="Background" Value="{DynamicResource DangerDeepBrush}" />
+        </Style>
+
+        <Style Selector="Button.launch.danger:pointerover /template/ Border#PART_Background">
+            <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
         </Style>
 
         <Style Selector="Button.launch">

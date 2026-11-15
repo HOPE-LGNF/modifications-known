@@ -557,19 +557,41 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         CancellationToken cancellationToken = default)
     {
         var files = await _nexus.GetFilesAsync(match.ModUid, cancellationToken);
-        var file = files
-                       .Where(candidate => candidate.IsActive)
-                       .OrderByDescending(candidate => candidate.LastUploadedAt)
-                       .FirstOrDefault()
-                   ?? files.OrderByDescending(candidate => candidate.LastUploadedAt).FirstOrDefault();
-        if (file is null) return null;
+        if (files.Count == 0) return null;
 
-        var versions = await _nexus.GetFileVersionsAsync(file.Id, cancellationToken);
-        var version = versions.FirstOrDefault(candidate => candidate.IsPrimary)
-                      ?? versions.OrderByDescending(candidate => candidate.UploadedAt).FirstOrDefault();
-        if (version is null) return null;
+        // A mod can expose a newer version under a secondary/optional file while
+        // the active file still points at the old version. Compare every file's
+        // versions and keep the highest one, not just the active file's primary.
+        LatestFile? best = null;
+        foreach (var file in files)
+        {
+            var versions = await _nexus.GetFileVersionsAsync(file.Id, cancellationToken);
+            foreach (var version in versions)
+            {
+                if (string.IsNullOrWhiteSpace(version.Version)) continue;
 
-        return new LatestFile(file, version);
+                if (best is null
+                    || VersionText.IsNewer(version.Version, best.Version.Version)
+                    || (string.Equals(version.Version.Trim(), best.Version.Version.Trim(), StringComparison.OrdinalIgnoreCase)
+                        && version.UploadedAt > best.Version.UploadedAt))
+                {
+                    best = new LatestFile(file, version);
+                }
+            }
+        }
+
+        if (best is not null) return best;
+
+        var fallbackFile = files
+            .OrderByDescending(candidate => candidate.IsActive)
+            .ThenByDescending(candidate => candidate.LastUploadedAt)
+            .FirstOrDefault();
+        if (fallbackFile is null) return null;
+
+        var fallbackVersions = await _nexus.GetFileVersionsAsync(fallbackFile.Id, cancellationToken);
+        var fallback = fallbackVersions.FirstOrDefault(candidate => candidate.IsPrimary)
+                       ?? fallbackVersions.OrderByDescending(candidate => candidate.UploadedAt).FirstOrDefault();
+        return fallback is null ? null : new LatestFile(fallbackFile, fallback);
     }
 
     private void ClearUpdate(InstalledModItemViewModel item)

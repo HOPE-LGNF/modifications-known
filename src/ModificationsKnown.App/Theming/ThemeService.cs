@@ -126,6 +126,11 @@ public static class ThemeService
         resources["SuccessBrush"] = Brush(palette.Success);
         resources["WarningBrush"] = Brush(palette.Warning);
         resources["DangerBrush"] = Brush(palette.Danger);
+        var danger = Color.Parse(palette.Danger);
+        resources["DangerDeepBrush"] = new SolidColorBrush(Color.FromRgb(
+            (byte)(danger.R * 0.82),
+            (byte)(danger.G * 0.82),
+            (byte)(danger.B * 0.82)));
         resources["DangerContrastBrush"] = Brush("#FFFFFF");
         resources["HeroStartBrush"] = Brush(palette.HeroStart);
         resources["HeroEndBrush"] = Brush(palette.HeroEnd);
