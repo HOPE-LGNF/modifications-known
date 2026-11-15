@@ -316,6 +316,13 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         if (generation == _toastGeneration) IsToastVisible = false;
     }
 
+    public event Action<IReadOnlyCollection<string>>? ModsChanged;
+
+    public void NotifyModsChanged(IReadOnlyCollection<string> packageNames)
+    {
+        if (packageNames.Count > 0) ModsChanged?.Invoke(packageNames);
+    }
+
     public async Task HandleNxmLinkAsync(string raw)
     {
         if (_pages.GetValueOrDefault("discover") is not DiscoverViewModel discover)
@@ -324,7 +331,9 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             return;
         }
 
-        NavigateTo("discover");
+        // NXM can arrive while the user is on Installed/Saves/Settings. Never
+        // yank them to Discover; the download still runs in the background and
+        // reports through the status bar.
         await discover.HandleNxmLinkAsync(raw);
     }
 

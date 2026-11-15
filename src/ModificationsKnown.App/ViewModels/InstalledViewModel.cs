@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
@@ -350,6 +351,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         _nexus = nexus;
         _thumbnails = thumbnails;
         _processMonitor = processMonitor;
+        _shell.ModsChanged += packageNames =>
+            Dispatcher.UIThread.Post(() => OnModsChanged(packageNames));
         _downloader = downloader;
         _updates = updates;
         _nxmRegistrar = nxmRegistrar;
@@ -365,6 +368,33 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
     [RelayCommand]
     private Task RefreshAsync() => RefreshCoreAsync();
+
+    private void OnModsChanged(IReadOnlyCollection<string> packageNames)
+    {
+        if (packageNames.Count == 0) return;
+
+        foreach (var packageName in packageNames)
+        {
+            _updateCache.Remove(packageName);
+            _latestFiles.Remove(packageName);
+            foreach (var item in _allItems.Where(candidate =>
+                         string.Equals(candidate.Mod.PackageId, packageName, StringComparison.OrdinalIgnoreCase)))
+            {
+                item.HasUpdate = false;
+                item.LatestVersionLabel = string.Empty;
+            }
+        }
+
+        HasUpdates = _allItems.Any(candidate => candidate.HasUpdate);
+        _ = RefreshAfterModsChangedAsync();
+    }
+
+    private async Task RefreshAfterModsChangedAsync()
+    {
+        await RefreshCoreAsync();
+        HasUpdates = _allItems.Any(candidate => candidate.HasUpdate);
+        UpdateSummary = HasUpdates ? "仍有可更新项，可重新检查。" : "已更新，可更新标记已清除。";
+    }
 
     private async Task EnsureNxmReadyAsync()
     {

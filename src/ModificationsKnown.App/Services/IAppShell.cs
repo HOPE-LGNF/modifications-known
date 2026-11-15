@@ -28,6 +28,10 @@ public interface IAppShell
 
     Task LaunchGameAsync();
 
+    event Action<IReadOnlyCollection<string>>? ModsChanged;
+
+    void NotifyModsChanged(IReadOnlyCollection<string> packageNames);
+
     void NavigateTo(string key);
 }
 

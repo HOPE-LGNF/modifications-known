@@ -523,6 +523,10 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     file?.Id);
                 _shell.SetStatus(installed.Message, StatusKind.Success);
                 DownloadStatus = updateTarget is null ? "安装完成。" : "更新完成。";
+                _shell.NotifyModsChanged(
+                    installed.Packages.Where(package => package.Success)
+                        .Select(package => package.PackageName)
+                        .ToList());
             }
             else
             {
@@ -841,6 +845,14 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     modUid,
                     nexusVersion,
                     nxm.FileId.ToString());
+            }
+
+            if (installed.Success)
+            {
+                _shell.NotifyModsChanged(
+                    installed.Packages.Where(package => package.Success)
+                        .Select(package => package.PackageName)
+                        .ToList());
             }
 
             _shell.SetStatus(installed.Message, installed.Success ? StatusKind.Success : StatusKind.Error);
