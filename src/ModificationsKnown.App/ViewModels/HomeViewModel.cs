@@ -4,10 +4,12 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Games;
+using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
 using ModificationsKnown.Infrastructure.Storage;
+using ModificationsKnown.Infrastructure.Windows;
 
 namespace ModificationsKnown.App.ViewModels;
 
@@ -35,6 +37,8 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private readonly ActivityLogService _activity;
     private readonly SaveIsolationService _saveIsolation;
     private readonly GameProcessMonitor _processMonitor;
+    private readonly NxmProtocolRegistrar _nxmRegistrar;
+    private readonly IUserDialogService _dialogs;
     private readonly ModGroupStore _groups = new();
     private DateTimeOffset _lastAccountCheck;
     private int _modCount;
@@ -109,6 +113,21 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     [RelayCommand]
     private Task LaunchGame() => _shell.LaunchGameAsync();
 
+    [RelayCommand]
+    private async Task ChecklistActionAsync(HomeChecklistItem? item)
+    {
+        if (item is null) return;
+
+        if (string.Equals(item.TargetPage, "nxm", StringComparison.OrdinalIgnoreCase))
+        {
+            await NxmRegistrationFlow.RegisterAsync(_dialogs, _nxmRegistrar, _shell);
+            RebuildChecklist();
+            return;
+        }
+
+        _shell.NavigateTo(item.TargetPage);
+    }
+
     public bool HasActivity => RecentActivity.Count > 0;
 
     public bool HasNoActivity => !HasActivity;
@@ -122,7 +141,9 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         INexusModsClient nexus,
         ActivityLogService activity,
         SaveIsolationService saveIsolation,
-        GameProcessMonitor processMonitor)
+        GameProcessMonitor processMonitor,
+        NxmProtocolRegistrar nxmRegistrar,
+        IUserDialogService dialogs)
     {
         _shell = shell;
         _locator = locator;
@@ -133,6 +154,8 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         _activity = activity;
         _saveIsolation = saveIsolation;
         _processMonitor = processMonitor;
+        _nxmRegistrar = nxmRegistrar;
+        _dialogs = dialogs;
         _shell.Game.Changed += OnGameChanged;
         _activity.Changed += (_, _) => Dispatcher.UIThread.Post(() => _ = RefreshAsync());
         _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(UpdateRunningState);
@@ -258,7 +281,20 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         Checklist.Add(new(3, "配置 Nexus API Key",
             NexusConfigured ? NexusAccountDetail : "浏览可匿名，查看文件和下载需要 API Key",
             NexusConfigured, "去设置", "settings"));
-        Checklist.Add(new(4, "安装第一个模组",
+
+        var nxmStatus = _nxmRegistrar.GetStatus();
+        var nxmRegistered = nxmStatus.RegisteredForCurrentExecutable;
+        Checklist.Add(new(4, "注册 NXM 链接",
+            nxmRegistered
+                ? "NXM 已注册，浏览器下载可自动接管"
+                : nxmStatus.Supported
+                    ? "免费账号下载模组需要；注册后可接收浏览器下载"
+                    : "当前平台不支持 NXM 协议",
+            nxmRegistered || !nxmStatus.Supported,
+            "去注册",
+            "nxm"));
+
+        Checklist.Add(new(5, "安装第一个模组",
             _modCount > 0 ? $"已安装 {_modCount} 个包" : "到模组发现浏览，或把压缩包拖进窗口",
             _modCount > 0, "去模组发现", "discover"));
     }

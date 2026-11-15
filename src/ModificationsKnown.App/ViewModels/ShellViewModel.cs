@@ -162,7 +162,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             logger);
         _pages = new Dictionary<string, object>
         {
-            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor),
+            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor, nxmRegistrar, dialogs),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs, updates, logger),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor, downloader, updates, nxmRegistrar, logger),
             ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger, _processMonitor),

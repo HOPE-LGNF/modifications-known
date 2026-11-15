@@ -194,8 +194,8 @@
                                                         Content="{Binding ActionText}"
                                                         IsVisible="{Binding IsPending}"
                                                         VerticalAlignment="Center"
-                                                        Command="{Binding $parent[UserControl].DataContext.GoToCommand}"
-                                                        CommandParameter="{Binding TargetPage}" />
+                                                        Command="{Binding $parent[UserControl].DataContext.ChecklistActionCommand}"
+                                                        CommandParameter="{Binding}" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>

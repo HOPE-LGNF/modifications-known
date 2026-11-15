@@ -4,7 +4,7 @@
         xmlns:views="using:ModificationsKnown.App.Views"
         x:Class="ModificationsKnown.App.Views.MainWindow"
         Title="已知改装 / Modifications Known"
-        Icon="/Assets/ModificationsKnown.ico"
+        Icon="/Assets/ModificationsKnown-64.png"
         Width="1240" Height="780"
         MinWidth="1020" MinHeight="680"
         WindowStartupLocation="CenterScreen"
@@ -53,23 +53,26 @@
                             Spacing="10"
                             VerticalAlignment="Center"
                             IsHitTestVisible="False">
-                    <Border Width="32" Height="32"
-                            CornerRadius="9"
-                            Background="{DynamicResource AccentSoftBrush}"
-                            BorderBrush="{DynamicResource AccentBrush}"
-                            BorderThickness="1">
-                        <TextBlock Text="MK"
-                                   FontSize="12"
-                                   FontWeight="Bold"
-                                   Foreground="{DynamicResource AccentBrush}"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center" />
-                    </Border>
+                    <Image Source="/Assets/ModificationsKnown-32.png"
+                           Width="32" Height="32"
+                           Stretch="Uniform" />
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="已知改装" FontSize="16" FontWeight="SemiBold" />
-                        <TextBlock Text="MODIFICATIONS KNOWN"
-                                   FontSize="9"
-                                   Foreground="{DynamicResource TextSecondaryBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="MODIFICATIONS KNOWN"
+                                       FontSize="9"
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                            <Border Background="{DynamicResource AccentSoftBrush}"
+                                    BorderBrush="{DynamicResource AccentBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="3"
+                                    Padding="4,0">
+                                <TextBlock Text="BETA"
+                                           FontSize="8"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource AccentBrush}" />
+                            </Border>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
 
