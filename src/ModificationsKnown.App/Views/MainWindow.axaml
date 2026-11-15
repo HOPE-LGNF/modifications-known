@@ -4,6 +4,7 @@
         xmlns:views="using:ModificationsKnown.App.Views"
         x:Class="ModificationsKnown.App.Views.MainWindow"
         Title="已知改装 / Modifications Known"
+        Icon="/Assets/ModificationsKnown.ico"
         Width="1240" Height="780"
         MinWidth="1020" MinHeight="680"
         WindowStartupLocation="CenterScreen"

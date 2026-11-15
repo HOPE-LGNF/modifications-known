@@ -393,7 +393,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     {
         await RefreshCoreAsync();
         HasUpdates = _allItems.Any(candidate => candidate.HasUpdate);
-        UpdateSummary = HasUpdates ? "仍有可更新项，可重新检查。" : "已更新，可更新标记已清除。";
+        UpdateSummary = HasUpdates ? "仍有可更新项，可重新检查。" : string.Empty;
     }
 
     private async Task EnsureNxmReadyAsync()
@@ -437,6 +437,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 item.HasUpdate = false;
                 await RefreshCoreAsync();
                 HasUpdates = _allItems.Any(candidate => candidate.HasUpdate);
+                UpdateSummary = HasUpdates ? "仍有可更新项，可重新检查。" : string.Empty;
             }
         }
         finally
@@ -488,6 +489,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
             await RefreshCoreAsync();
             HasUpdates = _allItems.Any(candidate => candidate.HasUpdate);
+            UpdateSummary = HasUpdates ? "仍有可更新项，可重新检查。" : string.Empty;
             _shell.SetStatus(
                 $"一键更新完成：成功 {succeeded} 个" + (skipped > 0 ? $"，跳过/失败 {skipped} 个。" : "。"),
                 skipped == 0 ? StatusKind.Success : StatusKind.Warning);
