@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Common;
+using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Network;
@@ -58,6 +59,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private readonly NxmProtocolRegistrar _nxmRegistrar;
     private readonly IUserDialogService _dialogs;
     private readonly PackageUpdateService _updates;
+    private readonly IAppLogger _logger;
 
     private bool _suppressFileSelection;
     private int _loadVersion;
@@ -152,22 +154,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     [RelayCommand]
     private async Task RegisterNxmAsync()
     {
-        var status = _nxmRegistrar.GetStatus();
-        var hasOtherHandler = !status.RegisteredForCurrentExecutable
-                              && !string.IsNullOrWhiteSpace(status.CurrentCommand);
-
-        if (hasOtherHandler)
-        {
-            var confirmed = await _dialogs.ConfirmAsync(
-                "覆盖 NXM 关联",
-                $"当前 nxm:// 由以下程序处理：\n{status.CurrentCommand}\n\n是否让 MK 覆盖它？其他程序的关联会先备份，取消注册时尝试恢复。",
-                "覆盖",
-                "取消");
-            if (!confirmed) return;
-        }
-
-        var result = _nxmRegistrar.Register(overwriteExisting: hasOtherHandler);
-        _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+        await NxmRegistrationFlow.RegisterAsync(_dialogs, _nxmRegistrar, _shell);
         RefreshNxmStatus();
     }
 
@@ -192,7 +179,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         IInstalledSourceStore sources,
         NxmProtocolRegistrar nxmRegistrar,
         IUserDialogService dialogs,
-        PackageUpdateService updates)
+        PackageUpdateService updates,
+        IAppLogger logger)
     {
         _shell = shell;
         _nexus = nexus;
@@ -204,6 +192,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         _nxmRegistrar = nxmRegistrar;
         _dialogs = dialogs;
         _updates = updates;
+        _logger = logger;
         Mods.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ShowListPlaceholder));
         ApiKeyMissing = string.IsNullOrWhiteSpace(settings.Current.NexusApiKey);
         _shell.Game.Changed += (_, _) => OnPropertyChanged(nameof(CanInstall));
@@ -337,6 +326,30 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         }
     }
 
+    private async Task EnsureNxmReadyAsync()
+    {
+        if (NxmRegistered || NxmNotRegistered == false) return;
+
+        var premium = false;
+        try
+        {
+            var account = await _nexus.GetAccountStatusAsync();
+            premium = account.IsPremium;
+        }
+        catch
+        {
+            // Unknown tier: still offer NXM, especially when no API key is set.
+        }
+
+        if (premium) return;
+
+        var go = await _dialogs.PromptNxmAsync();
+        if (!go) return;
+
+        await NxmRegistrationFlow.RegisterAsync(_dialogs, _nxmRegistrar, _shell);
+        RefreshNxmStatus();
+    }
+
     private async Task<(bool Proceed, InstalledMod? Target, bool Backup)> PrepareUpdateAsync(
         GameInstallation installation,
         string nexusName,
@@ -417,6 +430,8 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             _shell.SetStatus("当前游戏没有安装 BepInEx，无法安装模组。", StatusKind.Warning);
             return;
         }
+
+        await EnsureNxmReadyAsync();
 
         // Pin the operation inputs. The user may change the selection while a
         // long download is running; the installation must still belong to the
@@ -586,6 +601,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         var domain = _settings.Current.NexusGameDomain;
         var modId = card.Summary.GameScopedId;
         var url = $"https://www.nexusmods.com/{domain}/mods/{modId}?tab=files";
+        _logger.Info($"[NexusPage] registered={NxmRegistered} mod={modId} card={card.Summary.Id} version={version?.Version ?? "null"} file={file?.Id ?? "null"}");
 
         // v3 file ids are not the legacy ids the website expects. Resolve the
         // v1 file id by version name first, then by the file name. A failed
@@ -620,10 +636,12 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             _shell.SetStatus("未能解析这个文件的网站 file_id，已打开文件页；请手动选择文件。", StatusKind.Warning);
 
         url += "&nmm=1";
+        _logger.Info($"[NexusPage] opening {url}");
 
         try
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            var process = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            _logger.Info($"[NexusPage] Process.Start returned pid={process?.Id.ToString() ?? "null"}");
         }
         catch (Exception exception)
         {

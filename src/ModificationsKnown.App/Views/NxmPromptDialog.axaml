@@ -1,0 +1,36 @@
+<views:DialogWindow xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:views="using:ModificationsKnown.App.Views"
+                    x:Class="ModificationsKnown.App.Views.NxmPromptDialog"
+                    Title="需要 NXM 或 Premium">
+    <Grid>
+        <Border Background="{DynamicResource DialogScrimBrush}" />
+        <Border HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Width="500"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="16"
+                Padding="24"
+                BoxShadow="0 20 56 0 #A0000000">
+            <StackPanel Spacing="12">
+                <TextBlock Text="免费账号需要 NXM" FontSize="20" FontWeight="SemiBold" />
+                <TextBlock Text="Nexus 免费账号无法直接生成下载直链。注册 NXM 后，MK 可以接收浏览器的“Mod manager download”并自动继续下载和安装。"
+                           Classes="muted"
+                           FontSize="13"
+                           TextWrapping="Wrap" />
+                <TextBlock Text="NXM 是什么？"
+                           Foreground="{DynamicResource AccentBrush}"
+                           FontSize="12"
+                           Cursor="Hand"
+                           ToolTip.Tip="NXM 是 Nexus Mods 的 mod manager 链接协议。浏览器在文件页点击“Mod manager download”时会打开 nxm:// 链接；MK 注册后即可接收并自动下载、安装。免费账号需要这样下载；Premium 账号可直接生成直链。"
+                           ToolTip.ShowDelay="150" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,6,0,0">
+                    <Button Name="CancelButton" Classes="Ghost" Content="暂不" Click="OnCancelClick" />
+                    <Button Name="RegisterButton" Classes="Primary" Content="去注册 NXM" Click="OnRegisterClick" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</views:DialogWindow>

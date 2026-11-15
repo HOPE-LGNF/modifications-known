@@ -12,6 +12,7 @@ using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
 using ModificationsKnown.Infrastructure.Storage;
+using ModificationsKnown.Infrastructure.Windows;
 
 namespace ModificationsKnown.App.ViewModels;
 
@@ -213,6 +214,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly GameProcessMonitor _processMonitor;
     private readonly IFileDownloader _downloader;
     private readonly PackageUpdateService _updates;
+    private readonly NxmProtocolRegistrar _nxmRegistrar;
     private readonly List<InstalledModItemViewModel> _allItems = [];
     private readonly Dictionary<string, Bitmap?> _thumbnailCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (bool HasUpdate, string Label)> _updateCache = new(StringComparer.OrdinalIgnoreCase);
@@ -330,7 +332,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         ThumbnailService thumbnails,
         GameProcessMonitor processMonitor,
         IFileDownloader downloader,
-        PackageUpdateService updates)
+        PackageUpdateService updates,
+        NxmProtocolRegistrar nxmRegistrar)
     {
         _shell = shell;
         _operations = operations;
@@ -346,6 +349,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         _processMonitor = processMonitor;
         _downloader = downloader;
         _updates = updates;
+        _nxmRegistrar = nxmRegistrar;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
     }
 
@@ -358,12 +362,36 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     [RelayCommand]
     private Task RefreshAsync() => RefreshCoreAsync();
 
+    private async Task EnsureNxmReadyAsync()
+    {
+        if (_nxmRegistrar.GetStatus().RegisteredForCurrentExecutable) return;
+
+        var premium = false;
+        try
+        {
+            var account = await _nexus.GetAccountStatusAsync();
+            premium = account.IsPremium;
+        }
+        catch
+        {
+            // Unknown tier: let the user choose.
+        }
+
+        if (premium) return;
+
+        var go = await _dialogs.PromptNxmAsync();
+        if (!go) return;
+
+        await NxmRegistrationFlow.RegisterAsync(_dialogs, _nxmRegistrar, _shell);
+    }
+
     [RelayCommand]
     private async Task UpdateAsync(InstalledModItemViewModel item)
     {
         if (IsBusy || !item.IsNexusMatched) return;
         if (_shell.Game.Selected is not { } installation) return;
         if (!EnsureGameNotRunning(installation, "更新模组")) return;
+        await EnsureNxmReadyAsync();
 
         IsBusy = true;
         try
@@ -389,6 +417,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         if (IsBusy) return;
         if (_shell.Game.Selected is not { } installation) return;
         if (!EnsureGameNotRunning(installation, "更新模组")) return;
+        await EnsureNxmReadyAsync();
 
         var targets = _allItems.Where(item => item.HasUpdate && item.IsNexusMatched).ToList();
         if (targets.Count == 0)
