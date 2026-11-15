@@ -337,6 +337,13 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         await discover.HandleNxmLinkAsync(raw);
     }
 
+    public void NavigateSettings(string focus)
+    {
+        if (_pages.TryGetValue("settings", out var page) && page is SettingsViewModel settings)
+            settings.RequestFocus(focus);
+        NavigateTo("settings");
+    }
+
     public void NavigateTo(string key)
     {
         var item = NavigationItems.FirstOrDefault(candidate => candidate.Key == key);

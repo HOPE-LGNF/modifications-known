@@ -21,6 +21,9 @@ public partial class GameVersionRow : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsNotRunning))]
     private bool _isRunning;
 
+    [ObservableProperty]
+    private bool _isHighlighted;
+
     public GameVersionRow(
         GameInstallation installation,
         bool isCurrent,

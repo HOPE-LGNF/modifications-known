@@ -45,7 +45,7 @@
                                FontSize="11"
                                TextWrapping="Wrap" />
 
-                    <ItemsControl ItemsSource="{Binding GameVersions}">
+                    <ItemsControl Name="VersionsList" ItemsSource="{Binding GameVersions}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border Background="{DynamicResource SurfaceAltBrush}"
@@ -89,7 +89,8 @@
                                                     IsVisible="{Binding IsAliasDirty}"
                                                     IsEnabled="{Binding CanSaveAlias}"
                                                     Classes.modified="{Binding IsAliasDirty}" />
-                                            <Button Classes="Ghost"
+                                            <Button Classes="Ghost ellipsis"
+                                                    Classes.highlight="{Binding IsHighlighted}"
                                                     Content="⋯"
                                                     FontSize="16"
                                                     Padding="8,2"
@@ -174,7 +175,7 @@
                 </StackPanel>
             </Border>
 
-            <Border Classes="card">
+            <Border Name="NxmSection" Classes="card">
                 <StackPanel Spacing="10">
                     <StackPanel Orientation="Horizontal" Spacing="5">
                         <TextBlock Text="浏览器集成（NXM）" Classes="h2" />
@@ -270,6 +271,32 @@
                     <TextBlock Text="{Binding SettingsPath}"
                                Classes="caption"
                                TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="启动器更新" Classes="h2" />
+                    <TextBlock Text="{Binding CurrentAppVersion, StringFormat='当前版本 {0}'}"
+                               Classes="muted"
+                               FontSize="12" />
+                    <TextBlock Text="从 GitHub Releases 检查并安装新版本；更新会关闭当前窗口并在替换后自动重启。"
+                               Classes="caption"
+                               TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="Ghost"
+                                Content="检查更新"
+                                IsEnabled="{Binding !IsCheckingAppUpdate}"
+                                Command="{Binding CheckAppUpdateCommand}" />
+                        <Button Classes="Primary"
+                                Content="下载并安装"
+                                IsVisible="{Binding AppUpdateAvailable}"
+                                Command="{Binding InstallAppUpdateCommand}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding AppUpdateStatus}"
+                               Classes="caption"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                 </StackPanel>
             </Border>
 

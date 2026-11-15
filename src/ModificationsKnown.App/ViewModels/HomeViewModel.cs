@@ -120,8 +120,13 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
 
         if (string.Equals(item.TargetPage, "nxm", StringComparison.OrdinalIgnoreCase))
         {
-            await NxmRegistrationFlow.RegisterAsync(_dialogs, _nxmRegistrar, _shell);
-            RebuildChecklist();
+            _shell.NavigateSettings("nxm");
+            return;
+        }
+
+        if (string.Equals(item.TargetPage, "settings#bepinex", StringComparison.OrdinalIgnoreCase))
+        {
+            _shell.NavigateSettings("bepinex");
             return;
         }
 
@@ -277,7 +282,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             HasGame, "去设置", "settings"));
         Checklist.Add(new(2, "安装 BepInEx",
             BepInExReady ? "BepInEx 已就绪" : "在设置的版本列表里点 ⋯ 安装",
-            BepInExReady, "去设置", "settings"));
+            BepInExReady, "去安装", "settings#bepinex"));
         Checklist.Add(new(3, "配置 Nexus API Key",
             NexusConfigured ? NexusAccountDetail : "浏览可匿名，查看文件和下载需要 API Key",
             NexusConfigured, "去设置", "settings"));

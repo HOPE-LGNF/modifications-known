@@ -33,6 +33,8 @@ public interface IAppShell
     void NotifyModsChanged(IReadOnlyCollection<string> packageNames);
 
     void NavigateTo(string key);
+
+    void NavigateSettings(string focus);
 }
 
 public interface IAsyncPage

@@ -173,6 +173,12 @@
             <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
         </Style>
 
+        <Style Selector="Button.ellipsis.highlight">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
         <Style Selector="Button.launch.danger">
             <Setter Property="Background" Value="{DynamicResource DangerDeepBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource DangerDeepBrush}" />

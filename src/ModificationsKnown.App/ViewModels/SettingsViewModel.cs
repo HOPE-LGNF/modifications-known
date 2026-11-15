@@ -29,6 +29,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private readonly GameProcessMonitor _processMonitor;
     private readonly DataLocationService _dataLocation = new();
     private readonly BepInExInstaller _bepInExInstaller;
+    private readonly AppUpdateService _appUpdates = new();
     private bool _loadingSettings;
 
     [ObservableProperty]
@@ -54,6 +55,32 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
 
     [ObservableProperty]
     private bool _isBusy;
+
+    [ObservableProperty]
+    private int _focusRequest;
+
+    [ObservableProperty]
+    private bool _isCheckingAppUpdate;
+
+    [ObservableProperty]
+    private bool _appUpdateAvailable;
+
+    [ObservableProperty]
+    private string _appUpdateStatus = "检查 GitHub Release 是否有新版本。";
+
+    private string? _pendingUpdateAssetUrl;
+    private string _pendingReleaseUrl = string.Empty;
+
+    public string CurrentAppVersion => $"v{_appUpdates.CurrentVersion}";
+
+    public string RequestedFocus { get; private set; } = string.Empty;
+
+    public void RequestFocus(string focus)
+    {
+        RequestedFocus = focus;
+        FocusRequest++;
+        RefreshGameVersions();
+    }
 
     [ObservableProperty]
     private string _connectionStatus = "尚未测试。";
@@ -171,6 +198,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         RefreshGameVersions();
         DataRoot = _dataLocation.CurrentRoot;
         IsCustomDataRoot = _dataLocation.IsCustom;
+        if (!string.IsNullOrEmpty(RequestedFocus)) FocusRequest++;
         return Task.CompletedTask;
     }
 
@@ -181,15 +209,21 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
                      .OrderByDescending(installation => installation.Profile.Edition)
                      .ThenBy(installation => installation.DisplayLabel, StringComparer.OrdinalIgnoreCase))
         {
+            var isCurrent = string.Equals(
+                _shell.Game.Selected?.GameDirectory,
+                installation.GameDirectory,
+                StringComparison.OrdinalIgnoreCase);
             GameVersions.Add(new GameVersionRow(
                 installation,
-                string.Equals(_shell.Game.Selected?.GameDirectory, installation.GameDirectory, StringComparison.OrdinalIgnoreCase),
+                isCurrent,
                 SaveVersionAliasAsync,
                 InstallLoaderAsync,
                 OpenBepInExDownloadAsync,
                 DeleteVersionAsync)
             {
-                IsRunning = _processMonitor.IsRunning(installation)
+                IsRunning = _processMonitor.IsRunning(installation),
+                IsHighlighted = isCurrent
+                                 && string.Equals(RequestedFocus, "bepinex", StringComparison.OrdinalIgnoreCase)
             });
         }
 
@@ -605,6 +639,111 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         var result = _nxmRegistrar.Unregister();
         _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
         RefreshNxmStatus();
+    }
+
+    [RelayCommand]
+    private async Task CheckAppUpdateAsync()
+    {
+        if (IsCheckingAppUpdate) return;
+
+        IsCheckingAppUpdate = true;
+        AppUpdateStatus = "正在检查更新…";
+        try
+        {
+            var check = await _appUpdates.CheckAsync();
+            _pendingUpdateAssetUrl = check.AssetUrl;
+            _pendingReleaseUrl = check.ReleaseUrl;
+            AppUpdateAvailable = check.HasUpdate;
+            AppUpdateStatus = check.Message;
+        }
+        finally
+        {
+            IsCheckingAppUpdate = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task InstallAppUpdateAsync()
+    {
+        if (!AppUpdateAvailable) return;
+
+        if (string.IsNullOrWhiteSpace(_pendingUpdateAssetUrl))
+        {
+            OpenReleasePage();
+            return;
+        }
+
+        var confirmed = await _dialogs.ConfirmDangerAsync(
+            "安装启动器更新",
+            "将下载新版本并关闭当前启动器，替换完成后自动重新启动。\n\n请先保存正在进行的操作。继续吗？",
+            "下载并安装",
+            "取消");
+        if (!confirmed) return;
+
+        var target = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(target) || !File.Exists(target))
+        {
+            AppUpdateStatus = "无法定位当前启动器路径，请手动下载更新。";
+            OpenReleasePage();
+            return;
+        }
+
+        var downloadDirectory = Path.Combine(Path.GetTempPath(), "ModificationsKnown-update");
+        Directory.CreateDirectory(downloadDirectory);
+        var downloaded = Path.Combine(downloadDirectory, $"ModificationsKnown-{DateTime.Now:HHmmss}.exe");
+
+        AppUpdateStatus = "正在下载更新…";
+        if (!await _appUpdates.DownloadAsync(_pendingUpdateAssetUrl, downloaded))
+        {
+            AppUpdateStatus = "下载更新失败，请打开 Release 页手动下载。";
+            OpenReleasePage();
+            return;
+        }
+
+        try
+        {
+            var escapedTarget = target.Replace("'", "''");
+            var escapedSource = downloaded.Replace("'", "''");
+            var scriptPath = Path.Combine(downloadDirectory, $"apply-{Guid.NewGuid():N}.ps1");
+            var script = $$"""
+                $pidToWait = {{Environment.ProcessId}}
+                while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {
+                    Start-Sleep -Milliseconds 400
+                }
+                Copy-Item -LiteralPath '{{escapedSource}}' -Destination '{{escapedTarget}}' -Force
+                Start-Process -FilePath '{{escapedTarget}}'
+                Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force
+                """;
+            File.WriteAllText(scriptPath, script);
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"{scriptPath}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true
+            });
+
+            AppUpdateStatus = "正在重启以完成更新…";
+            Environment.Exit(0);
+        }
+        catch (Exception exception)
+        {
+            AppUpdateStatus = $"启动更新脚本失败：{exception.Message}";
+        }
+    }
+
+    private void OpenReleasePage()
+    {
+        if (string.IsNullOrWhiteSpace(_pendingReleaseUrl)) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo(_pendingReleaseUrl) { UseShellExecute = true });
+        }
+        catch
+        {
+            // Status text already explains the failure.
+        }
     }
 
     [RelayCommand]

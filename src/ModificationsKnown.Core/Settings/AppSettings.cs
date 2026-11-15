@@ -13,7 +13,7 @@ public sealed class AppSettings
 
     public string NexusGameDomain { get; set; } = "scavprototype";
 
-    public string ThemePreset { get; set; } = "daylight";
+    public string ThemePreset { get; set; } = "moss";
 
     /// <summary>Once true, the user's theme choice is never migrated again.</summary>
     public bool ThemePresetMigrated { get; set; }

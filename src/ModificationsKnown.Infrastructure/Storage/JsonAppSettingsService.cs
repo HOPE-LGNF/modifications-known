@@ -34,16 +34,15 @@ public sealed class JsonAppSettingsService : IAppSettingsService
             var json = await File.ReadAllTextAsync(AppPaths.SettingsFile, cancellationToken).ConfigureAwait(false);
             Current = JsonSerializer.Deserialize<AppSettings>(json, SerializerOptions) ?? new AppSettings();
 
-            // 0.7 moves the default to the light "daylight" theme. The removed
-            // ember preset also falls back to daylight; explicit moss/slate/
-            // custom choices stay as chosen.
+            // New installs default to the moss theme again. The removed ember
+            // preset falls back to moss; explicit daylight/slate/custom choices
+            // stay as chosen.
             if (!Current.ThemePresetMigrated)
             {
                 if (string.IsNullOrWhiteSpace(Current.ThemePreset)
-                    || string.Equals(Current.ThemePreset, "moss", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(Current.ThemePreset, "ember", StringComparison.OrdinalIgnoreCase))
                 {
-                    Current.ThemePreset = "daylight";
+                    Current.ThemePreset = "moss";
                 }
 
                 Current.ThemePresetMigrated = true;
