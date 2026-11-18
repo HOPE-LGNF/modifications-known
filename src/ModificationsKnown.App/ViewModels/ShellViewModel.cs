@@ -13,6 +13,7 @@ using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Saves;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Games;
 using ModificationsKnown.Infrastructure.Instances;
 using ModificationsKnown.Infrastructure.Saves;
 using ModificationsKnown.Infrastructure.Storage;
@@ -195,7 +196,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _processMonitor, nxmRegistrar, dialogs, _saveGroups),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs, updates, logger),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor, downloader, updates, nxmRegistrar, logger),
-            ["saves"] = new SavesViewModel(this, _saveGroups, saveArchive, new SaveSlotReader(), filePicker, dialogs, logger, _processMonitor),
+            ["saves"] = new SavesViewModel(this, _saveGroups, saveArchive, new SaveSlotReader(), filePicker, dialogs, logger, _processMonitor, new GameExecutableVersionReader()),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion, _processMonitor)

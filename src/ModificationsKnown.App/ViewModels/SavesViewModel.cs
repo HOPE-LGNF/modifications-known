@@ -8,6 +8,7 @@ using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Saves;
+using ModificationsKnown.Infrastructure.Games;
 using ModificationsKnown.Infrastructure.Saves;
 
 namespace ModificationsKnown.App.ViewModels;
@@ -22,6 +23,7 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
     private readonly IUserDialogService _dialogs;
     private readonly IAppLogger _logger;
     private readonly GameProcessMonitor _processMonitor;
+    private readonly GameExecutableVersionReader _gameVersions;
 
     // UI state is keyed by installation so a monitor refresh never loses the
     // user's selection or the expanded block.
@@ -67,7 +69,8 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         IFilePickerService filePicker,
         IUserDialogService dialogs,
         IAppLogger logger,
-        GameProcessMonitor processMonitor)
+        GameProcessMonitor processMonitor,
+        GameExecutableVersionReader gameVersions)
     {
         _shell = shell;
         _saveGroups = saveGroups;
@@ -77,6 +80,7 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         _dialogs = dialogs;
         _logger = logger;
         _processMonitor = processMonitor;
+        _gameVersions = gameVersions;
         _shell.Game.Changed += (_, _) =>
         {
             // A transient row selection is not carried across instances: the
@@ -579,7 +583,7 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         {
             var result = await _archive.ExportAsync(
                 row.Group,
-                SaveGameInfo.FromInstallation(row.Installation, DetectGameVersion(row.Installation)),
+                SaveGameInfo.FromInstallation(row.Installation, _gameVersions.ReadVersion(row.Installation)),
                 target);
             _shell.SetStatus(
                 result.Success ? $"{result.Message} 已保存到 {result.ArchivePath}" : result.Message,
@@ -794,7 +798,7 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         }
 
         var manifest = inspection.Manifest;
-        var targetVersion = DetectGameVersion(item.Installation);
+        var targetVersion = _gameVersions.ReadVersion(item.Installation);
         var name = await _dialogs.PromptAsync(
             "导入存档组",
             $"来源：{manifest.GroupName}（{manifest.SourceEdition} · {manifest.SourceVersion}）\n" +
@@ -894,19 +898,5 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
                 ? $"「{group.Name}」已创建，并作为当前存档。"
                 : $"「{group.Name}」已创建；当前存档保持不变。",
             applied ? StatusKind.Success : StatusKind.Info);
-    }
-
-    private static string? DetectGameVersion(GameInstallation installation)
-    {
-        try
-        {
-            var path = installation.ExecutablePath;
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
-            return FileVersionInfo.GetVersionInfo(path).FileVersion;
-        }
-        catch
-        {
-            return null;
-        }
     }
 }
