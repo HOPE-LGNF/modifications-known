@@ -105,7 +105,13 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
     {
         Mod = mod;
         _toggle = toggle;
-        ToggleCommand = new AsyncRelayCommand(() => toggle(Mod));
+        ToggleCommand = new AsyncRelayCommand(async () =>
+        {
+            await toggle(Mod);
+            OnPropertyChanged(nameof(IsEnabled));
+            OnPropertyChanged(nameof(IsDisabled));
+            OnPropertyChanged(nameof(State));
+        });
         UninstallCommand = new AsyncRelayCommand(() => uninstall(Mod));
         DeleteWholeCommand = new AsyncRelayCommand(() => deleteWhole(Mod));
         AdoptCommand = new AsyncRelayCommand(() => adopt(Mod));
@@ -226,6 +232,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     private readonly GameProcessMonitor _processMonitor;
     private readonly IFileDownloader _downloader;
     private readonly PackageUpdateService _updates;
+    private readonly ModUpdateResolver _updateResolver;
     private readonly NxmProtocolRegistrar _nxmRegistrar;
     private readonly IAppLogger _logger;
     private readonly List<InstalledModItemViewModel> _allItems = [];
@@ -346,6 +353,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         GameProcessMonitor processMonitor,
         IFileDownloader downloader,
         PackageUpdateService updates,
+        ModUpdateResolver updateResolver,
         NxmProtocolRegistrar nxmRegistrar,
         IAppLogger logger)
     {
@@ -365,6 +373,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             Dispatcher.UIThread.Post(() => OnModsChanged(packageNames));
         _downloader = downloader;
         _updates = updates;
+        _updateResolver = updateResolver;
         _nxmRegistrar = nxmRegistrar;
         _logger = logger;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
@@ -526,7 +535,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         {
             if (!_latestFiles.TryGetValue(item.Mod.PackageId, out var latest))
             {
-                latest = await ResolveLatestAsync(match);
+                latest = await _updateResolver.ResolveLatestAsync(match);
                 if (latest is null)
                 {
                     _shell.SetStatus($"「{item.Name}」没有可下载的 Nexus 文件。", StatusKind.Warning);
@@ -602,7 +611,11 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 source,
                 backup);
             _logger.Info($"[Update] install success={result.Success} backup={result.BackupPath ?? "none"} message={result.Message}");
-            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            _shell.SetStatus(
+                result.Message,
+                result.Success
+                    ? result.Warning ? StatusKind.Warning : StatusKind.Success
+                    : StatusKind.Error);
             return result.Success;
         }
         catch (NexusApiException exception)
@@ -674,53 +687,6 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         }
     }
 
-    private sealed record LatestFile(NexusModFile File, NexusFileVersion Version);
-
-    /// <summary>The single source of truth for “latest” is the newest Nexus
-    /// file and its primary version, not the mod-page display version. Check
-    /// and update both use this so badges cannot disagree with the action.</summary>
-    private async Task<LatestFile?> ResolveLatestAsync(
-        NexusMatch match,
-        CancellationToken cancellationToken = default)
-    {
-        var files = await _nexus.GetFilesAsync(match.ModUid, cancellationToken);
-        if (files.Count == 0) return null;
-
-        // A mod can expose a newer version under a secondary/optional file while
-        // the active file still points at the old version. Compare every file's
-        // versions and keep the highest one, not just the active file's primary.
-        LatestFile? best = null;
-        foreach (var file in files)
-        {
-            var versions = await _nexus.GetFileVersionsAsync(file.Id, cancellationToken);
-            foreach (var version in versions)
-            {
-                if (string.IsNullOrWhiteSpace(version.Version)) continue;
-
-                if (best is null
-                    || VersionText.IsNewer(version.Version, best.Version.Version)
-                    || (string.Equals(version.Version.Trim(), best.Version.Version.Trim(), StringComparison.OrdinalIgnoreCase)
-                        && version.UploadedAt > best.Version.UploadedAt))
-                {
-                    best = new LatestFile(file, version);
-                }
-            }
-        }
-
-        if (best is not null) return best;
-
-        var fallbackFile = files
-            .OrderByDescending(candidate => candidate.IsActive)
-            .ThenByDescending(candidate => candidate.LastUploadedAt)
-            .FirstOrDefault();
-        if (fallbackFile is null) return null;
-
-        var fallbackVersions = await _nexus.GetFileVersionsAsync(fallbackFile.Id, cancellationToken);
-        var fallback = fallbackVersions.FirstOrDefault(candidate => candidate.IsPrimary)
-                       ?? fallbackVersions.OrderByDescending(candidate => candidate.UploadedAt).FirstOrDefault();
-        return fallback is null ? null : new LatestFile(fallbackFile, fallback);
-    }
-
     private void ClearUpdate(InstalledModItemViewModel item)
     {
         item.HasUpdate = false;
@@ -765,7 +731,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 checkedCount++;
                 try
                 {
-                    var latest = await ResolveLatestAsync(item.NexusMatch);
+                    var latest = await _updateResolver.ResolveLatestAsync(item.NexusMatch);
                     if (latest is not null
                         && VersionText.IsNewer(latest.Version.Version, item.Mod.Version))
                     {
@@ -787,23 +753,9 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             }
 
             HasUpdates = updates > 0;
-            var allFailed = checkedCount > 0 && failed == checkedCount;
-            UpdateSummary = checkedCount == 0
-                ? "没有可检查的 Nexus 模组；先关联模组或配置 API Key。"
-                : allFailed
-                    ? $"检查更新失败（{failed} 个）"
-                    : updates > 0
-                        ? $"发现 {updates} 个可更新" + (failed > 0 ? $"，{failed} 个检查失败" : "")
-                        : "已是最新版本" + (failed > 0 ? $"，{failed} 个检查失败" : "");
-            _shell.SetStatus(
-                UpdateSummary,
-                checkedCount == 0
-                    ? StatusKind.Info
-                    : allFailed
-                        ? StatusKind.Error
-                        : updates > 0 || failed > 0
-                            ? StatusKind.Warning
-                            : StatusKind.Success);
+            var checkStatus = UpdateStatus.ForCheck(checkedCount, updates, failed);
+            UpdateSummary = checkStatus.Message;
+            _shell.SetStatus(checkStatus.Message, checkStatus.Kind);
         }
         finally
         {

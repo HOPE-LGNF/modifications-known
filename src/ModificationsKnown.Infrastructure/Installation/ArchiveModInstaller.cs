@@ -103,6 +103,12 @@ public sealed class ArchiveModInstaller : IModInstaller
             var auxiliary = allowAuxiliary && pluginsRoot is not null
                 ? CollectAuxiliaryCandidates(pluginsRoot)
                 : [];
+            var auxiliaryManifest = auxiliary
+                .Select(item => new PackageFile(
+                    item.RelativePath,
+                    new FileInfo(item.SourcePath).Length,
+                    HashFile(item.SourcePath)))
+                .ToList();
 
             // Preflight every target before writing anything. Existing or
             // duplicate package names are reported as failures, but other
@@ -135,7 +141,12 @@ public sealed class ArchiveModInstaller : IModInstaller
 
                 try
                 {
-                    var manifest = BuildManifest(package.SourceDirectory, package.PackageName, source, cancellationToken);
+                    var manifest = BuildManifest(
+                        package.SourceDirectory,
+                        package.PackageName,
+                        source,
+                        cancellationToken,
+                        auxiliaryManifest);
                     var packageStaging = Path.Combine(stagingRoot, Guid.NewGuid().ToString("N"));
                     Directory.CreateDirectory(packageStaging);
                     CopyManagedFiles(package.SourceDirectory, packageStaging, manifest, cancellationToken);
@@ -372,7 +383,8 @@ public sealed class ArchiveModInstaller : IModInstaller
         string sourceDirectory,
         string packageName,
         PackageSource? source,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<PackageFile>? auxiliaryFiles = null)
     {
         var files = new List<PackageFile>();
         var root = Path.GetFullPath(sourceDirectory);
@@ -401,7 +413,8 @@ public sealed class ArchiveModInstaller : IModInstaller
             PackageName = packageName,
             InstalledAt = DateTimeOffset.UtcNow,
             Source = source ?? PackageSource.Local,
-            Files = files
+            Files = files,
+            AuxiliaryFiles = auxiliaryFiles?.ToList() ?? []
         };
     }
 

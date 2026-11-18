@@ -21,6 +21,11 @@ public sealed class PackageManifest
     public PackageSource? Source { get; init; }
 
     public List<PackageFile> Files { get; init; } = [];
+
+    /// <summary>Files outside the package directory that belong to this
+    /// install unit, e.g. plugins/CUCoreLib.dll or BepInEx/patchers/*.dll.
+    /// Paths are relative to the game root.</summary>
+    public List<PackageFile> AuxiliaryFiles { get; init; } = [];
 }
 
 public sealed record PackageSource(

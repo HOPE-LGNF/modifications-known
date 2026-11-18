@@ -2,6 +2,7 @@ using System.IO.Compression;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Infrastructure.Installation;
+using ModificationsKnown.Infrastructure.BepInEx;
 
 namespace ModificationsKnown.Tests;
 
@@ -147,6 +148,39 @@ public sealed class ArchiveModInstallerTests
         Assert.True(result.Success);
         Assert.False(result.AllSucceeded);
         Assert.True(Directory.Exists(Path.Combine(temp.Path, "BepInEx", "plugins", "A")));
+    }
+
+
+    [Fact]
+    public async Task UninstallRemovesOwnedAuxiliaryFiles()
+    {
+        using var temp = new TempDirectory();
+        Directory.CreateDirectory(Path.Combine(temp.Path, "BepInEx", "plugins"));
+        Directory.CreateDirectory(Path.Combine(temp.Path, "BepInEx", "patchers"));
+        var archive = CreateArchive(
+            temp,
+            "together.zip",
+            ("BepInEx/plugins/Together/Together.dll", "fake dll"),
+            ("BepInEx/plugins/CUCoreLib.dll", "fake core"),
+            ("BepInEx/patchers/CT_AutoUpdateApplier.dll", "fake patcher"));
+
+        var installer = new ArchiveModInstaller();
+        var installed = await installer.InstallArchiveAsync(
+            CreateInstallation(temp.Path),
+            archive,
+            options: new ArchiveInstallOptions("Together", AllowAuxiliaryFiles: true));
+        Assert.True(installed.AllSucceeded, installed.Message);
+
+        var manager = new BepInExModManager();
+        var scanned = await manager.ScanAsync(CreateInstallation(temp.Path));
+        var together = Assert.Single(scanned.Where(mod => mod.PackageId == "Together"));
+        Assert.Equal(2, together.AuxiliaryFiles.Count);
+
+        var result = await manager.UninstallManagedAsync(CreateInstallation(temp.Path), together);
+
+        Assert.True(result.Success, result.Message);
+        Assert.False(File.Exists(Path.Combine(temp.Path, "BepInEx", "plugins", "CUCoreLib.dll")));
+        Assert.False(File.Exists(Path.Combine(temp.Path, "BepInEx", "patchers", "CT_AutoUpdateApplier.dll")));
     }
 
 }

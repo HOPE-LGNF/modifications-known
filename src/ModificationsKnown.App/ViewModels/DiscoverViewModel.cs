@@ -99,6 +99,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
     private readonly NxmProtocolRegistrar _nxmRegistrar;
     private readonly IUserDialogService _dialogs;
     private readonly PackageUpdateService _updates;
+    private readonly ModUpdateResolver _updateResolver;
     private readonly IAppLogger _logger;
 
     private bool _suppressFileSelection;
@@ -220,6 +221,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         NxmProtocolRegistrar nxmRegistrar,
         IUserDialogService dialogs,
         PackageUpdateService updates,
+        ModUpdateResolver updateResolver,
         IAppLogger logger)
     {
         _shell = shell;
@@ -232,6 +234,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         _nxmRegistrar = nxmRegistrar;
         _dialogs = dialogs;
         _updates = updates;
+        _updateResolver = updateResolver;
         _logger = logger;
         Mods.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ShowListPlaceholder));
         ApiKeyMissing = string.IsNullOrWhiteSpace(settings.Current.NexusApiKey);
@@ -397,21 +400,15 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         string gameScopedId,
         string? incomingVersion)
     {
-        IReadOnlyList<InstalledMod> installed;
+        InstalledMod? target;
         try
         {
-            installed = await _operations.ScanAsync(installation);
+            target = await _updateResolver.FindTargetAsync(installation, nexusName, gameScopedId);
         }
         catch
         {
             return (true, null, false);
         }
-
-        var safeName = PathSafety.GetSafeFileName(nexusName);
-        var target = installed.FirstOrDefault(mod =>
-            string.Equals(mod.Source?.GameScopedId, gameScopedId, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(mod.PackageId, safeName, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(mod.Name, nexusName, StringComparison.OrdinalIgnoreCase));
 
         if (target is null) return (true, null, false);
 
@@ -425,10 +422,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             return (false, null, false);
         }
 
-        if (string.Equals(
-                Path.GetFullPath(target.DirectoryPath).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(installation.PluginsDirectory).TrimEnd(Path.DirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase))
+        if (ModUpdateResolver.IsPluginsRoot(installation, target))
         {
             _shell.SetStatus("散放在 plugins 根目录的 DLL 无法安全更新；请先手动处理。", StatusKind.Warning);
             DownloadStatus = "无法更新散放 DLL。";

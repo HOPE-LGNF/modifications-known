@@ -266,7 +266,8 @@
 
                                             <StackPanel Grid.Column="2" Spacing="6" HorizontalAlignment="Right">
                                                 <CheckBox Content="启用"
-                                                          IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                          IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                                          Command="{Binding ToggleCommand}"
                                                           HorizontalAlignment="Right" />
                                                 <Button Classes="Ghost"
                                                         Content="⋯"
@@ -361,7 +362,8 @@
                                                         IsVisible="{Binding CanDeleteWhole}"
                                                         Command="{Binding DeleteWholeCommand}" />
                                                 <CheckBox Content="启用"
-                                                          IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                          IsChecked="{Binding IsEnabled, Mode=OneWay}"
+                                                          Command="{Binding ToggleCommand}"
                                                           VerticalAlignment="Center" />
                                             </StackPanel>
                                         </Grid>

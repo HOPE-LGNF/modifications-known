@@ -39,13 +39,15 @@
 5. 若勾选备份，把暂存目录复制到：
    `%APPDATA%\ModificationsKnown\backups\<yyyyMMdd-HHmmss>\<包名>`
 6. 调用安装器安装新包；如果归档是已知目标包，允许同时携带 `plugins` 根 DLL 与 `BepInEx/patchers` 附属文件；
-7. 只有**全部包成功**才删除暂存目录并保留备份（如勾选）；
-8. 失败：删除半成品，把暂存目录移回原位置；暂存不存在时绝不删除仍存活的安装。
+7. 安装后比较旧/新包文件哈希；内容相同则恢复旧版本并报“未更新”，不把同内容归档当成功；
+8. 只有**全部包成功**才删除暂存目录并保留备份（如勾选）；
+9. 失败：删除半成品，把暂存目录移回原位置；暂存不存在时绝不删除仍存活的安装。
 
 Together 这类归档的严格路径：
 
 - 目标包目录：`BepInEx/plugins/Together/`；
 - 附属文件：`BepInEx/plugins/CUCoreLib.dll`、`BepInEx/patchers/CT_AutoUpdateApplier.dll`；
+- 附属文件写入包 manifest 的 `auxiliaryFiles`（相对游戏根目录、哈希）；卸载时只删除未被其他托管包声明且哈希未变的文件；
 - `ArchiveInstallOptions(TargetPackageName, AllowAuxiliaryFiles)` 只在已知更新目标时启用附属文件；
 - 普通安装仍拒绝无法归属的散放文件；散放根 DLL 不再出现在“可更新”列表。
 

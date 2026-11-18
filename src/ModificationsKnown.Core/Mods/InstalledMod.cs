@@ -52,6 +52,8 @@ public sealed class InstalledMod
 
     public PackageSource? Source => Manifest?.Source;
 
+    public IReadOnlyList<PackageFile> AuxiliaryFiles => Manifest?.AuxiliaryFiles ?? [];
+
     public string Name =>
         Plugins.Select(plugin => plugin.Name)
             .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name))

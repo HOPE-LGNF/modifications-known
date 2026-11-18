@@ -1,3 +1,4 @@
+using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
@@ -5,7 +6,11 @@ using ModificationsKnown.Infrastructure.Storage;
 
 namespace ModificationsKnown.App.Services;
 
-public sealed record PackageUpdateResult(bool Success, string Message, string? BackupPath = null);
+public sealed record PackageUpdateResult(
+    bool Success,
+    string Message,
+    string? BackupPath = null,
+    bool Warning = false);
 
 /// <summary>Replaces an installed package with a downloaded archive in a
 /// same-volume staging step, optionally copies a backup elsewhere, and restores
@@ -87,9 +92,35 @@ public sealed class PackageUpdateService
                     backupPath);
             }
 
+            var contentChanged = HasContentChanges(staged, targetPath);
+            if (!contentChanged)
+            {
+                var restored = TryRestore(staged, targetPath);
+                return new PackageUpdateResult(
+                    false,
+                    restored
+                        ? $"下载的归档与已安装「{target.Name}」内容相同，未发生更新；已恢复旧版本。"
+                        : $"下载的归档与已安装「{target.Name}」内容相同；旧版本未能自动恢复，暂存目录：{staged}",
+                    backupPath);
+            }
+
+            var refreshed = await _operations.ScanAsync(installation, cancellationToken);
+            var installedPackage = refreshed.FirstOrDefault(mod =>
+                string.Equals(mod.PackageId, target.PackageId, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mod.DirectoryPath, targetPath, StringComparison.OrdinalIgnoreCase));
+            var versionUpdated = VersionText.IsNewer(installedPackage?.Version, target.Version);
             if (!wasEnabled) DisablePackage(targetPath);
             TryDelete(staged);
             _logger?.Info($"Updated package {target.PackageId}; backup={backupPath ?? "none"}");
+            if (!versionUpdated)
+            {
+                return new PackageUpdateResult(
+                    true,
+                    $"「{target.Name}」文件已替换，但 DLL 版本仍为 {installedPackage?.VersionLabel ?? "未知"}（目标 {VersionText.Label(target.Version)}）；请确认下载的是最新文件。",
+                    backupPath,
+                    Warning: true);
+            }
+
             return new PackageUpdateResult(
                 true,
                 backupPath is null
@@ -127,6 +158,33 @@ public sealed class PackageUpdateService
             // Keep the staged copy and report the failed restore to the caller.
             return false;
         }
+    }
+
+    private static bool HasContentChanges(string oldDirectory, string newDirectory)
+    {
+        static Dictionary<string, string> Snapshot(string root)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+                if (relative.StartsWith(".modifications-known/", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (relative.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase))
+                    relative = relative[..^".disabled".Length];
+                using var stream = File.OpenRead(file);
+                result[relative] = Convert.ToHexString(
+                    System.Security.Cryptography.SHA256.HashData(stream));
+            }
+
+            return result;
+        }
+
+        var oldFiles = Snapshot(oldDirectory);
+        var newFiles = Snapshot(newDirectory);
+        return oldFiles.Count != newFiles.Count
+               || oldFiles.Any(pair => !newFiles.TryGetValue(pair.Key, out var hash)
+                                       || !string.Equals(hash, pair.Value, StringComparison.Ordinal));
     }
 
     private static void DisablePackage(string packagePath)

@@ -436,6 +436,62 @@ public sealed class BepInExModManager : IModManager
             }
         }
 
+        foreach (var aux in mod.Manifest.AuxiliaryFiles)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!PackageManifestReader.IsSafeRelativePath(aux.RelativePath))
+            {
+                preserved++;
+                continue;
+            }
+
+            var path = Path.GetFullPath(Path.Combine(
+                installation.GameDirectory,
+                aux.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+
+            if (!PathSafety.IsWithinDirectory(path, installation.GameDirectory))
+            {
+                preserved++;
+                continue;
+            }
+
+            var actualPath = File.Exists(path)
+                ? path
+                : File.Exists(path + ".disabled")
+                    ? path + ".disabled"
+                    : null;
+
+            if (actualPath is null)
+            {
+                missing++;
+                continue;
+            }
+
+            if (IsAuxiliaryClaimedByOther(installation, mod, aux.RelativePath))
+            {
+                preserved++;
+                continue;
+            }
+
+            try
+            {
+                if (string.Equals(HashFile(actualPath), aux.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Delete(actualPath);
+                    deleted++;
+                }
+                else
+                {
+                    preserved++;
+                }
+            }
+            catch
+            {
+                preserved++;
+            }
+        }
+
         TryRemoveManifestDirectory(mod.DirectoryPath);
         CleanupEmptyDirectories(mod.DirectoryPath);
 
@@ -448,6 +504,28 @@ public sealed class BepInExModManager : IModManager
             preserved > 0
                 ? $"已移除 {deleted} 个托管文件；保留了 {preserved} 个用户新增/修改文件{(missing > 0 ? $"，{missing} 个文件已不存在" : "")}。"
                 : $"已卸载「{mod.PackageId}」{(deleted > 0 ? $"，移除 {deleted} 个文件" : "")}。{(remaining ? "目录中仍有用户文件。" : "")}");
+    }
+
+    private static bool IsAuxiliaryClaimedByOther(
+        GameInstallation installation,
+        InstalledMod current,
+        string relativePath)
+    {
+        var currentDirectory = Path.GetFullPath(current.DirectoryPath);
+        foreach (var directory in Directory.EnumerateDirectories(installation.PluginsDirectory))
+        {
+            if (string.Equals(Path.GetFullPath(directory), currentDirectory, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!PackageManifestReader.TryRead(directory, out var manifest, out _))
+                continue;
+
+            if (manifest.AuxiliaryFiles.Any(file =>
+                    string.Equals(file.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+
+        return false;
     }
 
     private OperationResult DeleteWholeCore(
