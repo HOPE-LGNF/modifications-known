@@ -13,6 +13,7 @@ using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Saves;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Instances;
 using ModificationsKnown.Infrastructure.Saves;
 using ModificationsKnown.Infrastructure.Storage;
 using ModificationsKnown.Infrastructure.Windows;
@@ -167,11 +168,11 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         var nxmRegistrar = new NxmProtocolRegistrar();
         var deletion = new InstanceDeletionService(
             instanceStore,
-            modGroups,
-            manualMatches,
+            modGroups.RemoveAll,
+            manualMatches.RemoveAll,
             sources,
-            _saveIsolation,
-            logger);
+            isRunning: _processMonitor.IsRunning,
+            logger: logger);
         _pages = new Dictionary<string, object>
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor, nxmRegistrar, dialogs, _saveGroups),

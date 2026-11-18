@@ -3,6 +3,8 @@ using Avalonia.Platform.Storage;
 using ModificationsKnown.App.Views;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Nexus;
+using ModificationsKnown.Core.Saves;
+using ModificationsKnown.Infrastructure.Instances;
 using ModificationsKnown.Infrastructure.Saves;
 
 namespace ModificationsKnown.App.Services;
@@ -33,9 +35,7 @@ public interface IUserDialogService
 
     Task<InstanceDeletionPlan?> PickInstanceDeletionAsync(
         GameInstallation installation,
-        IReadOnlyList<InstanceSaveFile> saves,
-        string profileDirectory,
-        string suggestedTarget);
+        IReadOnlyList<SaveGroup> groups);
 
     /// <summary>
     /// Asks how to handle real saves that MK has not taken over yet. Returning
@@ -135,14 +135,12 @@ public sealed class UserDialogService : IUserDialogService
 
     public async Task<InstanceDeletionPlan?> PickInstanceDeletionAsync(
         GameInstallation installation,
-        IReadOnlyList<InstanceSaveFile> saves,
-        string profileDirectory,
-        string suggestedTarget)
+        IReadOnlyList<SaveGroup> groups)
     {
         var owner = _ownerProvider();
         if (owner is null) return null;
 
-        var dialog = new DeleteInstanceDialog(installation, saves, profileDirectory, suggestedTarget);
+        var dialog = new DeleteInstanceDialog(installation, groups);
         return await dialog.ShowDialog<InstanceDeletionPlan?>(owner);
     }
 

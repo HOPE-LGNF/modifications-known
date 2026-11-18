@@ -8,8 +8,11 @@ using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Nexus;
+using ModificationsKnown.Core.Saves;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Instances;
 using ModificationsKnown.Infrastructure.Installation;
+using ModificationsKnown.Infrastructure.Storage;
 using ModificationsKnown.Infrastructure.Windows;
 
 namespace ModificationsKnown.App.ViewModels;
@@ -273,13 +276,21 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
             return;
         }
 
-        var profile = _deletion.GetProfileDirectory(installation);
-        var saves = _deletion.ListSaves(installation);
-        var plan = await _dialogs.PickInstanceDeletionAsync(
-            installation,
-            saves,
-            profile,
-            _deletion.SuggestSaveTarget(installation));
+        IReadOnlyList<SaveGroup> groups;
+        try
+        {
+            groups = _deletion.GetGroups(installation);
+        }
+        catch (Exception exception)
+        {
+            _logger.Warn($"读取存档组失败：{exception.Message}");
+            await _dialogs.AlertAsync(
+                "无法删除版本",
+                $"读取该实例的存档组失败：{exception.Message}\n\n为了不误删存档组，本次没有做任何修改。");
+            return;
+        }
+
+        var plan = await _dialogs.PickInstanceDeletionAsync(installation, groups);
         if (plan is null) return;
 
         if (InstanceDeletionService.IsInstanceRunning(installation))
