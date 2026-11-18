@@ -60,6 +60,32 @@ public enum UnmanagedSaveAction
     CreateEmpty
 }
 
+/// <summary>What the unmanaged-save dialog decided. <c>OpenInstanceSettings</c>
+/// means the receiving copy is not registered yet; nothing was written.</summary>
+public enum UnmanagedSaveChoice
+{
+    Import,
+    CreateEmpty,
+    OpenInstanceSettings
+}
+
+public sealed record UnmanagedSaveCandidate(
+    string InstallationKey,
+    string DisplayName,
+    string GameDirectory,
+    int GroupCount)
+{
+    public string GroupCountLabel => GroupCount == 0
+        ? "0 组 · 将新建「默认」"
+        : $"{GroupCount} 组 · 将新建「导入的存档」";
+
+    public bool CanCreateEmpty => GroupCount == 0;
+}
+
+public sealed record UnmanagedSaveDecision(
+    UnmanagedSaveChoice Choice,
+    string? TargetInstallationKey = null);
+
 public sealed record SaveGroupInitializationResult(
     SaveGroupInitializationState State,
     string Message,
@@ -83,10 +109,37 @@ public sealed record SaveLaunchPreview(
     bool NeedsSwitch,
     string LiveDirectory);
 
+/// <summary>Outcome of aligning the live junction with the group an
+/// installation would use next (active-instance change / startup).</summary>
+public enum SaveGroupActivationState
+{
+    Switched,
+    AlreadyActive,
+    NeedsUnmanagedChoice,
+    RunningLocked,
+    Failed
+}
+
+public sealed record SaveGroupActivationResult(
+    SaveGroupActivationState State,
+    string Message,
+    SaveGroup? Group = null,
+    string LiveDirectory = "",
+    int UnmanagedFileCount = 0)
+{
+    public bool Success =>
+        State is SaveGroupActivationState.Switched or SaveGroupActivationState.AlreadyActive;
+}
+
 public sealed record SaveGroupOperationResult(
     bool Success,
     string Message,
     SaveGroup? Group = null);
+
+/// <summary>Which installation owns the group the live junction points at.
+/// The game writes one global LocalLow directory, so this is global state that
+/// every installation row on the saves page needs to describe.</summary>
+public sealed record SaveGroupOwner(string InstallationKey, SaveGroup Group, string GameDirectory);
 
 /// <summary>
 /// Owns save-group data: the catalog, per-group manifests, legacy profile
@@ -641,7 +694,8 @@ public sealed class SaveGroupService
 
     private SaveGroupInitializationResult InitializeBody(
         GameInstallation installation,
-        UnmanagedSaveAction? unmanagedAction)
+        UnmanagedSaveAction? unmanagedAction,
+        bool allowTakeover = false)
     {
         if (!_options.Linker.IsSupported)
         {
@@ -679,10 +733,38 @@ public sealed class SaveGroupService
                         $"现有存档链接指向 MK 之外的位置：{target}。为避免覆盖，未做任何修改。");
                 }
 
+                // A junction whose target no longer exists carries no data: treat
+                // it as "no link" and let this instance build its first group.
+                if (!Directory.Exists(target))
+                {
+                    _options.Linker.RemoveJunction(live, out var removeError);
+                    if (_options.Linker.Exists(live))
+                    {
+                        return Failed(
+                            $"现有存档链接指向已不存在的目录（{target}），且无法移除该链接：{removeError}。未做任何修改。");
+                    }
+
+                    return CreateEmptyDefault(
+                        installation,
+                        $"原存档链接指向已删除的目录（{target}），已清理并创建默认存档组。");
+                }
+
                 if (!PathEquals(target, installationDirectory) && !IsUnder(target, installationDirectory))
                 {
-                    return Failed(
-                        $"现有存档链接指向另一个安装的存档目录：{target}。未做任何修改。");
+                    // Read-only initialization never takes the link away from
+                    // another installation; an explicit instance switch may.
+                    if (!allowTakeover)
+                    {
+                        var owner = GetLiveOwner();
+                        var described = owner is null
+                            ? target
+                            : $"另一个安装的存档组「{owner.Group.Name}」（{owner.GameDirectory}）";
+                        return Failed($"现有存档链接属于{described}。未做任何修改。");
+                    }
+
+                    return CreateEmptyDefault(
+                        installation,
+                        $"该版本还没有存档组；已创建默认存档组并接管了存档链接（原链接：{target}）。");
                 }
 
                 if (HasDataFiles(target))
@@ -761,6 +843,34 @@ public sealed class SaveGroupService
         }
     }
 
+    /// <summary>Resolves the live junction to the installation and group that own
+    /// it, or null when the link is missing, dangling or outside the profiles
+    /// root. The game writes one global LocalLow directory, so the owner is
+    /// page-level state, not per-installation state.</summary>
+    public SaveGroupOwner? GetLiveOwner()
+    {
+        lock (_writeGate)
+        lock (_gate)
+        {
+            var live = _options.LiveSaveDirectory;
+            if (!_options.Linker.Exists(live) || !_options.Linker.TryGetTarget(live, out var target))
+                return null;
+
+            var full = Path.GetFullPath(target);
+            if (!Directory.Exists(full)) return null;
+
+            foreach (var entry in _catalog.Load().Installations)
+            {
+                var group = _scanner.Scan(entry.InstallationKey)
+                    .FirstOrDefault(candidate => PathEquals(candidate.DirectoryPath, full));
+                if (group is not null)
+                    return new SaveGroupOwner(entry.InstallationKey, group, entry.GameDirectory);
+            }
+
+            return null;
+        }
+    }
+
     public SaveLaunchPreview GetLaunchPreview(GameInstallation installation)
     {
         lock (_writeGate)
@@ -777,6 +887,150 @@ public sealed class SaveGroupService
                 needsSwitch = !PathEquals(target, group.DirectoryPath);
 
             return new SaveLaunchPreview(false, group, needsSwitch, live);
+        }
+    }
+
+    /// <summary>
+    /// Points the live junction at the group this installation would use next.
+    /// Called when the active instance changes and at startup: unlike a launch
+    /// it also creates the first group (“默认”), and it never touches unmanaged
+    /// saves — the caller resolves those first and calls again with the action.
+    /// </summary>
+    public Task<SaveGroupActivationResult> EnsureActiveGroupAsync(
+        GameInstallation installation,
+        UnmanagedSaveAction? unmanagedAction = null,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => EnsureActiveGroupCore(installation, unmanagedAction), cancellationToken);
+
+    private SaveGroupActivationResult EnsureActiveGroupCore(
+        GameInstallation installation,
+        UnmanagedSaveAction? unmanagedAction)
+    {
+        lock (_writeGate)
+        {
+            var running = ProbeRunningState(installation);
+            if (running != GameRunningState.NotRunning)
+            {
+                return new SaveGroupActivationResult(
+                    SaveGroupActivationState.RunningLocked,
+                    running == GameRunningState.Running
+                        ? "游戏正在运行；请先关闭游戏再切换存档组。"
+                        : "无法确认游戏是否正在运行（进程信息不可读）；为避免损坏存档，未切换存档组。");
+            }
+
+            var live = _options.LiveSaveDirectory;
+            try
+            {
+                var (entry, groups) = Reconcile(installation, persist: true);
+
+                if (groups.Count == 0)
+                {
+                    // First activation: migrate legacy data, import unmanaged
+                    // saves (only after the caller asked) or create 「默认」.
+                    // An explicit instance switch may also take the link over.
+                    var init = InitializeBody(installation, unmanagedAction, allowTakeover: true);
+                    if (init.State == SaveGroupInitializationState.NeedsUnmanagedChoice)
+                    {
+                        return new SaveGroupActivationResult(
+                            SaveGroupActivationState.NeedsUnmanagedChoice,
+                            init.Message,
+                            null,
+                            init.LiveDirectory,
+                            init.UnmanagedFileCount);
+                    }
+
+                    if (!init.Success)
+                    {
+                        return new SaveGroupActivationResult(
+                            SaveGroupActivationState.Failed,
+                            init.Message,
+                            null,
+                            init.LiveDirectory);
+                    }
+
+                    var created = init.Groups.FirstOrDefault(candidate => candidate.Id == init.NextLaunchGroupId)
+                                  ?? init.Groups.FirstOrDefault();
+                    return new SaveGroupActivationResult(
+                        SaveGroupActivationState.Switched,
+                        init.Message,
+                        created,
+                        init.LiveDirectory);
+                }
+
+                var group = SelectGroup(groups, entry?.NextLaunchGroupId);
+                if (group is null)
+                {
+                    return new SaveGroupActivationResult(
+                        SaveGroupActivationState.Failed,
+                        "没有可用的存档组。",
+                        null,
+                        live);
+                }
+
+                if (!Directory.Exists(group.DirectoryPath))
+                {
+                    return new SaveGroupActivationResult(
+                        SaveGroupActivationState.Failed,
+                        $"存档组目录不存在：{group.DirectoryPath}",
+                        group,
+                        live);
+                }
+
+                var switched = SwitchLiveLink(group, live);
+                if (!switched.Success)
+                {
+                    return new SaveGroupActivationResult(
+                        SaveGroupActivationState.Failed,
+                        switched.Message,
+                        group,
+                        live);
+                }
+
+                if (entry is not null && entry.NextLaunchGroupId != group.Id)
+                {
+                    try
+                    {
+                        var catalog = _catalog.Load();
+                        var catalogEntry = catalog.Installations.FirstOrDefault(candidate =>
+                            string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
+                                StringComparison.OrdinalIgnoreCase));
+                        if (catalogEntry is null)
+                            throw new InvalidOperationException("存档组索引缺失，请刷新后重试。");
+
+                        catalogEntry.NextLaunchGroupId = group.Id;
+                        _catalog.Save(catalog);
+                    }
+                    catch (Exception exception)
+                    {
+                        var restore = RestoreLiveLink(live, switched.PreviousTarget);
+                        _options.Logger?.Warn($"同步存档组后保存索引失败：{exception.Message}");
+                        return new SaveGroupActivationResult(
+                            SaveGroupActivationState.Failed,
+                            restore.Success
+                                ? $"保存存档索引失败，链接已恢复：{exception.Message}"
+                                : $"保存存档索引失败，原链接未恢复（{restore.Stage}失败：{restore.Error}）；请手动检查 {live}。",
+                            group,
+                            live);
+                    }
+                }
+
+                return new SaveGroupActivationResult(
+                    switched.Switched
+                        ? SaveGroupActivationState.Switched
+                        : SaveGroupActivationState.AlreadyActive,
+                    switched.Message,
+                    group,
+                    live);
+            }
+            catch (Exception exception)
+            {
+                _options.Logger?.Warn($"由实例切换同步存档组失败：{exception.Message}");
+                return new SaveGroupActivationResult(
+                    SaveGroupActivationState.Failed,
+                    $"切换存档组失败：{exception.Message}",
+                    null,
+                    live);
+            }
         }
     }
 
@@ -863,6 +1117,141 @@ public sealed class SaveGroupService
                 ? $"当前存档已切换到「{group.Name}」；从 Steam 启动也会使用该组。"
                 : $"「{group.Name}」已经是当前存档。",
             group);
+    }
+
+    /// <summary>
+    /// Copies whatever the live directory currently holds into a new group of
+    /// this installation and makes it the live one. Used when an installation
+    /// that already has groups adopts unmanaged saves. The original directory is
+    /// kept as a backup when it is a real folder rather than a link.
+    /// </summary>
+    public Task<SaveGroupOperationResult> ImportLiveIntoNewGroupAsync(
+        GameInstallation installation,
+        string? name = null,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => ImportLiveIntoNewGroupCore(installation, name), cancellationToken);
+
+    private SaveGroupOperationResult ImportLiveIntoNewGroupCore(
+        GameInstallation installation,
+        string? name)
+    {
+        lock (_writeGate)
+        {
+            var running = ProbeRunningState(installation);
+            if (running == GameRunningState.Running)
+                return Fail("游戏正在运行；请先关闭游戏再导入存档。");
+            if (running == GameRunningState.Unknown)
+                return Fail("无法确认游戏是否正在运行（进程信息不可读）；为避免损坏存档，未导入。");
+
+            var live = _options.LiveSaveDirectory;
+            if (!Directory.Exists(live))
+                return Fail("现有存档目录不存在，没有可导入的内容。");
+
+            var staging = NewStagingDirectory(out var groupId);
+            string? backup = null;
+            SaveGroup? group = null;
+
+            try
+            {
+                var files = CollectDataFiles(live);
+                if (files.Count == 0)
+                {
+                    DeleteDirectoryQuietly(staging);
+                    return Fail("现有存档目录是空的，没有可导入的文件。");
+                }
+
+                CopyFiles(live, staging, files);
+                VerifyCopy(live, staging, files);
+
+                group = CommitGroup(
+                    installation,
+                    staging,
+                    groupId,
+                    ResolveImportedGroupName(installation, name),
+                    isDefault: false,
+                    _options.UtcNow());
+
+                if (_options.Linker.Exists(live) && _options.Linker.TryGetTarget(live, out _))
+                {
+                    var switched = SwitchLiveLink(group, live);
+                    if (!switched.Success)
+                    {
+                        RollbackGroup(installation, group);
+                        return Fail($"导入后切换链接失败，新组已回滚：{switched.Message}");
+                    }
+                }
+                else
+                {
+                    // A real folder with saves: move it aside first so creating the
+                    // junction cannot destroy the original data.
+                    backup = MoveLiveToBackup(live);
+                    if (!_options.Linker.CreateJunction(live, group.DirectoryPath, out var linkError))
+                    {
+                        var restore = RestoreBackup(backup, live);
+                        if (restore.Success) RollbackGroup(installation, group);
+                        return Fail(restore.Success
+                            ? $"导入存档后创建隔离链接失败，原目录已恢复：{linkError}"
+                            : $"创建隔离链接失败（{linkError}），原目录仍在 {backup}；" +
+                              $"导入的存档组「{group.Name}」已保留，请手动处理。");
+                    }
+                }
+
+                TrySelectGroup(installation, group.Id);
+                _options.Logger?.Info($"已把现有存档导入为「{group.Name}」（{group.DirectoryPath}）");
+                return new SaveGroupOperationResult(
+                    true,
+                    backup is null
+                        ? $"已把现有存档导入为「{group.Name}」，并切换为当前存档。"
+                        : $"已把现有存档导入为「{group.Name}」并切换为当前存档；原目录备份在 {backup}。",
+                    group);
+            }
+            catch (Exception exception)
+            {
+                DeleteDirectoryQuietly(staging);
+                var restored = backup is null || RestoreBackup(backup, live).Success;
+                if (group is not null && restored) RollbackGroup(installation, group);
+                _options.Logger?.Warn($"导入现有存档失败：{exception.Message}");
+                return Fail(restored
+                    ? $"导入现有存档失败，未改动原目录：{exception.Message}"
+                    : $"导入现有存档失败：{exception.Message}；原目录仍在 {backup}，请手动检查。");
+            }
+        }
+    }
+
+    private string ResolveImportedGroupName(GameInstallation installation, string? requested)
+    {
+        var baseName = string.IsNullOrWhiteSpace(requested) ? "导入的存档" : requested.Trim();
+        var existing = Reconcile(installation, persist: false).Groups
+            .Select(group => group.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!existing.Contains(baseName)) return baseName;
+
+        for (var index = 2; ; index++)
+        {
+            var candidate = $"{baseName} {index}";
+            if (!existing.Contains(candidate)) return candidate;
+        }
+    }
+
+    /// <summary>Records an imported group as the next-launch choice. The link is
+    /// already switched; a catalog failure is logged rather than rolled back.</summary>
+    private void TrySelectGroup(GameInstallation installation, Guid groupId)
+    {
+        try
+        {
+            var catalog = _catalog.Load();
+            var entry = catalog.Installations.FirstOrDefault(candidate =>
+                string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
+                    StringComparison.OrdinalIgnoreCase));
+            if (entry is null) return;
+
+            entry.NextLaunchGroupId = groupId;
+            _catalog.Save(catalog);
+        }
+        catch (Exception exception)
+        {
+            _options.Logger?.Warn($"导入后保存存档索引失败：{exception.Message}");
+        }
     }
 
     private SaveGroupOperationResult DeleteGroupCore(GameInstallation installation, Guid groupId) =>

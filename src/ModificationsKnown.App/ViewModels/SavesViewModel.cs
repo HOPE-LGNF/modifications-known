@@ -204,23 +204,36 @@ public sealed partial class SaveGroupRow : ObservableObject
     /// <summary>Raised when <see cref="IsExpanded"/> changes; the page keeps one row open.</summary>
     public event EventHandler? Expanded;
 
+    /// <summary>True for the row that is this installation's stored choice
+    /// (catalog NextLaunchGroupId). It is not a pending change: the instance
+    /// already uses it whenever the live link is switched to this copy.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectLabel))]
+    [NotifyPropertyChangedFor(nameof(CanSelect))]
+    [NotifyPropertyChangedFor(nameof(SelectTip))]
+    private bool _isChosen;
+
     /// <summary>Selection is a radio group: every row can be chosen, including
     /// the live one — choosing it cancels a pending choice instead of writing.</summary>
-    public string SelectLabel => IsCurrent
-        ? HasPendingSelection ? "选择存档组" : "当前应用"
-        : IsPending ? "已选择" : "选择存档组";
+    public string SelectLabel => IsPending
+        ? "已选择"
+        : IsChosen
+            ? HasPendingSelection ? "取消选择" : IsCurrent ? "当前应用" : "已选择"
+            : "选择存档组";
 
     public bool CanSelect =>
-        !IsRunning && (IsCurrent ? HasPendingSelection : !IsPending);
+        !IsRunning && !IsPending && !(IsChosen && !HasPendingSelection);
 
     public string SelectTip => IsRunning
         ? "游戏运行中，选择已锁定"
-        : IsCurrent
-            ? HasPendingSelection
-                ? "取消待应用的选择，仍然使用当前组；不写任何文件"
-                : "这是当前正在使用的存档组"
-            : IsPending
-                ? "已选择；点上方「应用当前存档组」才会立即切换链接"
+        : IsPending
+            ? "已选择；点上方「应用当前存档组」才会立即切换链接"
+            : IsChosen
+                ? HasPendingSelection
+                    ? "取消待应用的选择，回到这个版本选定的存档组；不写任何文件"
+                    : IsCurrent
+                        ? "这是当前正在使用的存档组"
+                        : "这是该版本选定的存档组；切换到这个版本时会使用它"
                 : "只做选择；点上方「应用当前存档组」才会立即切换链接";
 
 
@@ -287,8 +300,11 @@ public partial class SaveInstallationItem : ObservableObject
         int unmanagedFileCount,
         string noticeMessage,
         SaveGroupRow? currentGroup,
+        SaveGroupRow? chosenGroup,
         IReadOnlyList<SaveGroupRow> groups,
         SaveGroupRow? selectedGroup,
+        string selectedGroupLabel,
+        string linkOwnerLabel,
         Func<SaveInstallationItem, Task> createEmpty,
         Func<SaveInstallationItem, Task> clone,
         Func<SaveInstallationItem, Task> import,
@@ -303,6 +319,9 @@ public partial class SaveInstallationItem : ObservableObject
         UnmanagedFileCount = unmanagedFileCount;
         NoticeMessage = noticeMessage;
         CurrentGroup = currentGroup;
+        ChosenGroup = chosenGroup;
+        SelectedGroupLabel = selectedGroupLabel;
+        LinkOwnerLabel = linkOwnerLabel;
         _expandedChanged = expandedChanged;
         _selectionChanged = selectionChanged;
 
@@ -353,13 +372,44 @@ public partial class SaveInstallationItem : ObservableObject
 
     public SaveGroupRow? CurrentGroup { get; }
 
-    public string CurrentGroupName => CurrentGroup?.Name ?? "未指定";
+    /// <summary>The group this copy will use next (catalog NextLaunchGroupId).
+    /// This is the copy's own “current group”; the live link is a global fact
+    /// that only says which copy is switched on right now.</summary>
+    public SaveGroupRow? ChosenGroup { get; }
+
+    /// <summary>The group this copy will use next (catalog selection).</summary>
+    public string SelectedGroupLabel { get; }
+
+    /// <summary>Which other copy currently owns the live link, empty when this
+    /// one does (or when the link points at nothing).</summary>
+    public string LinkOwnerLabel { get; }
+
+    public bool HasLinkOwner => LinkOwnerLabel.Length > 0;
+
+    public string CurrentGroupName => CurrentGroup?.Name ?? "未占用";
 
     public bool HasCurrentGroup => CurrentGroup is not null;
 
     public string CurrentGroupPath => CurrentGroup?.DirectoryPath ?? "—";
 
     public string CurrentGroupSummary => CurrentGroup?.SummaryLabel ?? "应用一个组后，从 Steam 启动也会使用它";
+
+    public string ChosenGroupName => ChosenGroup?.Name ?? "未选择";
+
+    public string ChosenGroupPath => ChosenGroup?.DirectoryPath ?? "—";
+
+    public string ChosenGroupSummary => ChosenGroup?.SummaryLabel
+        ?? (HasGroups ? "还没有选定存档组" : "还没有存档组；点「新建空组」开始。");
+
+    /// <summary>Small caption under the chosen group: it either says the link
+    /// serves this copy, or stays silent and lets the owner line speak.</summary>
+    public string LinkUsageLabel => ChosenGroup is null
+        ? "还没有选定存档组"
+        : CurrentGroup?.Id == ChosenGroup.Id
+            ? "链接：正在使用"
+            : HasLinkOwner ? string.Empty : "链接当前未指向任何存档组";
+
+    public bool HasLinkUsage => LinkUsageLabel.Length > 0;
 
     public string GroupCountLabel => $"{Groups.Count} 个存档组";
 
@@ -388,15 +438,24 @@ public partial class SaveInstallationItem : ObservableObject
     public bool CanApply =>
         CanEdit
         && SelectedGroup is not null
-        && SelectedGroup.Id != CurrentGroup?.Id;
+        && SelectedGroup.Id != ChosenGroup?.Id;
 
     public string SelectionHint
     {
         get
         {
-            if (SelectedGroup is null) return "点「选择存档组」进行选择；点行内其它位置只展开/收起。";
-            if (SelectedGroup.Id == CurrentGroup?.Id)
-                return $"「{SelectedGroup.Name}」已应用；从 Steam 启动也会使用该组。";
+            if (SelectedGroup is null)
+                return HasGroups
+                    ? "点「选择存档组」进行选择；点行内其它位置只展开/收起。"
+                    : "还没有存档组；点「新建空组」开始。";
+
+            if (SelectedGroup.Id == ChosenGroup?.Id)
+                return CurrentGroup?.Id == SelectedGroup.Id
+                    ? $"「{SelectedGroup.Name}」已应用；从 Steam 启动也会使用该组。"
+                    : HasLinkOwner
+                        ? $"「{SelectedGroup.Name}」是该版本选定的存档组；链接现归「{LinkOwnerLabel}」。"
+                        : $"「{SelectedGroup.Name}」是该版本选定的存档组；链接当前未指向任何组。";
+
             return $"待应用：{SelectedGroup.Name}";
         }
     }
@@ -433,16 +492,19 @@ public partial class SaveInstallationItem : ObservableObject
         _selectionChanged(this);
     }
 
-    /// <summary>“待应用” belongs to exactly one row: the pending selection that
-    /// is not already the live group. Every row learns whether a pending choice
-    /// exists, so the live row can offer “选择存档组” to cancel it.</summary>
+    /// <summary>“待应用” belongs to exactly one row: a selection that differs
+    /// from this copy's stored choice. Choosing the stored choice again cancels
+    /// it; every row learns whether a pending choice exists so the chosen row
+    /// can offer 「取消选择」 instead of a dead disabled button.</summary>
     private void UpdatePendingFlags()
     {
-        var anyPending = SelectedGroup is not null && SelectedGroup.Id != CurrentGroup?.Id;
+        var chosenId = ChosenGroup?.Id;
+        var anyPending = SelectedGroup is not null && SelectedGroup.Id != chosenId;
         foreach (var row in Groups)
         {
             row.HasPendingSelection = anyPending;
-            row.IsPending = ReferenceEquals(row, SelectedGroup) && row.Id != CurrentGroup?.Id;
+            row.IsChosen = row.Id == chosenId;
+            row.IsPending = ReferenceEquals(row, SelectedGroup) && row.Id != chosenId;
             row.IsSelected = ReferenceEquals(row, SelectedGroup);
         }
     }
@@ -466,6 +528,17 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
 
     [ObservableProperty]
     private string _emptyMessage = string.Empty;
+
+    /// <summary>Global fact shown once at the top: the LocalLow junction points
+    /// at exactly one group, and this says whose it is.</summary>
+    [ObservableProperty]
+    private string _liveLinkLabel = string.Empty;
+
+    /// <summary>Normalized game directory of the version selected in the top
+    /// instance picker. The view uses this to scroll the matching card into
+    /// view when the active version changes.</summary>
+    [ObservableProperty]
+    private string? _activeInstallationKey;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(RefreshCommand))]
@@ -498,7 +571,13 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         _dialogs = dialogs;
         _logger = logger;
         _processMonitor = processMonitor;
-        _shell.Game.Changed += (_, _) => _ = RefreshAsync();
+        _shell.Game.Changed += (_, _) =>
+        {
+            // A pending choice is not carried across instances: the page always
+            // reopens on the live group of the instance that is now active.
+            ResetTransientState();
+            _ = RefreshAsync();
+        };
 
         // A process-state change only flips IsRunning: rebuilding the list here
         // would drop scroll position, expansion and the pending selection.
@@ -553,12 +632,13 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         {
             AnyRunning = _processMonitor.AnyRunning;
             var activePath = _shell.Game.Selected?.GameDirectory;
+            var liveOwnerLabel = TryDescribeLiveOwner();
             var items = new List<SaveInstallationItem>();
             foreach (var installation in _shell.Game.Installations)
             {
                 try
                 {
-                    items.Add(await BuildInstallationItemAsync(installation, activePath));
+                    items.Add(await BuildInstallationItemAsync(installation, activePath, liveOwnerLabel));
                 }
                 catch (Exception exception)
                 {
@@ -568,6 +648,13 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
 
             Instances.Clear();
             foreach (var item in items) Instances.Add(item);
+
+            if (!SamePathOrNull(ActiveInstallationKey, activePath))
+                ActiveInstallationKey = activePath;
+
+            LiveLinkLabel = liveOwnerLabel is null
+                ? "LocalLow 链接：未指向任何存档组（首次启动会自动创建）"
+                : $"LocalLow 链接 → {liveOwnerLabel}";
 
             EmptyMessage = Instances.Count == 0
                 ? "还没有添加游戏版本。先在设置中添加实例。"
@@ -579,9 +666,33 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         }
     }
 
+    /// <summary>Resolves the global live link into "instance · group" for the
+    /// page header; null when it points at nothing (or is stale).</summary>
+    private string? TryDescribeLiveOwner()
+    {
+        try
+        {
+            var owner = _saveGroups.GetLiveOwner();
+            if (owner is null) return null;
+
+            var installation = _shell.Game.Installations.FirstOrDefault(candidate =>
+                string.Equals(_saveGroups.GetInstallationKey(candidate), owner.InstallationKey,
+                    StringComparison.OrdinalIgnoreCase));
+
+            var name = installation?.DisplayLabel ?? owner.GameDirectory;
+            return $"{name} · {owner.Group.Name}";
+        }
+        catch (Exception exception)
+        {
+            _logger.Warn($"读取当前存档链接失败：{exception.Message}");
+            return null;
+        }
+    }
+
     private async Task<SaveInstallationItem> BuildInstallationItemAsync(
         GameInstallation installation,
-        string? activeGameDirectory)
+        string? activeGameDirectory,
+        string? liveOwnerLabel)
     {
         // Two copies of the same edition share Profile.Id; only the exact game
         // directory is the active install.
@@ -602,7 +713,9 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             // single-profile save (nor let “new group” strand it). Initialize is
             // read-only for unmanaged saves and migrates a legacy profile without
             // touching the live junction; a running game is never written to.
-            if (groups.Count == 0 && !isRunning)
+            // When the link belongs to another copy, skip it: the header already
+            // says which copy owns the link, and this is not an error.
+            if (groups.Count == 0 && !isRunning && liveOwnerLabel is null)
             {
                 var init = await _saveGroups.InitializeAsync(installation);
                 if (init.State == SaveGroupInitializationState.NeedsUnmanagedChoice)
@@ -663,10 +776,20 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         }
 
         var selected = rows.FirstOrDefault(row => row.Id == pendingId)
+                       ?? rows.FirstOrDefault(row => row.Id == nextLaunchId)
                        ?? current
                        ?? rows.FirstOrDefault();
 
         var isExpanded = _expansion.TryGetValue(key, out var expanded) ? expanded : isActive;
+
+        // The group this copy will use next (catalog selection), independent of
+        // which group currently owns the global LocalLow link.
+        var chosen = rows.FirstOrDefault(row => row.Id == nextLaunchId);
+        var selectedLabel = chosen?.Name
+                            ?? rows.FirstOrDefault()?.Name
+                            ?? "未选择";
+        var linkOwner = current is null && liveOwnerLabel is not null ? liveOwnerLabel : string.Empty;
+
         return new SaveInstallationItem(
             installation,
             isActive,
@@ -676,8 +799,11 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             unmanagedFileCount,
             notice,
             current,
+            chosen,
             rows,
             selected,
+            selectedLabel,
+            linkOwner,
             CreateEmptyAsync,
             CloneAsync,
             ImportAsync,
@@ -745,8 +871,33 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
             StringComparison.OrdinalIgnoreCase);
 
-    private void RememberExpansion(SaveInstallationItem item) =>
-        _expansion[_saveGroups.GetInstallationKey(item.Installation)] = item.IsExpanded;
+    private static bool SamePathOrNull(string? left, string? right) =>
+        left is null || right is null
+            ? left is null && right is null
+            : SameDirectory(left, right);
+
+    private void RememberExpansion(SaveInstallationItem item)
+    {
+        var key = _saveGroups.GetInstallationKey(item.Installation);
+
+        if (!item.IsExpanded)
+        {
+            _expansion.Remove(key);
+            return;
+        }
+
+        // Installation cards behave like an accordion: only one block stays
+        // open. Collapsing the siblings first also keeps the persisted state
+        // consistent when the page is refreshed.
+        foreach (var other in Instances)
+        {
+            if (!ReferenceEquals(other, item) && other.IsExpanded)
+                other.IsExpanded = false;
+        }
+
+        _expansion.Clear();
+        _expansion[key] = true;
+    }
 
     private void RememberSelection(SaveInstallationItem item)
     {

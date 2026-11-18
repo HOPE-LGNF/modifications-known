@@ -104,6 +104,10 @@
                            Classes="muted"
                            FontSize="12"
                            TextWrapping="Wrap" />
+                <TextBlock Text="{Binding LiveLinkLabel}"
+                           Classes="caption"
+                           FontSize="11"
+                           TextWrapping="Wrap" />
             </StackPanel>
             <Button Grid.Column="1"
                     Classes="Primary"
@@ -131,8 +135,8 @@
                        TextWrapping="Wrap"
                        IsVisible="{Binding EmptyMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Instances}" IsEnabled="{Binding !IsBusy}">
+            <ScrollViewer x:Name="InstancesScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="InstancesItems" ItemsSource="{Binding Instances}" IsEnabled="{Binding !IsBusy}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Classes="card" Margin="0,0,0,10" Padding="16">
@@ -176,7 +180,7 @@
                                                 <TextBlock Text="{Binding GroupCountLabel}"
                                                            Classes="caption"
                                                            HorizontalAlignment="Right" />
-                                                <TextBlock Text="{Binding CurrentGroupName, StringFormat='当前：{0}'}"
+                                                <TextBlock Text="{Binding SelectedGroupLabel, StringFormat='选定：{0}'}"
                                                            Classes="caption"
                                                            HorizontalAlignment="Right" />
                                             </StackPanel>
@@ -217,21 +221,30 @@
                                                 Padding="12,10">
                                             <StackPanel Spacing="8">
                                                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                                                    <TextBlock Text="存档组"
+                                                    <TextBlock Text="选定"
                                                                Classes="caption"
                                                                VerticalAlignment="Center" />
                                                     <StackPanel Grid.Column="1" Spacing="2">
-                                                        <TextBlock Text="{Binding CurrentGroupName}"
+                                                        <TextBlock Text="{Binding ChosenGroupName}"
                                                                    FontSize="15"
                                                                    FontWeight="SemiBold" />
-                                                        <TextBlock Text="{Binding CurrentGroupPath}"
+                                                        <TextBlock Text="{Binding ChosenGroupPath}"
                                                                    Classes="mono"
                                                                    FontSize="10"
                                                                    Foreground="{DynamicResource TextSecondaryBrush}"
                                                                    TextTrimming="CharacterEllipsis"
-                                                                   ToolTip.Tip="{Binding CurrentGroupPath}" />
-                                                        <TextBlock Text="{Binding CurrentGroupSummary}"
+                                                                   ToolTip.Tip="{Binding ChosenGroupPath}" />
+                                                        <TextBlock Text="{Binding ChosenGroupSummary}"
                                                                    Classes="caption" />
+                                                        <TextBlock Text="{Binding LinkUsageLabel}"
+                                                                   Classes="caption"
+                                                                   FontSize="11"
+                                                                   IsVisible="{Binding HasLinkUsage}" />
+                                                        <TextBlock Text="{Binding LinkOwnerLabel, StringFormat='链接现归「{0}」'}"
+                                                                   Classes="caption"
+                                                                   FontSize="11"
+                                                                   TextWrapping="Wrap"
+                                                                   IsVisible="{Binding HasLinkOwner}" />
                                                     </StackPanel>
                                                     <Button Grid.Column="2"
                                                             Classes="Primary"

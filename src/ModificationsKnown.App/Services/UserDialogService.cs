@@ -38,10 +38,15 @@ public interface IUserDialogService
         IReadOnlyList<SaveGroup> groups);
 
     /// <summary>
-    /// Asks how to handle real saves that MK has not taken over yet. Returning
-    /// null (cancel/close) means the caller must not touch any file.
+    /// Asks how to handle real saves that MK has not taken over yet, and which
+    /// registered installation should receive them. Returning null
+    /// (cancel/close) means the caller must not touch any file.
     /// </summary>
-    Task<UnmanagedSaveAction?> PickUnmanagedSaveActionAsync(string liveDirectory, int fileCount);
+    Task<UnmanagedSaveDecision?> PickUnmanagedSaveAsync(
+        string liveDirectory,
+        int fileCount,
+        IReadOnlyList<UnmanagedSaveCandidate> candidates,
+        string? selectedInstallationKey);
 }
 
 public sealed class UserDialogService : IUserDialogService
@@ -153,15 +158,17 @@ public sealed class UserDialogService : IUserDialogService
         return await dialog.ShowDialog<NexusMatch?>(owner);
     }
 
-    public async Task<UnmanagedSaveAction?> PickUnmanagedSaveActionAsync(
+    public async Task<UnmanagedSaveDecision?> PickUnmanagedSaveAsync(
         string liveDirectory,
-        int fileCount)
+        int fileCount,
+        IReadOnlyList<UnmanagedSaveCandidate> candidates,
+        string? selectedInstallationKey)
     {
         var owner = _ownerProvider();
         if (owner is null) return null;
 
-        var dialog = new UnmanagedSaveDialog(liveDirectory, fileCount);
-        return await dialog.ShowDialog<UnmanagedSaveAction?>(owner);
+        var dialog = new UnmanagedSaveDialog(liveDirectory, fileCount, candidates, selectedInstallationKey);
+        return await dialog.ShowDialog<UnmanagedSaveDecision?>(owner);
     }
 }
 

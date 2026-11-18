@@ -38,6 +38,14 @@
                            FontSize="10"
                            Foreground="{DynamicResource TextSecondaryBrush}"
                            TextWrapping="Wrap" />
+                <StackPanel Spacing="5">
+                    <TextBlock Text="接收版本" Classes="caption" />
+                    <ComboBox Name="InstanceCombo" MinWidth="360" />
+                    <TextBlock Name="InstanceHintText"
+                               Text=""
+                               Classes="caption"
+                               TextWrapping="Wrap" />
+                </StackPanel>
                 <Border Background="{DynamicResource SurfaceAltBrush}"
                         BorderBrush="{DynamicResource BorderBrush}"
                         BorderThickness="1"
@@ -55,19 +63,29 @@
                                    TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
-                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
-                    <Button Name="CancelButton"
+                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,8,0,0">
+                    <Button Grid.Column="0"
+                            Name="SettingsButton"
                             Classes="Ghost"
-                            Content="取消"
-                            Click="OnCancelClick" />
-                    <Button Name="EmptyButton"
-                            Content="新建空组"
-                            Click="OnEmptyClick" />
-                    <Button Name="ImportButton"
-                            Classes="Primary"
-                            Content="导入现存存档"
-                            Click="OnImportClick" />
-                </StackPanel>
+                            Content="找不到版本？去设置添加"
+                            Click="OnSettingsClick" />
+                    <StackPanel Grid.Column="2"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                HorizontalAlignment="Right">
+                        <Button Name="CancelButton"
+                                Classes="Ghost"
+                                Content="取消"
+                                Click="OnCancelClick" />
+                        <Button Name="EmptyButton"
+                                Content="新建空组"
+                                Click="OnEmptyClick" />
+                        <Button Name="ImportButton"
+                                Classes="Primary"
+                                Content="导入现存存档"
+                                Click="OnImportClick" />
+                    </StackPanel>
+                </Grid>
             </StackPanel>
         </Border>
     </Grid>

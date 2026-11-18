@@ -129,6 +129,8 @@
                               VerticalAlignment="Center"
                               ItemsSource="{Binding Game.Installations}"
                               SelectedItem="{Binding Game.Selected, Mode=TwoWay}"
+                              IsEnabled="{Binding CanSwitchInstance}"
+                              ToolTip.Tip="切换版本会同时切到该版本上次使用的存档组；游戏运行时不可切换"
                               PlaceholderText="未选择版本">
                         <ComboBox.ItemTemplate>
                             <DataTemplate>
