@@ -18,7 +18,7 @@
 
 > 一个安静、可靠、可解释的模组管理器：不隐藏文件系统，不静默覆盖，不让免费账号在 403 面前一脸问号。
 
-**当前版本：`0.7.0`（Beta 预览）**  
+**当前版本：`0.7.0-beta`** · [下载 Release](https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.7.0-beta)  
 **平台：** Windows 10/11 · **运行时：** .NET 8 · **UI：** Avalonia 11
 
 ---
@@ -135,16 +135,28 @@
 
 ### 使用发布版
 
-1. 从 Releases 下载 `win-x64` 单文件 exe（当前为 Beta 预览）。
+1. 从 [GitHub Releases](https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.7.0-beta) 下载 `win-x64` 单文件 exe；GitHub 无法访问时可用 [蓝奏云镜像](https://unauthhope.lanzout.com/iYnH04g2143g)（密码 `f1ka`）。
 2. 启动 MK，在“设置 → 游戏与版本”添加游戏实例。
 3. 在实例的 `⋯` 菜单安装 BepInEx。
 4. 在“设置 → Nexus Mods”填入 API Key，按需注册 NXM。
 5. 到“模组发现”浏览、下载、安装；到“已安装模组”启停或更新。
 
+直接下载：
+
+```text
+https://github.com/HOPE-LGNF/modifications-known/releases/download/v0.7.0-beta/ModificationsKnown-v0.7.0-beta-win-x64.exe
+```
+
+SHA-256：
+
+```text
+aeba515098bd8f1318362efd9a664d85ba9093227351819b7c6adb90cb3d54f0
+```
+
 需要控制台日志时：
 
 ```powershell
-.\ModificationsKnown.exe --console
+.\ModificationsKnown-v0.7.0-beta-win-x64.exe --console
 ```
 
 ### 从源码运行

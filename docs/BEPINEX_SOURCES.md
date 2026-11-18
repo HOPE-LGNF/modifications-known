@@ -20,7 +20,7 @@
   - `BepInEx/plugins`（缺失时创建）
 - MK 不自动下载 loader，避免给错误的游戏版本安装不匹配的 loader。
 
-## 当前实现（0.6.0）
+## 当前实现（0.7.0-beta）
 
 - 设置 → 游戏与版本 → 每个未安装 BepInEx 的版本有“安装 BepInEx”；
 - 点击后弹出两个选项：
@@ -29,6 +29,9 @@
     下载 zip，再回到“本地导入压缩包…”安装。
 - Thunderstore / Nexus 入口已移除；BepInEx 只从官方 GitHub 获取或由用户本地导入。
 - 安装完成后重新检测该实例的 BepInEx 状态。
+- **卸载 BepInEx**：实例 `⋯` 菜单；两步确认（勾选知晓 + 5 秒倒计时），删除
+  `BepInEx/`、`winhttp.dll`、`doorstop_config.ini`、`.doorstop_version`，同时删除该实例全部模组、插件和配置。
+- 游戏运行中禁止安装/卸载；卸载后实例保留，只回到“BepInEx 未安装”。
 
 ## 版本选择
 

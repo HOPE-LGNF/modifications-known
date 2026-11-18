@@ -4,114 +4,72 @@
 
 ### Added
 
-- Unmanaged saves can be handed to any registered copy: the dialog lists every
-  installation with its group count, a copy without groups gets 「默认」 and a
-  copy with groups gets 「导入的存档」 (numbered). The active instance follows
-  the receiving copy, and a real folder is kept in `save-backups`.
-- The saves page names the group that owns the global LocalLow link once at
-  the top and shows 选定：<group> per installation; each copy's card shows that
-  chosen group, and 「待应用」 only appears after choosing a different one.
-- A save link whose target was deleted is rebuilt instead of being treated as
-  “owned by another installation”, and an explicit instance switch may take the
-  link over when that copy has no group yet.
-- Switching the active instance moves the save group with it: the live link
-  follows that instance's last chosen group, the first activation creates a
-  「默认」 group, unmanaged saves still ask before anything is touched, and the
-  instance selector is locked while a game runs.
-- Save groups: multiple complete LocalLow profiles per game directory, with
-  create/clone/rename/select/apply/delete, immediate junction switching, ZIP
-  export and validated import. The first group (created, migrated or imported)
-  becomes the live group immediately — unless the live link currently belongs to
-  another installation, in which case the group is created without taking it
-  over; an explicit Apply still switches between installations.
-- Real save-layout reader: QoL `slot_N.sv` + `slot_N.sv.meta` +
-  `qol_slots.json` (`Slots` array, `Names` map), vanilla `save.sv`, and generic
-  cards for unclaimed files. Shows empty declared slots, layer/difficulty/
-  play-time facts and the most recent save per group.
-- Slot cards show the chosen character (0/1/2 → Experiment/Milky/Dune,
-  out-of-range values keep their raw number), and the layer chip now reads
-  “层级”. The group summary includes the character name as well.
-- Typed difficulty matching against the game's real presets (51 keys from
-  `RunSettings.presets`; official labels 艰难/轻松/天堂/荒凉/未植入芯片/无尽).
-  Numbers compare with a tolerance, booleans/dropdowns exactly; a save must carry
-  every key — a missing key (older save format) or an unknown key (newer game or
-  mod) shows “自定义” rather than a guess.
+- 存档组：一个游戏目录可以有多套完整的 LocalLow 存档，用 NTFS junction 切换；从 Steam 直接启动也写进当前组。首个组（新建/迁移/导入）自动成为当前组，除非 live 链接属于另一个安装。
+- 点选即保存：每个版本只有一个「选定组」，点击行内按钮立即保存——当前实例立刻切链接，其他实例只更新自己的选定组；没有待应用状态，也没有单独的「应用」按钮。
+- 未托管存档可交给任一已注册版本：0 组的版本导入成「默认」，已有组的版本导入成「导入的存档」并自动加序号；真实目录先移入 `save-backups`，导入后活动版本跟随接收方。
+- ZIP 备份/恢复：导出带 `manifest.json`（相对路径 + 大小 + SHA-256）；导入先解到 `save-groups-staging` 并校验，之后才注册成新组，绝不覆盖或合并现有组。
+- 真实存档读取：QoL 多槽、原版 `save.sv`、Generic 兜底；显示层级、深度、难度、游玩时长、保存时间、角色、种子与大小；同哈希文件合并成一张卡。
+- 难度按游戏真实预设表匹配（51 键）；缺键（旧档）或未知键一律「自定义」。
+- 切换活动实例时同步存档组；游戏运行中锁定实例切换与所有存档写操作。
 
 ### Changed
 
-- Deleting a save group moves it to the Windows recycle bin; removing an
-  instance no longer copies, moves or deletes save groups.
-- Save-group writes take a shared lock and re-probe the game process first; an
-  unreadable process list is treated as “running” (fail closed).
-- The saves page disables every save-write control while any installation runs
-  the game, and process polls only flip the running state instead of rebuilding
-  the page.
+- 删除存档组走 Windows 回收站；删除实例不再复制、移动或删除存档组。
+- 所有存档写操作共用一把锁并在锁内重新探测游戏进程；进程列表不可读按「运行中」处理（fail closed）。
+- 存档页刷新改为原地更新，保留卡片、展开、选中和滚动位置。
 
 ### Fixed
-- The empty-slot chip list is gone (QoL can append slots later), and the
-  “选择存档组” button uses the primary style in a smaller size; the live group
-  reads “当前应用” and stays disabled while nothing is pending.
-- The live group's row becomes a real “选择存档组” button while another group is
-  pending, so a pending choice can be cancelled without applying it; leaving the
-  saves page drops pending selections and expanded blocks.
-- The pending row's “已选择” button is disabled like the live row's “当前应用”,
-  and both keep their tooltip while disabled.
 
-- Expand chevrons are gone: both the installation header and save-group rows
-  expand on a click anywhere in the card, with a hover tint but no button-style
-  press flash or sink.
+- 导入现存存档时，组、live 链接与索引选定三者一致才算成功；索引写失败会撤销链接切换并保留副本。
+- 新建空组只在「确认原状态未变且链接不再指向它」时回滚；状态未知一律保留并报告部分失败。
+- 迁移与导入的副本在任何失败路径都保留。
+- 0 字节存档显示为「空文件」；未知类型的 `runSettings` 值按「自定义」，不再被漏掉后误判成官方预设。
+- 组摘要显示游玩时长；`mp_save\` 不再冒充「最近保存」。
+- 存档组名称校验与建议名清理共用同一套规则。
 
-- Save-group rows no longer select on click: clicking anywhere in the card
-  (except slot cards, the menu and the select button) expands it, and only one
-  group stays open at a time. Selection is the “选择存档组” button's job.
+## [0.7.0-beta] - 2026-11-15
 
-- Slot facts use 12px chips on a darker `Surface` background, and the expand
-  chevrons are 34px buttons drawn with a Path instead of a text glyph, so the
-  whole triangle is a real hit target.
-
-- Save cards follow the app theme again (the 12 procedural layer gradients are
-  gone) and list depth first without repeating the `LocationName` prefix.
-- `mp_save\` (multiplayer session data) is skipped when reading a group, so
-  “最近保存” no longer reports that folder's own `save.sv`.
-- The save-group row no longer repeats “最近：…” under a summary that already
-  contains the most recent save; the expand chevron is back on the left.
-- The `isMercRun` “雇佣兵” badge is no longer shown on slot cards.
-
-
-- Junctions are created with `DeviceIoControl` instead of `cmd.exe /c mklink`,
-  so `%VAR%`, `&`, quotes and Unicode in paths stay literal.
-- A failed rollback no longer claims “已恢复原链接”: the failing stage, the
-  error and the expected target are reported instead.
-- Export refuses a target inside the source group, so a previous archive can
-  never be re-packaged into the next one.
-- ZIP and GZip input is bounded (entry count, per-file and total expansion,
-  compression ratio, decompressed JSON size); over-limit input fails safely and
-  cleans staging.
-
-## [0.7.0] - 2026-11-14
+首个公开 Beta。主题从“日光默认”回到苔原，并把模组更新、免费账号 NXM、BepInEx 卸载和启动器自更新补成完整链路。
 
 ### Added
 
-- Light “日光” palette as the new default theme (existing explicit ember/slate/
-  custom choices are preserved; the old moss default is migrated once).
-- A-style shell: 64 px title bar with centred, horizontally scrollable tabs
-  (wheel/drag, no scrollbar), launcher column + dashboard, persisted activity
-  trail, save-profile management page, dynamic first-run checklist.
-- Drag-and-drop archive install with an explicit multi-file confirmation.
-- Settings sticky save bar with unsaved-change detection and discard.
+- **模组更新**：已安装页手动检查 Nexus 来源包；单项更新与一键更新；最新版本以“全部文件/版本中的最高文件版本”为准。
+- **安全替换**：更新前将旧包移到同盘暂存目录；可选复制备份到 `backups/<时间>/<包名>`；跨卷备份；安装失败自动恢复旧目录。
+- **BepInEx 卸载**：两步危险确认 + 5 秒最终倒计时，删除 loader 目录、根目录 loader 文件和该实例全部模组/配置。
+- **启动器自更新**：设置页检查 GitHub Release；下载后校验 GitHub asset SHA-256 digest；退出后由 PowerShell 辅助脚本替换 exe 并重启。
+- 免费账号且未注册 NXM 时，下载/更新前提示注册，并带“NXM 是什么？”说明。
+- 首页清单新增“注册 NXM 链接”，位于 API Key 与安装第一个模组之间。
+- 发现页/详情页增加“可能 Demo / 作者提到 Demo”提示（日期 + 作者文本关键词，保守提示，不作兼容性断言）。
+- 自绘标题栏、hazard 测试图标、BETA 标识；标题过长不再遮住 Demo 徽标。
+- 设置深链：首页“安装 BepInEx”会滚动并高亮当前实例 `⋯`；“注册 NXM”跳到 NXM 小节。
+- 关闭游戏按钮 hover 修正：普通深红、hover 亮红；启动后先保持“正在启动…”，捕捉到进程再变为“关闭游戏”。
 
 ### Changed
 
-- Cherry-picked from the UI PR: `CoverImage` blurred-backdrop covers, selected
-  mod-card state, 11 px minimum labels, category ComboBox fix, 401 message,
-  single-`v` version labels, and in-memory thumbnail cache so toggling a mod
-  does not re-fetch covers.
-- Toast lasts 5 s (success/info) or 6.5 s (warning/error).
-- Save page lists per-instance profiles with open/backup/delete actions.
-- Installed-page update check (manual, Nexus-linked packages only) with a
-  “可更新” badge; downloading a newer version from Discover now verifies the
-  installed version, backs up the old package and replaces it, restoring the
-  backup if install fails.
+- 默认主题恢复为 **苔原**；日光/夜航保留；旧 ember 迁移为苔原。
+- 更新检查/更新统一使用最新文件版本，修复“检查说有更新、更新却说已是最新”。
+- 更新成功即时清除“可更新”徽标和摘要，无需手动复查。
+- NXM 链接不再强制从已安装页跳转到模组发现，后台处理并保持当前页面。
+- 403 回退页始终携带 `file_id`（可解析时）与 `nmm=1`；更新流程使用同一文件页。
+- 非 Steam 实例只使用自身 exe 启动，不再错误回退 `steam://`。
+- Toast/状态点、成功类文字改用主题 Accent；Success 状态点不再固定绿色。
+- 设置页新增“启动器更新”卡片；README 重做并加入 5 张截图。
+
+### Fixed
+
+- 启动按钮在部分主题/视觉树下落入 disabled 样式而发黑。
+- 关闭按钮 hover 变成系统灰色。
+- 跨卷 `Directory.Move` 备份失败。
+- 更新徽标在更新后仍显示。
+- NXM 参数在回退页丢失。
+- 长标题遮住 Demo 提示。
+
+### Notes
+
+- 63 个测试通过；Windows 真机仍需回归更新安装、BepInEx 卸载、启动等待与自更新。
+- GitHub `/releases/latest` 默认不返回预发布版本，因此 Beta 不会被稳定版自更新通道自动推送；需手动下载。
+- 未签名；启动器自更新仍缺 Authenticode、差分与自动回滚。
+
 ## [0.6.1] - 2026-11-13
 
 ### Fixed
