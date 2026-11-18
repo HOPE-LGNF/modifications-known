@@ -67,6 +67,11 @@ public sealed class InstalledMod
         Plugins.Select(plugin => plugin.Version)
             .FirstOrDefault(version => !string.IsNullOrWhiteSpace(version));
 
+    /// <summary>Version recorded by the install source (Nexus file version),
+    /// which is authoritative for update checks. Falls back to the DLL version
+    /// for local/adopted packages.</summary>
+    public string? UpdateVersion => Manifest?.Source?.Version ?? Version;
+
     public int PluginCount => Plugins.Count;
 
     public IReadOnlyList<ModDependency> Dependencies =>

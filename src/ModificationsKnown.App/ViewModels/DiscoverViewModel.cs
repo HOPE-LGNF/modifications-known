@@ -414,7 +414,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
         var incoming = incomingVersion;
         if (!string.IsNullOrWhiteSpace(incoming)
-            && !VersionText.IsNewer(incoming, target.Version))
+            && !VersionText.IsNewer(incoming, target.UpdateVersion))
         {
             var message = $"已安装「{target.Name}」{target.VersionLabel}，不低于要安装的 {VersionText.Label(incoming)}，已跳过。";
             _shell.SetStatus(message, StatusKind.Info);
@@ -522,7 +522,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                 card.Summary.GameScopedId,
                 card.Summary.Id,
                 file?.Id,
-                card.Summary.Version);
+                version.Version);
             ModInstallResult installed;
             if (updateTarget is null)
             {
@@ -554,7 +554,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     _settings.Current.NexusGameDomain,
                     card.Summary.GameScopedId,
                     card.Summary.Id,
-                    card.Summary.Version,
+                    version.Version,
                     file?.Id);
                 _shell.SetStatus(
                     installed.Message,
@@ -581,7 +581,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     long.TryParse(card.Summary.GameScopedId, out var mg) ? mg : 0,
                     long.TryParse(file?.Id, out var fi) ? fi : 0,
                     card.Name,
-                    card.Summary.Version,
+                    version.Version,
                     card.Summary.Id,
                     file?.Id);
                 DownloadStatus = nxmReady

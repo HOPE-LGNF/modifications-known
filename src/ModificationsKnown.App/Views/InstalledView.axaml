@@ -42,7 +42,7 @@
                             ToolTip.Tip="只检查已关联 Nexus 的模组；不自动下载" />
                     <Button Classes="Ghost"
                             Content="一键更新"
-                            IsVisible="{Binding HasUpdates}"
+                            IsVisible="{Binding CanOneClickUpdate}"
                             Command="{Binding UpdateAllCommand}"
                             ToolTip.Tip="依次更新所有检测到可更新的 Nexus 模组" />
                     <Button Classes="Primary"

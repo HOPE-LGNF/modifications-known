@@ -93,22 +93,13 @@ public sealed class PackageUpdateService
             }
 
             var contentChanged = HasContentChanges(staged, targetPath);
-            if (!contentChanged)
-            {
-                var restored = TryRestore(staged, targetPath);
-                return new PackageUpdateResult(
-                    false,
-                    restored
-                        ? $"下载的归档与已安装「{target.Name}」内容相同，未发生更新；已恢复旧版本。"
-                        : $"下载的归档与已安装「{target.Name}」内容相同；旧版本未能自动恢复，暂存目录：{staged}",
-                    backupPath);
-            }
-
             var refreshed = await _operations.ScanAsync(installation, cancellationToken);
             var installedPackage = refreshed.FirstOrDefault(mod =>
                 string.Equals(mod.PackageId, target.PackageId, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(mod.DirectoryPath, targetPath, StringComparison.OrdinalIgnoreCase));
-            var versionUpdated = VersionText.IsNewer(installedPackage?.Version, target.Version);
+            var versionUpdated = VersionText.IsNewer(
+                installedPackage?.UpdateVersion,
+                target.UpdateVersion);
             if (!wasEnabled) DisablePackage(targetPath);
             TryDelete(staged);
             _logger?.Info($"Updated package {target.PackageId}; backup={backupPath ?? "none"}");
@@ -116,7 +107,9 @@ public sealed class PackageUpdateService
             {
                 return new PackageUpdateResult(
                     true,
-                    $"「{target.Name}」文件已替换，但 DLL 版本仍为 {installedPackage?.VersionLabel ?? "未知"}（目标 {VersionText.Label(target.Version)}）；请确认下载的是最新文件。",
+                    contentChanged
+                        ? $"「{target.Name}」文件已替换，但版本记录仍为 {installedPackage?.UpdateVersion ?? "未知"}（目标 {VersionText.Label(target.Version)}）；请确认下载的是最新文件。"
+                        : $"「{target.Name}」归档内容与旧版相同，已记录新版本 {VersionText.Label(target.UpdateVersion)}；可更新标记将清除。",
                     backupPath,
                     Warning: true);
             }
@@ -124,8 +117,12 @@ public sealed class PackageUpdateService
             return new PackageUpdateResult(
                 true,
                 backupPath is null
-                    ? $"已更新「{target.Name}」。"
-                    : $"已更新「{target.Name}」；旧版本备份在 {backupPath}。",
+                    ? (contentChanged
+                        ? $"已更新「{target.Name}」。"
+                        : $"已记录「{target.Name}」新版本 {VersionText.Label(target.UpdateVersion)}（归档内容相同）。")
+                    : (contentChanged
+                        ? $"已更新「{target.Name}」；旧版本备份在 {backupPath}。"
+                        : $"已记录「{target.Name}」新版本 {VersionText.Label(target.UpdateVersion)}（归档内容相同）；旧版本备份在 {backupPath}。"),
                 backupPath);
         }
         catch (Exception exception)
