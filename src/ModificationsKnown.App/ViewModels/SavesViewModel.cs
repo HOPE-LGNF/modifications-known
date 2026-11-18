@@ -12,38 +12,126 @@ using ModificationsKnown.Infrastructure.Saves;
 
 namespace ModificationsKnown.App.ViewModels;
 
-public sealed record SaveFileRow(string RelativePath, string SizeLabel);
+public sealed record SaveFact(string Text, string? Tip = null);
 
-/// <summary>One compact save-group row: identity, the two state tags, file
-/// metrics and the per-group actions. Rebuilt on every refresh, so it never
-/// holds stale selection state.</summary>
-public sealed class SaveGroupRow
+/// <summary>One save inside a group, formatted for the detail cards.</summary>
+public sealed class SaveSlotCard
 {
+    public SaveSlotCard(SaveSlotMetadata save)
+    {
+        Save = save;
+        Label = string.IsNullOrWhiteSpace(save.Label) ? save.FileName : save.Label;
+        Badges = BuildBadges(save);
+        Facts = BuildFacts(save);
+        FileLine = $"{save.FileName} · {FormatSize(save.FileSize)}";
+    }
+
+    public SaveSlotMetadata Save { get; }
+
+    public string Label { get; }
+
+    public IReadOnlyList<string> Badges { get; }
+
+    public IReadOnlyList<SaveFact> Facts { get; }
+
+    public string FileLine { get; }
+
+    public bool IsReadable => Save.IsReadable;
+
+    public bool IsUnreadable => !Save.IsReadable;
+
+    public bool HasError => !string.IsNullOrWhiteSpace(Save.Error);
+
+    public string Error => Save.Error ?? string.Empty;
+
+    private static IReadOnlyList<string> BuildBadges(SaveSlotMetadata save)
+    {
+        var badges = new List<string> { KindLabel(save.Kind) };
+        if (save.IsMostRecent) badges.Add("最近");
+        if (save.IsMultiplayer) badges.Add("多人");
+        if (save.Cheated) badges.Add("已修改");
+        if (save.ModCount > 0) badges.Add($"模组 {save.ModCount}");
+        return badges;
+    }
+
+    private static IReadOnlyList<SaveFact> BuildFacts(SaveSlotMetadata save)
+    {
+        var facts = new List<SaveFact>();
+
+        // 深度置顶：LocationName 里的“2158m Deep”与深度是同一份数据，只保留深度。
+        if (save.DepthMeters is > 0) facts.Add(new($"深度：{save.DepthMeters:0} m"));
+        if (!string.IsNullOrWhiteSpace(save.LayerName)) facts.Add(new($"层级：{save.LayerName}"));
+        else if (save.LayerIndex is { } layer) facts.Add(new($"层级：第 {layer + 1} 层"));
+        if (!string.IsNullOrWhiteSpace(save.DifficultyLabel))
+        {
+            var tip = string.Equals(save.DifficultyKey, SaveDifficultyPresets.CustomKey, StringComparison.Ordinal)
+                ? SaveDifficultyPresets.CustomDescription
+                : null;
+            facts.Add(new($"难度：{save.DifficultyLabel}", tip));
+        }
+        if (!string.IsNullOrWhiteSpace(save.CharacterLabel)) facts.Add(new($"角色：{save.CharacterLabel}"));
+        if (!string.IsNullOrWhiteSpace(save.RunTimeLabel)) facts.Add(new($"游玩：{save.RunTimeLabel}"));
+        if (!string.IsNullOrWhiteSpace(save.SavedAtLabel)) facts.Add(new($"保存：{save.SavedAtLabel}"));
+        if (save.CharacterId is { } characterId) facts.Add(new($"角色 ID：{characterId}"));
+        if (save.SeedValue is { } seed) facts.Add(new($"种子：{seed}"));
+        if (!string.IsNullOrWhiteSpace(save.SaveKind)) facts.Add(new($"类型：{save.SaveKind}"));
+        if (facts.Count == 0 && save.IsReadable) facts.Add(new("无更多元数据"));
+        return facts;
+    }
+
+    private static string KindLabel(SaveArtifactKind kind) => kind switch
+    {
+        SaveArtifactKind.Slot => "槽位",
+        SaveArtifactKind.Current => "当前进度",
+        SaveArtifactKind.Autosave => "自动存档",
+        SaveArtifactKind.SingleSave => "原版存档",
+        _ => "文件"
+    };
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes / 1024.0 / 1024.0:0.#} MB"
+    };
+}
+
+/// <summary>One compact save-group row. Clicking the row selects it; the
+/// chevron is a second, explicit click that expands the save cards.</summary>
+public sealed partial class SaveGroupRow : ObservableObject
+{
+    private readonly bool _canDeleteGroup;
+
     public SaveGroupRow(
         GameInstallation installation,
         SaveGroup group,
+        bool isCurrent,
         bool isNextLaunch,
         bool isRunning,
-        IReadOnlyList<SaveFileRow> files,
-        string sizeLabel,
-        string updatedLabel,
+        SaveGroupDetails details,
+        bool canDeleteGroup,
         Func<SaveGroupRow, Task> open,
         Func<SaveGroupRow, Task> export,
         Func<SaveGroupRow, Task> rename,
-        Func<SaveGroupRow, Task> selectNextLaunch)
+        Func<SaveGroupRow, Task> delete)
     {
         Installation = installation;
         Group = group;
+        IsCurrent = isCurrent;
         IsNextLaunch = isNextLaunch;
-        IsRunning = isRunning;
-        Files = files;
-        SizeLabel = sizeLabel;
-        UpdatedLabel = updatedLabel;
+        _isRunning = isRunning;
+        _canDeleteGroup = canDeleteGroup;
+        Details = details;
+        Saves = details.Saves.Select(save => new SaveSlotCard(save)).ToList();
 
         OpenCommand = new AsyncRelayCommand(() => open(this));
-        ExportCommand = new AsyncRelayCommand(() => export(this));
-        RenameCommand = new AsyncRelayCommand(() => rename(this));
-        SelectNextLaunchCommand = new AsyncRelayCommand(() => selectNextLaunch(this));
+        ExportCommand = new AsyncRelayCommand(() => export(this), () => CanExport);
+        RenameCommand = new AsyncRelayCommand(() => rename(this), () => CanEdit);
+        DeleteCommand = new AsyncRelayCommand(() => delete(this), () => CanDelete);
+        ToggleExpandedCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
+        SelectCommand = new RelayCommand(
+            () => Selected?.Invoke(this, EventArgs.Empty),
+            () => CanSelect);
     }
 
     public GameInstallation Installation { get; }
@@ -54,29 +142,112 @@ public sealed class SaveGroupRow
 
     public string Name => Group.Name;
 
-    public bool IsDefault => Group.IsDefault;
+    public bool IsCurrent { get; }
 
     public bool IsNextLaunch { get; }
 
-    public bool IsRunning { get; }
+    public bool IsDefault => Group.IsDefault;
+
+    public bool HasCurrentTag => IsCurrent;
+
+    public string CurrentTag => IsCurrent ? "当前" : string.Empty;
+
+    public string DirectoryPath => Group.DirectoryPath;
+
+    public SaveGroupDetails Details { get; }
+
+    public IReadOnlyList<SaveSlotCard> Saves { get; }
+
+    public bool HasSaves => Saves.Count > 0;
+
+    public bool IsEmpty => Saves.Count == 0;
+
+    public string SummaryLabel => Details.SummaryLabel;
+
+
+
+    public bool HasError => !string.IsNullOrWhiteSpace(Details.Error);
+
+    public string DetailError => Details.Error ?? string.Empty;
+
+    [ObservableProperty]
+    private bool _isExpanded;
+
+    [ObservableProperty]
+    private bool _isRunning;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectLabel))]
+    [NotifyPropertyChangedFor(nameof(SelectTip))]
+    [NotifyPropertyChangedFor(nameof(CanSelect))]
+    private bool _isPending;
+
+    /// <summary>True while another group of the same installation is pending.
+    /// The live group keeps a read-only “当前应用” label until then, and turns
+    /// into a real “选择存档组” button so the pending choice can be undone
+    /// without applying it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectLabel))]
+    [NotifyPropertyChangedFor(nameof(CanSelect))]
+    [NotifyPropertyChangedFor(nameof(SelectTip))]
+    private bool _hasPendingSelection;
+
+
+    /// <summary>True for the row chosen with “选择存档组”; drives the accent border.</summary>
+    [ObservableProperty]
+    private bool _isSelected;
+
+
+    /// <summary>Raised by the row's “选择存档组” button; the page marks it pending.</summary>
+    public event EventHandler? Selected;
+
+    /// <summary>Raised when <see cref="IsExpanded"/> changes; the page keeps one row open.</summary>
+    public event EventHandler? Expanded;
+
+    /// <summary>Selection is a radio group: every row can be chosen, including
+    /// the live one — choosing it cancels a pending choice instead of writing.</summary>
+    public string SelectLabel => IsCurrent
+        ? HasPendingSelection ? "选择存档组" : "当前应用"
+        : IsPending ? "已选择" : "选择存档组";
+
+    public bool CanSelect =>
+        !IsRunning && (IsCurrent ? HasPendingSelection : !IsPending);
+
+    public string SelectTip => IsRunning
+        ? "游戏运行中，选择已锁定"
+        : IsCurrent
+            ? HasPendingSelection
+                ? "取消待应用的选择，仍然使用当前组；不写任何文件"
+                : "这是当前正在使用的存档组"
+            : IsPending
+                ? "已选择；点上方「应用当前存档组」才会立即切换链接"
+                : "只做选择；点上方「应用当前存档组」才会立即切换链接";
+
 
     public bool CanEdit => !IsRunning;
 
     public bool CanExport => !IsRunning;
 
-    public bool CanSelectNextLaunch => !IsRunning && !IsNextLaunch;
+    public bool CanDelete => !IsRunning && !IsCurrent && !IsNextLaunch && _canDeleteGroup;
 
-    public string DirectoryPath => Group.DirectoryPath;
+    public string DeleteHint =>
+        IsCurrent ? "当前存档组，不能删除"
+        : IsNextLaunch ? "下次启动组，不能删除"
+        : IsRunning ? "游戏运行中，不能删除"
+        : !_canDeleteGroup ? "至少保留一个存档组"
+        : "移入 Windows 回收站";
 
-    public IReadOnlyList<SaveFileRow> Files { get; }
+    public IRelayCommand ToggleExpandedCommand { get; }
 
-    public bool IsEmpty => Files.Count == 0;
+    public IRelayCommand SelectCommand { get; }
 
-    public string SummaryLabel => $"{Files.Count} 个文件 · {SizeLabel} · 最后更新 {UpdatedLabel}";
+    partial void OnIsExpandedChanged(bool value) => Expanded?.Invoke(this, EventArgs.Empty);
 
-    public string SizeLabel { get; }
+    partial void OnHasPendingSelectionChanged(bool value) =>
+        SelectCommand.NotifyCanExecuteChanged();
 
-    public string UpdatedLabel { get; }
+    partial void OnIsPendingChanged(bool value) =>
+        SelectCommand.NotifyCanExecuteChanged();
 
     public IAsyncRelayCommand OpenCommand { get; }
 
@@ -84,14 +255,28 @@ public sealed class SaveGroupRow
 
     public IAsyncRelayCommand RenameCommand { get; }
 
-    public IAsyncRelayCommand SelectNextLaunchCommand { get; }
+    public IAsyncRelayCommand DeleteCommand { get; }
+
+    partial void OnIsRunningChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(CanExport));
+        OnPropertyChanged(nameof(CanDelete));
+        OnPropertyChanged(nameof(CanSelect));
+        OnPropertyChanged(nameof(SelectTip));
+        OnPropertyChanged(nameof(DeleteHint));
+        ExportCommand.NotifyCanExecuteChanged();
+        RenameCommand.NotifyCanExecuteChanged();
+        DeleteCommand.NotifyCanExecuteChanged();
+        SelectCommand.NotifyCanExecuteChanged();
+    }
 }
 
 /// <summary>One collapsible installation block on the saves page.</summary>
 public partial class SaveInstallationItem : ObservableObject
 {
-    private readonly Guid? _nextLaunchGroupId;
     private readonly Action<SaveInstallationItem> _expandedChanged;
+    private readonly Action<SaveInstallationItem> _selectionChanged;
 
     public SaveInstallationItem(
         GameInstallation installation,
@@ -101,13 +286,15 @@ public partial class SaveInstallationItem : ObservableObject
         bool needsUnmanagedChoice,
         int unmanagedFileCount,
         string noticeMessage,
+        SaveGroupRow? currentGroup,
         IReadOnlyList<SaveGroupRow> groups,
-        Guid? nextLaunchGroupId,
+        SaveGroupRow? selectedGroup,
         Func<SaveInstallationItem, Task> createEmpty,
         Func<SaveInstallationItem, Task> clone,
         Func<SaveInstallationItem, Task> import,
-        Func<SaveInstallationItem, Task> commitSelection,
-        Action<SaveInstallationItem> expandedChanged)
+        Func<SaveInstallationItem, Task> applySelection,
+        Action<SaveInstallationItem> expandedChanged,
+        Action<SaveInstallationItem> selectionChanged)
     {
         Installation = installation;
         IsActive = isActive;
@@ -115,21 +302,35 @@ public partial class SaveInstallationItem : ObservableObject
         NeedsUnmanagedChoice = needsUnmanagedChoice;
         UnmanagedFileCount = unmanagedFileCount;
         NoticeMessage = noticeMessage;
-        _nextLaunchGroupId = nextLaunchGroupId;
+        CurrentGroup = currentGroup;
         _expandedChanged = expandedChanged;
+        _selectionChanged = selectionChanged;
 
-        foreach (var group in groups) Groups.Add(group);
+        foreach (var group in groups)
+        {
+            var row = group;
+            row.Selected += (_, _) => SelectedGroup = row;
+            row.Expanded += (_, _) =>
+            {
+                // Accordion: opening one group closes the others.
+                if (!row.IsExpanded) return;
+                foreach (var other in Groups)
+                {
+                    if (!ReferenceEquals(other, row) && other.IsExpanded) other.IsExpanded = false;
+                }
+            };
+            Groups.Add(row);
+        }
 
         ToggleExpandedCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
-        CreateEmptyCommand = new AsyncRelayCommand(() => createEmpty(this));
-        CloneCommand = new AsyncRelayCommand(() => clone(this));
-        ImportCommand = new AsyncRelayCommand(() => import(this));
-        CommitSelectionCommand = new AsyncRelayCommand(
-            () => commitSelection(this),
-            () => CanCommitSelection);
+        CreateEmptyCommand = new AsyncRelayCommand(() => createEmpty(this), () => CanEdit);
+        CloneCommand = new AsyncRelayCommand(() => clone(this), () => CanEdit && HasGroups);
+        ImportCommand = new AsyncRelayCommand(() => import(this), () => CanImport);
+        ApplyCommand = new AsyncRelayCommand(() => applySelection(this), () => CanApply);
 
         _isExpanded = isExpanded;
-        SelectedNextGroup = NextLaunchGroup;
+        _selectedGroup = selectedGroup;
+        UpdatePendingFlags();
     }
 
     public GameInstallation Installation { get; }
@@ -150,12 +351,15 @@ public partial class SaveInstallationItem : ObservableObject
 
     public ObservableCollection<SaveGroupRow> Groups { get; } = [];
 
-    public SaveGroupRow? NextLaunchGroup =>
-        Groups.FirstOrDefault(group => group.Id == _nextLaunchGroupId);
+    public SaveGroupRow? CurrentGroup { get; }
 
-    public SaveGroupRow? NextLaunchGroupOrFirst => NextLaunchGroup ?? Groups.FirstOrDefault();
+    public string CurrentGroupName => CurrentGroup?.Name ?? "未指定";
 
-    public string NextLaunchLabel => NextLaunchGroup?.Name ?? "未创建";
+    public bool HasCurrentGroup => CurrentGroup is not null;
+
+    public string CurrentGroupPath => CurrentGroup?.DirectoryPath ?? "—";
+
+    public string CurrentGroupSummary => CurrentGroup?.SummaryLabel ?? "应用一个组后，从 Steam 启动也会使用它";
 
     public string GroupCountLabel => $"{Groups.Count} 个存档组";
 
@@ -164,28 +368,38 @@ public partial class SaveInstallationItem : ObservableObject
     public bool HasNoGroups => Groups.Count == 0;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Chevron))]
     private bool _isExpanded;
 
     [ObservableProperty]
     private SaveGroupRow? _selectedGroup;
 
     [ObservableProperty]
-    private SaveGroupRow? _selectedNextGroup;
-
-    [ObservableProperty]
     private bool _isRunning;
 
-    public string Chevron => IsExpanded ? "▾" : "▸";
 
     public bool CanEdit => !IsRunning && !NeedsUnmanagedChoice;
 
+    /// <summary>Text for the page-level running banner (see SavesViewModel.AnyRunning).</summary>
+    public string RunningNotice =>
+        "游戏正在运行；选择、应用、克隆、导入、导出和删除已锁定，请关闭游戏后再操作。";
+
     public bool CanImport => !IsRunning && !NeedsUnmanagedChoice;
 
-    public bool CanCommitSelection =>
+    public bool CanApply =>
         CanEdit
-        && SelectedNextGroup is not null
-        && SelectedNextGroup.Id != _nextLaunchGroupId;
+        && SelectedGroup is not null
+        && SelectedGroup.Id != CurrentGroup?.Id;
+
+    public string SelectionHint
+    {
+        get
+        {
+            if (SelectedGroup is null) return "点「选择存档组」进行选择；点行内其它位置只展开/收起。";
+            if (SelectedGroup.Id == CurrentGroup?.Id)
+                return $"「{SelectedGroup.Name}」已应用；从 Steam 启动也会使用该组。";
+            return $"待应用：{SelectedGroup.Name}";
+        }
+    }
 
     public IRelayCommand ToggleExpandedCommand { get; }
 
@@ -195,7 +409,7 @@ public partial class SaveInstallationItem : ObservableObject
 
     public IAsyncRelayCommand ImportCommand { get; }
 
-    public IAsyncRelayCommand CommitSelectionCommand { get; }
+    public IAsyncRelayCommand ApplyCommand { get; }
 
     partial void OnIsExpandedChanged(bool value) => _expandedChanged(this);
 
@@ -203,14 +417,34 @@ public partial class SaveInstallationItem : ObservableObject
     {
         OnPropertyChanged(nameof(CanEdit));
         OnPropertyChanged(nameof(CanImport));
-        OnPropertyChanged(nameof(CanCommitSelection));
-        CommitSelectionCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanApply));
+        CreateEmptyCommand.NotifyCanExecuteChanged();
+        CloneCommand.NotifyCanExecuteChanged();
+        ImportCommand.NotifyCanExecuteChanged();
+        ApplyCommand.NotifyCanExecuteChanged();
     }
 
-    partial void OnSelectedNextGroupChanged(SaveGroupRow? value)
+    partial void OnSelectedGroupChanged(SaveGroupRow? value)
     {
-        OnPropertyChanged(nameof(CanCommitSelection));
-        CommitSelectionCommand.NotifyCanExecuteChanged();
+        UpdatePendingFlags();
+        OnPropertyChanged(nameof(CanApply));
+        OnPropertyChanged(nameof(SelectionHint));
+        ApplyCommand.NotifyCanExecuteChanged();
+        _selectionChanged(this);
+    }
+
+    /// <summary>“待应用” belongs to exactly one row: the pending selection that
+    /// is not already the live group. Every row learns whether a pending choice
+    /// exists, so the live row can offer “选择存档组” to cancel it.</summary>
+    private void UpdatePendingFlags()
+    {
+        var anyPending = SelectedGroup is not null && SelectedGroup.Id != CurrentGroup?.Id;
+        foreach (var row in Groups)
+        {
+            row.HasPendingSelection = anyPending;
+            row.IsPending = ReferenceEquals(row, SelectedGroup) && row.Id != CurrentGroup?.Id;
+            row.IsSelected = ReferenceEquals(row, SelectedGroup);
+        }
     }
 }
 
@@ -219,25 +453,38 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
     private readonly IAppShell _shell;
     private readonly SaveGroupService _saveGroups;
     private readonly SaveGroupArchiveService _archive;
+    private readonly SaveSlotReader _slotReader;
     private readonly IFilePickerService _filePicker;
     private readonly IUserDialogService _dialogs;
     private readonly IAppLogger _logger;
     private readonly GameProcessMonitor _processMonitor;
 
-    // Expansion is per installation (not per rebuild) so a process-monitor
-    // refresh does not collapse the block the user is working in.
+    // UI state is keyed by installation so a monitor refresh never loses the
+    // user's pending selection or the expanded block.
     private readonly Dictionary<string, bool> _expansion = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Guid> _pending = new(StringComparer.OrdinalIgnoreCase);
 
     [ObservableProperty]
     private string _emptyMessage = string.Empty;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RefreshCommand))]
     private bool _isBusy;
+
+    /// <summary>True while any installation runs the game. The game writes the
+    /// one global LocalLow directory, so this locks every save-write control on
+    /// the page, not only the running installation.</summary>
+    [ObservableProperty]
+    private bool _anyRunning;
+
+    public string RunningNotice =>
+        "游戏正在运行；选择、应用、克隆、导入、导出和删除已锁定，请关闭游戏后再操作。";
 
     public SavesViewModel(
         IAppShell shell,
         SaveGroupService saveGroups,
         SaveGroupArchiveService archive,
+        SaveSlotReader slotReader,
         IFilePickerService filePicker,
         IUserDialogService dialogs,
         IAppLogger logger,
@@ -246,33 +493,72 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         _shell = shell;
         _saveGroups = saveGroups;
         _archive = archive;
+        _slotReader = slotReader;
         _filePicker = filePicker;
         _dialogs = dialogs;
         _logger = logger;
         _processMonitor = processMonitor;
         _shell.Game.Changed += (_, _) => _ = RefreshAsync();
-        _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(() => _ = RefreshAsync());
+
+        // A process-state change only flips IsRunning: rebuilding the list here
+        // would drop scroll position, expansion and the pending selection.
+        _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(ApplyRunningState);
     }
 
     public ObservableCollection<SaveInstallationItem> Instances { get; } = [];
 
     public Task OnActivatedAsync() => RefreshAsync();
 
-    [RelayCommand]
+    /// <summary>Pending selections and expanded blocks are page-local UI state:
+    /// leaving the page drops both, so the page always reopens on the live group.
+    /// Nothing here writes to disk or to the catalog.</summary>
+    public void ResetTransientState()
+    {
+        foreach (var item in Instances)
+        {
+            foreach (var row in item.Groups)
+            {
+                if (row.IsExpanded) row.IsExpanded = false;
+            }
+
+            item.SelectedGroup = item.CurrentGroup ?? item.Groups.FirstOrDefault();
+        }
+
+        // Selection/expansion callbacks repopulate the maps; clear them last so
+        // the next refresh starts from the live state rather than stale intent.
+        _pending.Clear();
+        _expansion.Clear();
+    }
+
+
+    [RelayCommand(CanExecute = nameof(CanRefresh))]
     private Task RefreshAsync() => RefreshCoreAsync();
+
+    private bool CanRefresh() => !IsBusy;
+
+    /// <summary>One save operation at a time: the page disables its controls
+    /// while <see cref="IsBusy"/> and every handler re-checks this flag, so a
+    /// second click cannot start a competing import/export/apply.</summary>
+    private bool TryBeginOperation()
+    {
+        if (!IsBusy) return true;
+        _shell.SetStatus("正在处理另一个存档操作，请等待完成后再试。", StatusKind.Info);
+        return false;
+    }
 
     private async Task RefreshCoreAsync()
     {
         IsBusy = true;
         try
         {
-            var activeId = _shell.Game.Selected?.Profile.Id;
+            AnyRunning = _processMonitor.AnyRunning;
+            var activePath = _shell.Game.Selected?.GameDirectory;
             var items = new List<SaveInstallationItem>();
             foreach (var installation in _shell.Game.Installations)
             {
                 try
                 {
-                    items.Add(await BuildInstallationItemAsync(installation, activeId));
+                    items.Add(await BuildInstallationItemAsync(installation, activePath));
                 }
                 catch (Exception exception)
                 {
@@ -295,22 +581,22 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
 
     private async Task<SaveInstallationItem> BuildInstallationItemAsync(
         GameInstallation installation,
-        string? activeId)
+        string? activeGameDirectory)
     {
-        var isActive = string.Equals(installation.Profile.Id, activeId, StringComparison.OrdinalIgnoreCase);
-        var isRunning = _processMonitor.IsRunning(installation);
+        // Two copies of the same edition share Profile.Id; only the exact game
+        // directory is the active install.
+        var isActive = activeGameDirectory is not null
+                       && SameDirectory(installation.GameDirectory, activeGameDirectory);
+        var isRunning = AnyRunning;
         var key = _saveGroups.GetInstallationKey(installation);
-        var rows = new List<SaveGroupRow>();
 
         IReadOnlyList<SaveGroup> groups = [];
-        Guid? nextLaunchId = null;
         var needsUnmanagedChoice = false;
         var unmanagedFileCount = 0;
         var notice = string.Empty;
         try
         {
             groups = _saveGroups.GetGroups(installation);
-            nextLaunchId = _saveGroups.GetNextLaunchGroupId(installation);
 
             // Opening the page before the first launch must not hide an existing
             // single-profile save (nor let “new group” strand it). Initialize is
@@ -332,7 +618,6 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
                 else if (init.Success)
                 {
                     groups = init.Groups;
-                    nextLaunchId = init.NextLaunchGroupId;
                 }
             }
         }
@@ -344,10 +629,44 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             notice = $"读取存档组失败：{exception.Message}";
         }
 
-        foreach (var group in groups)
-            rows.Add(BuildGroupRow(installation, group, group.Id == nextLaunchId, isRunning));
+        SaveGroup? liveGroup = null;
+        Guid? nextLaunchId = null;
+        try
+        {
+            liveGroup = _saveGroups.GetLiveGroup(installation);
+            nextLaunchId = _saveGroups.GetNextLaunchGroupId(installation);
+        }
+        catch (Exception exception)
+        {
+            _logger.Warn($"读取当前存档组失败：{exception.Message}");
+        }
 
-        var isExpanded = _expansion.TryGetValue(key, out var stored) ? stored : isActive;
+        var canDeleteGroup = groups.Count > 1;
+        var rows = new List<SaveGroupRow>(groups.Count);
+        foreach (var group in groups)
+        {
+            rows.Add(await BuildGroupRowAsync(
+                installation,
+                group,
+                group.Id == liveGroup?.Id,
+                group.Id == nextLaunchId,
+                isRunning,
+                canDeleteGroup));
+        }
+
+        var current = rows.FirstOrDefault(row => row.Id == liveGroup?.Id);
+        var pendingId = _pending.TryGetValue(key, out var stored) ? stored : (Guid?)null;
+        if (pendingId is not null && rows.All(row => row.Id != pendingId))
+        {
+            _pending.Remove(key);
+            pendingId = null;
+        }
+
+        var selected = rows.FirstOrDefault(row => row.Id == pendingId)
+                       ?? current
+                       ?? rows.FirstOrDefault();
+
+        var isExpanded = _expansion.TryGetValue(key, out var expanded) ? expanded : isActive;
         return new SaveInstallationItem(
             installation,
             isActive,
@@ -356,64 +675,87 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             needsUnmanagedChoice,
             unmanagedFileCount,
             notice,
+            current,
             rows,
-            nextLaunchId,
+            selected,
             CreateEmptyAsync,
             CloneAsync,
             ImportAsync,
-            CommitSelectionAsync,
-            RememberExpansion);
+            ApplySelectionAsync,
+            RememberExpansion,
+            RememberSelection);
     }
 
-    private SaveGroupRow BuildGroupRow(
+    private async Task<SaveGroupRow> BuildGroupRowAsync(
         GameInstallation installation,
         SaveGroup group,
+        bool isCurrent,
         bool isNextLaunch,
-        bool isRunning)
+        bool isRunning,
+        bool canDeleteGroup)
     {
-        var files = new List<SaveFileRow>();
-        var total = 0L;
-        DateTime? updated = null;
-
+        SaveGroupDetails details;
         try
         {
-            if (Directory.Exists(group.DirectoryPath))
-            {
-                foreach (var path in Directory.EnumerateFiles(
-                             group.DirectoryPath, "*", SearchOption.AllDirectories))
-                {
-                    if (SaveGroupFormat.IsInternalFile(Path.GetFileName(path))) continue;
-
-                    var info = new FileInfo(path);
-                    files.Add(new SaveFileRow(
-                        Path.GetRelativePath(group.DirectoryPath, path),
-                        FormatSize(info.Length)));
-                    total += info.Length;
-                    if (updated is null || info.LastWriteTime > updated) updated = info.LastWriteTime;
-                }
-            }
+            // Hashing and gzip parsing are bounded but still file I/O; keep them
+            // off the UI thread so a large group cannot freeze the page.
+            details = await Task.Run(
+                () => _slotReader.ReadGroup(group.DirectoryPath, installation.GameDirectory));
         }
         catch (Exception exception)
         {
             _logger.Warn($"读取存档组文件失败：{exception.Message}");
+            details = new SaveGroupDetails
+            {
+                Error = $"读取存档组失败：{exception.Message}"
+            };
         }
 
         return new SaveGroupRow(
             installation,
             group,
+            isCurrent,
             isNextLaunch,
             isRunning,
-            files.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase).ToList(),
-            FormatSize(total),
-            updated?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "—",
+            details,
+            canDeleteGroup,
             OpenGroupAsync,
             ExportGroupAsync,
             RenameGroupAsync,
-            SelectNextLaunchAsync);
+            DeleteGroupAsync);
     }
+
+    /// <summary>Updates only the running flags; list items, expansion, scroll
+    /// and the pending selection are left untouched.</summary>
+    private void ApplyRunningState()
+    {
+        var running = _processMonitor.AnyRunning;
+        AnyRunning = running;
+
+        foreach (var item in Instances)
+        {
+            item.IsRunning = running;
+            foreach (var row in item.Groups) row.IsRunning = running;
+        }
+    }
+
+    private static bool SameDirectory(string left, string right) =>
+        string.Equals(
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)),
+            Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
+            StringComparison.OrdinalIgnoreCase);
 
     private void RememberExpansion(SaveInstallationItem item) =>
         _expansion[_saveGroups.GetInstallationKey(item.Installation)] = item.IsExpanded;
+
+    private void RememberSelection(SaveInstallationItem item)
+    {
+        var key = _saveGroups.GetInstallationKey(item.Installation);
+        if (item.SelectedGroup is null || item.SelectedGroup.Id == item.CurrentGroup?.Id)
+            _pending.Remove(key);
+        else
+            _pending[key] = item.SelectedGroup.Id;
+    }
 
     private Task OpenGroupAsync(SaveGroupRow row)
     {
@@ -473,6 +815,8 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             return;
         }
 
+        if (!TryBeginOperation()) return;
+
         var input = await _dialogs.PromptAsync(
             "重命名存档组",
             $"重命名「{row.Name}」只改名称；不会移动、复制或删除存档文件。",
@@ -480,16 +824,78 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             "存档组名称");
         if (input is null) return;
 
-        var result = await _saveGroups.RenameAsync(row.Installation, row.Id, input);
-        _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
-        if (result.Success) await RefreshAsync();
+        IsBusy = true;
+        try
+        {
+            var result = await _saveGroups.RenameAsync(row.Installation, row.Id, input);
+            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        await RefreshAsync();
     }
 
-    private async Task SelectNextLaunchAsync(SaveGroupRow row)
+    private async Task DeleteGroupAsync(SaveGroupRow row)
     {
-        var result = await _saveGroups.SelectNextLaunchAsync(row.Installation, row.Id);
-        _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
-        if (result.Success) await RefreshAsync();
+        if (row.IsRunning)
+        {
+            _shell.SetStatus("游戏正在运行，先关闭游戏再删除存档组。", StatusKind.Warning);
+            return;
+        }
+
+        var confirmed = await _dialogs.ConfirmAsync(
+            "删除存档组",
+            $"将「{row.Name}」移入 Windows 回收站。\n\n" +
+            "不会永久删除存档；可以从回收站还原。",
+            "删除：移入回收站",
+            "取消");
+        if (!confirmed) return;
+
+        IsBusy = true;
+        try
+        {
+            var result = await _saveGroups.DeleteGroupAsync(row.Installation, row.Id);
+            if (result.Success)
+                _pending.Remove(_saveGroups.GetInstallationKey(row.Installation));
+            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            if (result.Success) await RefreshAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private async Task ApplySelectionAsync(SaveInstallationItem item)
+    {
+        if (item.IsRunning)
+        {
+            _shell.SetStatus("游戏正在运行，先关闭游戏再切换存档组。", StatusKind.Warning);
+            return;
+        }
+
+        if (item.SelectedGroup is not { } group)
+        {
+            _shell.SetStatus("请先点击一个存档组。", StatusKind.Info);
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var result = await _saveGroups.ApplyCurrentAsync(item.Installation, group.Id);
+            if (result.Success)
+                _pending.Remove(_saveGroups.GetInstallationKey(item.Installation));
+            _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
+            if (result.Success) await RefreshAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private async Task CreateEmptyAsync(SaveInstallationItem item)
@@ -508,6 +914,8 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             return;
         }
 
+        if (!TryBeginOperation()) return;
+
         var suggestion = _saveGroups.SuggestGroupName(
             item.Installation,
             $"存档组 {item.Groups.Count + 1}");
@@ -519,17 +927,22 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             "存档组名称");
         if (input is null) return;
 
-        var result = await _saveGroups.CreateEmptyAsync(item.Installation, input);
-        if (!result.Success)
+        IsBusy = true;
+        try
         {
-            _shell.SetStatus(result.Message, StatusKind.Error);
-            return;
-        }
+            var result = await _saveGroups.CreateEmptyAsync(item.Installation, input);
+            if (!result.Success)
+            {
+                _shell.SetStatus(result.Message, StatusKind.Error);
+                return;
+            }
 
-        _shell.SetStatus(result.Message, StatusKind.Success);
-        await RefreshAsync();
-        if (result.Group is not null)
-            await OfferAsNextLaunchAsync(item.Installation, result.Group, "存档组已创建");
+            await FinishGroupCreationAsync(item.Installation, result.Group);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private async Task CloneAsync(SaveInstallationItem item)
@@ -548,33 +961,40 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             return;
         }
 
-        var source = item.SelectedNextGroup ?? item.NextLaunchGroupOrFirst;
+        var source = item.SelectedGroup ?? item.CurrentGroup ?? item.Groups.FirstOrDefault();
         if (source is null)
         {
             _shell.SetStatus("还没有可克隆的存档组；先新建一个空组。", StatusKind.Warning);
             return;
         }
 
+        if (!TryBeginOperation()) return;
+
         var suggestion = _saveGroups.SuggestGroupName(item.Installation, $"{source.Name} 副本");
         item.IsExpanded = true;
         var input = await _dialogs.PromptAsync(
-            "克隆当前存档组",
+            "克隆存档组",
             $"复制「{source.Name}」的完整存档目录到新组；新组使用新的 ID，源组保持不变。",
             suggestion,
             "新存档组名称");
         if (input is null) return;
 
-        var result = await _saveGroups.CloneAsync(item.Installation, source.Id, input);
-        if (!result.Success)
+        IsBusy = true;
+        try
         {
-            _shell.SetStatus(result.Message, StatusKind.Error);
-            return;
-        }
+            var result = await _saveGroups.CloneAsync(item.Installation, source.Id, input);
+            if (!result.Success)
+            {
+                _shell.SetStatus(result.Message, StatusKind.Error);
+                return;
+            }
 
-        _shell.SetStatus(result.Message, StatusKind.Success);
-        await RefreshAsync();
-        if (result.Group is not null)
-            await OfferAsNextLaunchAsync(item.Installation, result.Group, "存档组已克隆");
+            await FinishGroupCreationAsync(item.Installation, result.Group);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private async Task ImportAsync(SaveInstallationItem item)
@@ -592,6 +1012,8 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
                 StatusKind.Warning);
             return;
         }
+
+        if (!TryBeginOperation()) return;
 
         var zip = await _filePicker.PickSaveArchiveAsync();
         if (string.IsNullOrWhiteSpace(zip)) return;
@@ -613,114 +1035,97 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             "新存档组名称");
         if (name is null) return;
 
-        var allowMismatch = false;
-        for (var attempt = 0; attempt < 5; attempt++)
+        IsBusy = true;
+        try
         {
-            var result = await _archive.ImportAsync(
-                zip,
-                item.Installation,
-                _saveGroups,
-                name,
-                allowMismatch,
-                targetVersion);
+            var allowMismatch = false;
+            for (var attempt = 0; attempt < 5; attempt++)
+        {
+                var result = await _archive.ImportAsync(
+                    zip,
+                    item.Installation,
+                    _saveGroups,
+                    name,
+                    allowMismatch,
+                    targetVersion);
 
-            if (result.State == SaveGroupImportState.NeedsEditionConfirmation)
+                if (result.State == SaveGroupImportState.NeedsEditionConfirmation)
             {
-                var confirmed = await _dialogs.ConfirmAsync(
-                    "来源版本不一致",
-                    result.Message + "\n\n仍要导入到一个新存档组吗？",
-                    "仍然导入",
-                    "取消");
-                if (!confirmed)
+                    var confirmed = await _dialogs.ConfirmAsync(
+                        "来源版本不一致",
+                        result.Message + "\n\n仍要导入到一个新存档组吗？",
+                        "仍然导入",
+                        "取消");
+                    if (!confirmed)
                 {
-                    _shell.SetStatus("已取消导入；没有创建或修改任何存档组。", StatusKind.Info);
+                        _shell.SetStatus("已取消导入；没有创建或修改任何存档组。", StatusKind.Info);
+                        return;
+                    }
+
+                    allowMismatch = true;
+                    continue;
+                }
+
+                if (!result.Success && result.SuggestedName is not null)
+            {
+                    var retry = await _dialogs.PromptAsync(
+                        "存档组名称已存在",
+                        result.Message,
+                        result.SuggestedName,
+                        "新存档组名称");
+                    if (retry is null) return;
+                    name = retry;
+                    continue;
+                }
+
+                if (!result.Success)
+            {
+                    _shell.SetStatus(result.Message, StatusKind.Error);
                     return;
                 }
 
-                allowMismatch = true;
-                continue;
-            }
-
-            if (!result.Success && result.SuggestedName is not null)
-            {
-                var retry = await _dialogs.PromptAsync(
-                    "存档组名称已存在",
-                    result.Message,
-                    result.SuggestedName,
-                    "新存档组名称");
-                if (retry is null) return;
-                name = retry;
-                continue;
-            }
-
-            if (!result.Success)
-            {
-                _shell.SetStatus(result.Message, StatusKind.Error);
+                await FinishGroupCreationAsync(item.Installation, result.Group);
                 return;
             }
 
-            _shell.SetStatus(result.Message, StatusKind.Success);
-            await RefreshAsync();
-            if (result.Group is not null)
-                await OfferAsNextLaunchAsync(item.Installation, result.Group, "存档组已导入");
-            return;
-        }
-
-        _shell.SetStatus("导入未完成：名称多次冲突或确认未完成；未创建新组。", StatusKind.Warning);
-    }
-
-    private async Task CommitSelectionAsync(SaveInstallationItem item)
-    {
-        if (item.SelectedNextGroup is not { } group)
+            _shell.SetStatus("导入未完成：名称多次冲突或确认未完成；未创建新组。", StatusKind.Warning);
+            }
+        finally
         {
-            _shell.SetStatus("请先在下拉框中选择一个存档组。", StatusKind.Info);
-            return;
+            IsBusy = false;
         }
-
-        if (item.IsRunning)
-        {
-            _shell.SetStatus("游戏正在运行，先关闭游戏再选择下次启动的存档组。", StatusKind.Warning);
-            return;
-        }
-
-        var result = await _saveGroups.SelectNextLaunchAsync(item.Installation, group.Id);
-        _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
-        if (result.Success) await RefreshAsync();
     }
 
     /// <summary>
-    /// After a create/clone the user decides whether the new group becomes the
-    /// next launch group. The first group is already selected by the service, so
-    /// there is nothing to ask.
+    /// Create/clone/import never ask whether to replace the current group. The
+    /// only exception is the first group of an installation, which is applied
+    /// so a fresh setup is immediately usable.
     /// </summary>
-    private async Task OfferAsNextLaunchAsync(
-        GameInstallation installation,
-        SaveGroup group,
-        string title)
+    private async Task FinishGroupCreationAsync(GameInstallation installation, SaveGroup? group)
     {
-        if (_saveGroups.GetNextLaunchGroupId(installation) == group.Id)
+        var applied = false;
+        if (group is not null)
         {
-            _shell.SetStatus(
-                $"「{group.Name}」已就绪，并作为下次 MK 启动使用的存档组。",
-                StatusKind.Success);
-            await RefreshAsync();
-            return;
+            try
+            {
+                // The service applies the first group itself (it holds the write
+                // lock); for later groups the live link intentionally stays put.
+                applied = _saveGroups.GetLiveGroup(installation)?.Id == group.Id;
+            }
+            catch (Exception exception)
+            {
+                _logger.Warn($"读取当前存档组失败：{exception.Message}");
+            }
         }
 
-        var confirmed = await _dialogs.ConfirmAsync(
-            title,
-            $"是否将「{group.Name}」设为下次由 MK 启动时使用？",
-            "设为下次启动",
-            "保持现有选择");
-        if (!confirmed)
-        {
-            _shell.SetStatus($"已保留「{group.Name}」；下次启动组保持不变。", StatusKind.Info);
-            return;
-        }
+        await RefreshAsync();
+        if (group is null) return;
 
-        var result = await _saveGroups.SelectNextLaunchAsync(installation, group.Id);
-        _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
-        if (result.Success) await RefreshAsync();
+        _shell.SetStatus(
+            applied
+                ? $"「{group.Name}」已创建，并作为当前存档。"
+                : $"「{group.Name}」已创建；当前存档保持不变。",
+            applied ? StatusKind.Success : StatusKind.Info);
     }
 
     private static string? DetectGameVersion(GameInstallation installation)
@@ -736,11 +1141,4 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             return null;
         }
     }
-
-    private static string FormatSize(long bytes) => bytes switch
-    {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
-        _ => $"{bytes / 1024.0 / 1024.0:0.#} MB"
-    };
 }

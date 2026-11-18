@@ -685,6 +685,92 @@ public sealed class SaveSlotReaderTests
         Assert.Equal("艰难", Assert.Single(details.Saves, save => save.SlotNumber == 1).DifficultyLabel);
     }
 
+    [Fact]
+    public void ReadGroup_CharacterIndex_MapsToOfficialNames()
+    {
+        using var temp = new TempDirectory();
+        var group = temp.CreateDirectory("group");
+        var game = temp.CreateDirectory("game");
+        WriteLang(game, new Dictionary<string, string>
+        {
+            ["/other/experiment"] = "Experiment",
+            ["/other/milky"] = "Milky",
+            ["/other/dune"] = "Dune"
+        });
+
+        WriteSave(group, "slot_1.sv", VanillaPayload(0, 10, SaveDifficultyPresets.Normal.EffectiveSettings, character: 0));
+        WriteSave(group, "slot_2.sv", VanillaPayload(0, 20, SaveDifficultyPresets.Normal.EffectiveSettings, character: 1));
+        WriteSave(group, "slot_3.sv", VanillaPayload(0, 30, SaveDifficultyPresets.Normal.EffectiveSettings, character: 2));
+
+        var details = Reader.ReadGroup(group, game);
+
+        Assert.Equal("Experiment", Assert.Single(details.Saves, s => s.SlotNumber == 1).CharacterLabel);
+        Assert.Equal("Milky", Assert.Single(details.Saves, s => s.SlotNumber == 2).CharacterLabel);
+        Assert.Equal("Dune", Assert.Single(details.Saves, s => s.SlotNumber == 3).CharacterLabel);
+    }
+
+    [Fact]
+    public void ReadGroup_CharacterWithoutLang_UsesBuiltInNames()
+    {
+        using var temp = new TempDirectory();
+        var group = temp.CreateDirectory("group");
+        WriteSave(group, "slot_1.sv", VanillaPayload(0, 10, SaveDifficultyPresets.Normal.EffectiveSettings, character: 1));
+
+        var save = Assert.Single(Reader.ReadGroup(group).Saves);
+
+        Assert.Equal("Milky", save.CharacterLabel);
+    }
+
+    [Fact]
+    public void ReadGroup_CharacterOutOfRange_KeepsRawValueInLabel()
+    {
+        using var temp = new TempDirectory();
+        var group = temp.CreateDirectory("group");
+        WriteSave(group, "slot_1.sv", VanillaPayload(0, 10, SaveDifficultyPresets.Normal.EffectiveSettings, character: 9));
+        WriteSave(group, "slot_2.sv", VanillaPayload(0, 20, SaveDifficultyPresets.Normal.EffectiveSettings, character: -1));
+        WriteSave(group, "slot_3.sv", VanillaPayload(0, 30, SaveDifficultyPresets.Normal.EffectiveSettings, character: 1.5));
+
+        var details = Reader.ReadGroup(group);
+
+        Assert.Equal("未知角色（9）", Assert.Single(details.Saves, s => s.SlotNumber == 1).CharacterLabel);
+        Assert.Equal("未知角色（-1）", Assert.Single(details.Saves, s => s.SlotNumber == 2).CharacterLabel);
+        Assert.Equal("未知角色（1.5）", Assert.Single(details.Saves, s => s.SlotNumber == 3).CharacterLabel);
+    }
+
+    [Fact]
+    public void ReadGroup_MissingOrNonNumericCharacter_LeavesLabelEmpty()
+    {
+        using var temp = new TempDirectory();
+        var group = temp.CreateDirectory("group");
+        WriteSave(group, "slot_1.sv", VanillaPayload(0, 10, SaveDifficultyPresets.Normal.EffectiveSettings, character: null));
+        var nonNumeric = (Dictionary<string, object?>)VanillaPayload(
+            0, 20, SaveDifficultyPresets.Normal.EffectiveSettings, character: 1);
+        nonNumeric["character"] = "not-a-number";
+        WriteSave(group, "slot_2.sv", nonNumeric);
+
+        var details = Reader.ReadGroup(group);
+
+        Assert.Null(Assert.Single(details.Saves, s => s.SlotNumber == 1).CharacterLabel);
+        Assert.Null(Assert.Single(details.Saves, s => s.SlotNumber == 2).CharacterLabel);
+    }
+
+    [Fact]
+    public void ReadGroup_SummaryMentionsTheCharacter()
+    {
+        using var temp = new TempDirectory();
+        var group = temp.CreateDirectory("group");
+        WriteSave(group, "slot_1.sv", VanillaPayload(0, 10, SaveDifficultyPresets.Normal.EffectiveSettings, character: 1));
+        WriteText(group, "slot_1.sv.meta", Meta(new Dictionary<string, object?>
+        {
+            ["Timestamp"] = "2026/11/16 20:00"
+        }));
+
+        var details = Reader.ReadGroup(group);
+
+        Assert.Contains("Milky", details.SummaryLabel);
+        Assert.StartsWith("槽 1", details.MostRecentLabel);
+    }
+
     private static object TypedPayload(
         IReadOnlyDictionary<string, SaveSettingValue> settings,
         params (string Key, SaveSettingValue Value)[] overrides)
@@ -729,25 +815,32 @@ public sealed class SaveSlotReaderTests
         int biome,
         double runTime,
         IReadOnlyDictionary<string, SaveSettingValue> settings,
-        int characterId = 4242) => new Dictionary<string, object?>
+        int characterId = 4242,
+        double? character = 0)
     {
-        ["biome"] = biome,
-        ["runTime"] = runTime,
-        ["runSettings"] = settings
-            .Select(pair => new Dictionary<string, object?>
-            {
-                ["Item1"] = pair.Key,
-                ["Item2"] = pair.Value.Kind switch
+        var payload = new Dictionary<string, object?>
+        {
+            ["biome"] = biome,
+            ["runTime"] = runTime,
+            ["runSettings"] = settings
+                .Select(pair => new Dictionary<string, object?>
                 {
-                    SaveSettingKind.Boolean => pair.Value.Boolean,
-                    SaveSettingKind.Text => pair.Value.Text,
-                    _ => pair.Value.Number
-                }
-            })
-            .ToArray(),
-        ["cId"] = characterId,
-        ["isMercRun"] = false
-    };
+                    ["Item1"] = pair.Key,
+                    ["Item2"] = pair.Value.Kind switch
+                    {
+                        SaveSettingKind.Boolean => pair.Value.Boolean,
+                        SaveSettingKind.Text => pair.Value.Text,
+                        _ => pair.Value.Number
+                    }
+                })
+                .ToArray(),
+            ["cId"] = characterId,
+            ["isMercRun"] = false
+        };
+
+        if (character.HasValue) payload["character"] = character.Value;
+        return payload;
+    }
 
     private static string WriteSave(string group, string relativePath, object payload)
     {

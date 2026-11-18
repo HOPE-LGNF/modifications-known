@@ -127,13 +127,16 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _saveGroups = new SaveGroupService(new SaveGroupOptions
         {
             // The game always writes the one global LocalLow directory, so any
-            // running installation locks every save-group write.
-            IsGameRunning = installation =>
-                _processMonitor.IsRunning(installation) || _processMonitor.AnyRunning
+            // running installation locks every save-group write. The probe scans
+            // at call time and reports Unknown when process info is hidden,
+            // which the service treats as “running”.
+            ProbeGameRunningState = _ => _processMonitor.ProbeAnyRunning()
         });
         _processMonitor.Start();
         var saveArchive = new SaveGroupArchiveService(
-            isGameRunning: () => _processMonitor.AnyRunning);
+            isGameRunning: () => _processMonitor.ProbeAnyRunning() != GameRunningState.NotRunning,
+            // Export/import share the save-group write lock with apply/delete.
+            coordinator: _saveGroups);
         _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
         {
             OnPropertyChanged(nameof(IsSelectedInstanceRunning));
@@ -176,7 +179,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _processMonitor, nxmRegistrar, dialogs, _saveGroups),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs, updates, logger),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor, downloader, updates, nxmRegistrar, logger),
-            ["saves"] = new SavesViewModel(this, _saveGroups, saveArchive, filePicker, dialogs, logger, _processMonitor),
+            ["saves"] = new SavesViewModel(this, _saveGroups, saveArchive, new SaveSlotReader(), filePicker, dialogs, logger, _processMonitor),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion, _processMonitor)
@@ -596,7 +599,16 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     partial void OnSelectedNavigationChanged(NavigationItem? value)
     {
         if (value is null) return;
-        CurrentPage = _pages.GetValueOrDefault(value.Key);
+
+        var next = _pages.GetValueOrDefault(value.Key);
+
+        // Pending save-group selections are page-local UI state: leaving the
+        // saves page discards them, so it never reopens with a stale “待应用”
+        // that does not affect launching.
+        if (CurrentPage is SavesViewModel leavingSaves && !ReferenceEquals(leavingSaves, next))
+            leavingSaves.ResetTransientState();
+
+        CurrentPage = next;
         OnPropertyChanged(nameof(IsGameSkinOverlayVisible));
         _ = ActivateCurrentPageAsync();
     }

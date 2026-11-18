@@ -112,7 +112,7 @@
                             Classes.danger="{Binding IsCloseAction}"
                             Content="{Binding LaunchButtonText}"
                             Command="{Binding LaunchGameCommand}" />
-                    <TextBlock Text="启动前会切换到所选的存档组；从 MK 外启动使用上次设置的存档。"
+                    <TextBlock Text="应用后会立即切换 LocalLow 链接；从 Steam 启动也使用当前存档组。"
                                Classes="caption"
                                TextWrapping="Wrap"
                                HorizontalAlignment="Center" />
@@ -256,7 +256,7 @@
                         <StackPanel Spacing="10">
                             <TextBlock Text="存档与数据" Classes="h2" />
                             <StackPanel Spacing="2">
-                                <TextBlock Text="下次 MK 启动存档组" Classes="caption" />
+                                <TextBlock Text="当前存档组" Classes="caption" />
                                 <TextBlock Text="{Binding SaveGroupLabel}"
                                            FontSize="13"
                                            FontWeight="SemiBold" />

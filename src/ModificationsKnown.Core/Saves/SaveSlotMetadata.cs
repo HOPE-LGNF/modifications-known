@@ -58,6 +58,15 @@ public sealed class SaveSlotMetadata
 
     public bool IsMultiplayer { get; set; }
 
+    /// <summary>
+    /// Raw <c>character</c> value from the save (0 = Experiment, 1 = Milky,
+    /// 2 = Dune). Kept as a double so out-of-range values survive for display.
+    /// </summary>
+    public double? CharacterValue { get; set; }
+
+    /// <summary>Localised character name, or “未知角色（n）” for unknown values.</summary>
+    public string? CharacterLabel { get; set; }
+
     public bool IsMercRun { get; set; }
 
     public bool Cheated { get; set; }

@@ -449,6 +449,11 @@ public sealed class SaveSlotReader
         if (ReadInt(ReadProperty(payload, root, "cId", "characterId", "CharacterId")) is { } characterId && entry.CharacterId is null)
             entry.CharacterId = characterId;
 
+        // 0 = Experiment, 1 = Milky, 2 = Dune; keep the raw value so an unknown
+        // index can still be shown instead of silently dropped.
+        if (ReadDouble(ReadProperty(payload, root, "character", "Character")) is { } character && entry.CharacterValue is null)
+            entry.CharacterValue = character;
+
         if (ReadBool(ReadProperty(payload, root, "isMercRun", "IsMercRun")) is { } mercRun)
             entry.IsMercRun |= mercRun;
 
@@ -631,6 +636,9 @@ public sealed class SaveSlotReader
         if (!string.IsNullOrEmpty(entry.DifficultyKey))
             entry.DifficultyLabel = language.PresetLabel(entry.DifficultyKey);
 
+        if (entry.CharacterValue is { } character)
+            entry.CharacterLabel = language.CharacterLabel(character);
+
         if (entry.SavedAt is { } savedAt)
             entry.SavedAtLabel = savedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
     }
@@ -660,6 +668,7 @@ public sealed class SaveSlotReader
         if (!string.IsNullOrWhiteSpace(save.LocationName)) parts.Add(save.LocationName);
         if (!string.IsNullOrWhiteSpace(save.LayerName)) parts.Add(save.LayerName);
         if (!string.IsNullOrWhiteSpace(save.DifficultyLabel)) parts.Add(save.DifficultyLabel);
+        if (!string.IsNullOrWhiteSpace(save.CharacterLabel)) parts.Add(save.CharacterLabel);
         if (save.SavedAt is { } savedAt) parts.Add(savedAt.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture));
         return string.Join(" · ", parts);
     }
@@ -1029,6 +1038,24 @@ internal sealed class SaveLanguage
 
     public string PresetLabel(string key) =>
         Get($"/other/preset{key}") ?? SaveDifficultyPresets.LabelFor(key);
+
+    private static readonly string[] CharacterKeys = ["experiment", "milky", "dune"];
+
+    private static readonly string[] CharacterFallbacks = ["Experiment", "Milky", "Dune"];
+
+    /// <summary>
+    /// The save stores the chosen character as 0/1/2. Anything else keeps its raw
+    /// value in the label so a modded index is visible instead of guessed.
+    /// </summary>
+    public string CharacterLabel(double value)
+    {
+        var rounded = (int)Math.Round(value);
+        if (Math.Abs(value - rounded) < 0.0001 && rounded is >= 0 and <= 2)
+            return Get($"/other/{CharacterKeys[rounded]}") ?? CharacterFallbacks[rounded];
+
+        var raw = value.ToString("0.###", CultureInfo.InvariantCulture);
+        return $"未知角色（{raw}）";
+    }
 
     private string? Get(string key)
     {
