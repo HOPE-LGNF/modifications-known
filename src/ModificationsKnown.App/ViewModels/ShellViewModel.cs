@@ -26,7 +26,6 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private readonly IGameLocator _locator;
     private readonly IGameLauncher _launcher;
     private readonly IUserDialogService _dialogs;
-    private readonly SaveIsolationService _saveIsolation;
     private readonly SaveGroupService _saveGroups;
     private readonly ActivityLogService _activity;
     private readonly GameProcessMonitor _processMonitor;
@@ -123,7 +122,6 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
         var instanceStore = new GameInstanceStore();
         Game = new GameContext(instanceStore);
-        _saveIsolation = new SaveIsolationService(logger);
         _activity = new ActivityLogService();
         _processMonitor = new GameProcessMonitor(Game, logger);
         _saveGroups = new SaveGroupService(new SaveGroupOptions
@@ -175,7 +173,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             logger: logger);
         _pages = new Dictionary<string, object>
         {
-            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor, nxmRegistrar, dialogs, _saveGroups),
+            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _processMonitor, nxmRegistrar, dialogs, _saveGroups),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs, updates, logger),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor, downloader, updates, nxmRegistrar, logger),
             ["saves"] = new SavesViewModel(this, _saveGroups, saveArchive, filePicker, dialogs, logger, _processMonitor),
@@ -443,8 +441,9 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
     /// <summary>
     /// Save groups must be ready before any launch: unmanaged saves need an
-    /// explicit choice, a switch is confirmed, and a failed switch blocks the
-    /// launch instead of letting the game write into the wrong profile.
+    /// explicit choice, and a failed switch blocks the launch instead of
+    /// letting the game write into the wrong profile. Selecting a group is an
+    /// explicit action on the saves page, so launching never asks again.
     /// </summary>
     private async Task<bool> PrepareSaveGroupForLaunchAsync(GameInstallation installation)
     {
@@ -488,27 +487,15 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             return false;
         }
 
-        if (preview.NeedsSwitch)
-        {
-            var confirmed = await _dialogs.ConfirmAsync(
-                "切换存档组",
-                $"本次将使用「{preview.Group.Name}」的存档。\n\n" +
-                "从 MK 外启动游戏会使用最近一次由 MK 设置的存档。",
-                "继续启动",
-                "取消");
-            if (!confirmed)
-            {
-                SetStatus("已取消启动；存档组未切换。", StatusKind.Info);
-                return false;
-            }
-        }
-
         var prepared = await _saveGroups.PrepareLaunchAsync(installation);
         if (!prepared.Success)
         {
             SetStatus(prepared.Message, StatusKind.Error);
             return false;
         }
+
+        if (prepared.Switched && prepared.Group is not null)
+            SetStatus($"本次使用「{prepared.Group.Name}」的存档。", StatusKind.Info);
 
         return true;
     }

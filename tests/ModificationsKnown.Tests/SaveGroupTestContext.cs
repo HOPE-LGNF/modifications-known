@@ -63,6 +63,30 @@ internal sealed class FakeSaveLinker : ISaveLinker
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 }
 
+internal sealed class FakeRecycleBin : IRecycleBin
+{
+    public List<string> SentPaths { get; } = [];
+
+    public bool Fail { get; set; }
+
+    public bool DeleteAfterSend { get; set; } = true;
+
+    public bool TrySendDirectory(string path, out string error)
+    {
+        if (Fail)
+        {
+            error = "simulated recycle failure";
+            return false;
+        }
+
+        SentPaths.Add(Path.GetFullPath(path));
+        if (DeleteAfterSend && Directory.Exists(path))
+            Directory.Delete(path, recursive: true);
+        error = string.Empty;
+        return true;
+    }
+}
+
 internal sealed class SaveGroupTestContext : IDisposable
 {
     public SaveGroupTestContext()
@@ -96,6 +120,8 @@ internal sealed class SaveGroupTestContext : IDisposable
 
     public FakeSaveLinker Linker { get; } = new();
 
+    public FakeRecycleBin RecycleBin { get; } = new();
+
     public bool Running { get; set; }
 
     public SaveGroupService Service { get; }
@@ -104,15 +130,16 @@ internal sealed class SaveGroupTestContext : IDisposable
 
     public string InstallationDirectory => Path.Combine(ProfilesRoot, InstallationKey);
 
-    public SaveGroupService BuildService(string? profilesRoot = null) =>
+    public SaveGroupService BuildService(string? profilesRoot = null, string? catalogPath = null) =>
         new(new SaveGroupOptions
         {
             ProfilesRoot = profilesRoot ?? ProfilesRoot,
-            CatalogPath = CatalogPath,
+            CatalogPath = catalogPath ?? CatalogPath,
             BackupsRoot = BackupsRoot,
             StagingRoot = StagingRoot,
             LiveSaveDirectory = Live,
             Linker = Linker,
+            RecycleBin = RecycleBin,
             IsGameRunning = _ => Running
         });
 

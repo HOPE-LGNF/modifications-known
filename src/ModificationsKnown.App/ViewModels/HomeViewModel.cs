@@ -37,7 +37,6 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private readonly IAppSettingsService _settings;
     private readonly INexusModsClient _nexus;
     private readonly ActivityLogService _activity;
-    private readonly SaveIsolationService _saveIsolation;
     private readonly SaveGroupService _saveGroups;
     private readonly GameProcessMonitor _processMonitor;
     private readonly NxmProtocolRegistrar _nxmRegistrar;
@@ -151,7 +150,6 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         IAppSettingsService settings,
         INexusModsClient nexus,
         ActivityLogService activity,
-        SaveIsolationService saveIsolation,
         GameProcessMonitor processMonitor,
         NxmProtocolRegistrar nxmRegistrar,
         IUserDialogService dialogs,
@@ -164,7 +162,6 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         _settings = settings;
         _nexus = nexus;
         _activity = activity;
-        _saveIsolation = saveIsolation;
         _saveGroups = saveGroups;
         _processMonitor = processMonitor;
         _nxmRegistrar = nxmRegistrar;
@@ -225,10 +222,9 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             BepInExReady = installation.HasBepInEx;
             NexusConfigured = !string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey);
             LastLaunchLabel = FormatLastLaunch(_settings.Current.LastLaunchAt);
-            var nextSaveGroup = ResolveNextSaveGroup(installation);
-            SaveGroupLabel = nextSaveGroup?.Name ?? "未创建";
-            SaveProfilePath = nextSaveGroup?.DirectoryPath
-                              ?? _saveIsolation.GetProfileDirectory(installation);
+            var currentSaveGroup = _saveGroups.GetLiveGroup(installation);
+            SaveGroupLabel = currentSaveGroup?.Name ?? "未指定";
+            SaveProfilePath = currentSaveGroup?.DirectoryPath ?? "—";
             SaveIsolationLabel = DescribeIsolation(installation);
             CurrentGroupLabel = DescribeCurrentGroup(installation.GameDirectory);
             UpdateRunningState();
@@ -325,31 +321,17 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             var preview = _saveGroups.GetLaunchPreview(installation);
             if (preview.NeedsInitialization || preview.Group is null)
                 return "尚未创建存档组";
-            if (!preview.NeedsSwitch)
-                return $"已指向「{preview.Group.Name}」";
-            return "启动前切换到所选存档组";
+
+            var live = _saveGroups.GetLiveGroup(installation);
+            if (live is null)
+                return "当前链接未指向存档组";
+            if (live.Id != preview.Group.Id)
+                return $"链接指向「{live.Name}」，选择为「{preview.Group.Name}」";
+            return $"已指向「{live.Name}」";
         }
         catch
         {
             return "存档组状态未知";
-        }
-    }
-
-    /// <summary>The group MK will use on the next launch (falling back to the
-    /// first group when the preference is not set yet).</summary>
-    private SaveGroup? ResolveNextSaveGroup(GameInstallation installation)
-    {
-        try
-        {
-            var groups = _saveGroups.GetGroups(installation);
-            var nextLaunchId = _saveGroups.GetNextLaunchGroupId(installation);
-            return groups.FirstOrDefault(group => group.Id == nextLaunchId)
-                   ?? groups.FirstOrDefault();
-        }
-        catch
-        {
-            // The saves page reports details; the home card stays readable.
-            return null;
         }
     }
 

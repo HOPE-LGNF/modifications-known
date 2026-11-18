@@ -21,6 +21,8 @@ public sealed class SaveGroupOptions
 
     public ISaveLinker Linker { get; init; } = new WindowsJunctionLinker();
 
+    public IRecycleBin RecycleBin { get; init; } = new WindowsRecycleBin();
+
     public IAppLogger? Logger { get; init; }
 
     public Func<DateTimeOffset> UtcNow { get; init; } = () => DateTimeOffset.UtcNow;
@@ -626,15 +628,41 @@ public sealed class SaveGroupService
     }
 
     /// <summary>
-    /// Points the live LocalLow junction at the selected group. This is the only
-    /// place a launch changes the link; selecting a group only changes the
-    /// preference. A failed switch never boots the game.
+    /// Points the live LocalLow junction at the selected group during a launch.
+    /// A failed switch never boots the game.
     /// </summary>
     public Task<SaveLaunchResult> PrepareLaunchAsync(
         GameInstallation installation,
         CancellationToken cancellationToken = default)
     {
         return Task.Run(() => PrepareLaunchCore(installation), cancellationToken);
+    }
+
+    /// <summary>
+    /// Applies a group immediately: switches the live junction (only when no
+    /// game is running) and persists the selection. On failure the old link and
+    /// the previous selection are kept.
+    /// </summary>
+    public Task<SaveGroupOperationResult> ApplyCurrentAsync(
+        GameInstallation installation,
+        Guid groupId,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => ApplyCurrentCore(installation, groupId), cancellationToken);
+
+    public SaveGroup? GetLiveGroup(GameInstallation installation)
+    {
+        lock (_gate)
+        {
+            var groups = Reconcile(installation, persist: true).Groups;
+            if (!_options.Linker.Exists(_options.LiveSaveDirectory)
+                || !_options.Linker.TryGetTarget(_options.LiveSaveDirectory, out var target))
+            {
+                return null;
+            }
+
+            var full = Path.GetFullPath(target);
+            return groups.FirstOrDefault(group => PathEquals(group.DirectoryPath, full));
+        }
     }
 
     public SaveLaunchPreview GetLaunchPreview(GameInstallation installation)
@@ -655,6 +683,125 @@ public sealed class SaveGroupService
         }
     }
 
+    /// <summary>
+    /// Sends one non-current group to the Windows recycle bin and removes its
+    /// index record. Never falls back to a permanent delete.
+    /// </summary>
+    public Task<SaveGroupOperationResult> DeleteGroupAsync(
+        GameInstallation installation,
+        Guid groupId,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => DeleteGroupCore(installation, groupId), cancellationToken);
+
+    private SaveGroupOperationResult ApplyCurrentCore(GameInstallation installation, Guid groupId)
+    {
+        if (!_options.Linker.IsSupported)
+            return Fail("非 Windows 环境，无法切换存档链接。");
+
+        if (IsGameRunning(installation))
+            return Fail("游戏正在运行；请先关闭游戏再应用存档组。");
+
+        var reconciled = Reconcile(installation, persist: true);
+        var group = reconciled.Groups.FirstOrDefault(candidate => candidate.Id == groupId);
+        if (group is null)
+            return Fail("要应用的存档组不存在，或不属于当前游戏目录。");
+
+        if (!Directory.Exists(group.DirectoryPath))
+            return Fail($"存档组目录不存在：{group.DirectoryPath}");
+
+        var live = _options.LiveSaveDirectory;
+        var switched = SwitchLiveLink(group, live);
+        if (!switched.Success)
+            return Fail(switched.Message);
+
+        try
+        {
+            var catalog = _catalog.Load();
+            var entry = catalog.Installations.FirstOrDefault(candidate =>
+                string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
+                    StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+                throw new InvalidOperationException("存档组索引缺失，请刷新后重试。");
+
+            entry.NextLaunchGroupId = groupId;
+            _catalog.Save(catalog);
+        }
+        catch (Exception exception)
+        {
+            RestoreLiveLink(live, switched.PreviousTarget);
+            _options.Logger?.Warn($"应用存档组时保存索引失败：{exception.Message}");
+            return Fail($"应用存档组失败，已恢复原链接：{exception.Message}");
+        }
+
+        _options.Logger?.Info($"当前存档组已应用：{group.Name}（{group.DirectoryPath}）");
+        return new SaveGroupOperationResult(
+            true,
+            switched.Switched
+                ? $"当前存档已切换到「{group.Name}」；从 Steam 启动也会使用该组。"
+                : $"「{group.Name}」已经是当前存档。",
+            group);
+    }
+
+    private SaveGroupOperationResult DeleteGroupCore(GameInstallation installation, Guid groupId)
+    {
+        if (IsGameRunning(installation))
+            return Fail("游戏正在运行；请先关闭游戏再删除存档组。");
+
+        var reconciled = Reconcile(installation, persist: true);
+        var groups = reconciled.Groups;
+        var group = groups.FirstOrDefault(candidate => candidate.Id == groupId);
+        if (group is null)
+            return Fail("要删除的存档组不存在，或不属于当前游戏目录。");
+
+        if (groups.Count <= 1)
+            return Fail("至少保留一个存档组；这是最后一个组，不能删除。");
+
+        if (reconciled.Entry?.NextLaunchGroupId == groupId)
+            return Fail("这是当前存档组；请先选择并应用另一个组，再删除。");
+
+        if (_options.Linker.Exists(_options.LiveSaveDirectory)
+            && _options.Linker.TryGetTarget(_options.LiveSaveDirectory, out var liveTarget)
+            && PathEquals(liveTarget, group.DirectoryPath))
+        {
+            return Fail("这是实际链接指向的存档组；请先切换到其他组，再删除。");
+        }
+
+        if (!Directory.Exists(group.DirectoryPath))
+            return Fail($"存档组目录不存在：{group.DirectoryPath}");
+
+        if (!_options.RecycleBin.TrySendDirectory(group.DirectoryPath, out var recycleError))
+        {
+            _options.Logger?.Warn($"删除存档组失败（回收站）：{recycleError}");
+            return Fail($"删除存档组失败，未做任何修改：{recycleError}");
+        }
+
+        try
+        {
+            var catalog = _catalog.Load();
+            var entry = catalog.Installations.FirstOrDefault(candidate =>
+                string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
+                    StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+                throw new InvalidOperationException("存档组索引缺失。");
+
+            entry.Groups.RemoveAll(record => record.Id == groupId);
+            if (entry.NextLaunchGroupId == groupId)
+                entry.NextLaunchGroupId = entry.Groups.OrderBy(record => record.CreatedAt).FirstOrDefault()?.Id;
+            _catalog.Save(catalog);
+        }
+        catch (Exception exception)
+        {
+            _options.Logger?.Warn($"存档组已进回收站，但索引更新失败：{exception.Message}");
+            return Fail($"已移入 Windows 回收站，但索引更新失败；刷新后该组会从列表消失：{exception.Message}");
+        }
+
+        _options.Logger?.Info($"存档组已移入 Windows 回收站：{group.Name}（{group.DirectoryPath}）");
+        return new SaveGroupOperationResult(
+            true,
+            $"已将「{group.Name}」移入 Windows 回收站；可从回收站还原。",
+            group);
+    }
+
     private SaveLaunchResult PrepareLaunchCore(GameInstallation installation)
     {
         if (!_options.Linker.IsSupported)
@@ -671,7 +818,26 @@ public sealed class SaveGroupService
         if (!Directory.Exists(group.DirectoryPath))
             return new SaveLaunchResult(false, $"存档组目录不存在：{group.DirectoryPath}", group);
 
-        var live = _options.LiveSaveDirectory;
+        var switched = SwitchLiveLink(group, _options.LiveSaveDirectory);
+        if (!switched.Success)
+            return new SaveLaunchResult(false, $"{switched.Message} 游戏不会启动。", group);
+
+        return new SaveLaunchResult(true, switched.Message, group, switched.Switched);
+    }
+
+    private sealed record LinkSwitchResult(
+        bool Success,
+        string Message,
+        bool Switched,
+        string? PreviousTarget);
+
+    /// <summary>
+    /// Shared junction switch used by apply and launch. It never overwrites a
+    /// real directory with data or an external link, and restores the previous
+    /// target if creating the new link fails.
+    /// </summary>
+    private LinkSwitchResult SwitchLiveLink(SaveGroup group, string live)
+    {
         try
         {
             if (_options.Linker.Exists(live))
@@ -681,21 +847,29 @@ public sealed class SaveGroupService
                     var current = Path.GetFullPath(currentTarget);
                     if (!IsUnder(current, ProfilesRoot))
                     {
-                        return new SaveLaunchResult(
+                        return new LinkSwitchResult(
                             false,
-                            $"现有存档链接指向 MK 之外的位置：{current}。未切换，游戏不会启动。",
-                            group);
+                            $"现有存档链接指向 MK 之外的位置：{current}。未切换。",
+                            false,
+                            current);
                     }
 
                     if (PathEquals(current, group.DirectoryPath))
-                        return new SaveLaunchResult(true, $"存档已指向「{group.Name}」。", group);
+                    {
+                        return new LinkSwitchResult(
+                            true,
+                            $"存档已指向「{group.Name}」。",
+                            false,
+                            current);
+                    }
 
                     if (!_options.Linker.RemoveJunction(live, out var removeError))
                     {
-                        return new SaveLaunchResult(
+                        return new LinkSwitchResult(
                             false,
-                            $"切换存档组失败：无法移除现有链接（{removeError}）。游戏不会启动。",
-                            group);
+                            $"切换存档组失败：无法移除现有链接（{removeError}）。",
+                            false,
+                            current);
                     }
 
                     if (!_options.Linker.CreateJunction(live, group.DirectoryPath, out var createError))
@@ -704,21 +878,27 @@ public sealed class SaveGroupService
                         var recovery = restored
                             ? $"已恢复原链接：{current}"
                             : $"未能恢复原链接（{restoreError}），请手动检查 {live}。";
-                        return new SaveLaunchResult(
+                        return new LinkSwitchResult(
                             false,
-                            $"切换存档组失败：{createError}。{recovery} 游戏不会启动。",
-                            group);
+                            $"切换存档组失败：{createError}。{recovery}",
+                            false,
+                            current);
                     }
 
-                    return new SaveLaunchResult(true, $"存档已切换到「{group.Name}」。", group, Switched: true);
+                    return new LinkSwitchResult(
+                        true,
+                        $"存档已切换到「{group.Name}」。",
+                        true,
+                        current);
                 }
 
                 if (Directory.EnumerateFileSystemEntries(live).Any())
                 {
-                    return new SaveLaunchResult(
+                    return new LinkSwitchResult(
                         false,
-                        $"检测到未托管的存档目录：{live}。请先在存档管理中导入或处理，游戏不会启动。",
-                        group);
+                        $"检测到未托管的存档目录：{live}。请先导入或处理，未切换。",
+                        false,
+                        null);
                 }
 
                 Directory.Delete(live, recursive: false);
@@ -727,18 +907,47 @@ public sealed class SaveGroupService
             Directory.CreateDirectory(Path.GetDirectoryName(live)!);
             if (!_options.Linker.CreateJunction(live, group.DirectoryPath, out var firstLinkError))
             {
-                return new SaveLaunchResult(
+                return new LinkSwitchResult(
                     false,
-                    $"创建存档链接失败：{firstLinkError}。游戏不会启动。",
-                    group);
+                    $"创建存档链接失败：{firstLinkError}。",
+                    false,
+                    null);
             }
 
-            return new SaveLaunchResult(true, $"存档已指向「{group.Name}」。", group, Switched: true);
+            return new LinkSwitchResult(
+                true,
+                $"存档已指向「{group.Name}」。",
+                true,
+                null);
         }
         catch (Exception exception)
         {
             _options.Logger?.Warn($"切换存档组失败：{exception.Message}");
-            return new SaveLaunchResult(false, $"切换存档组失败：{exception.Message}。游戏不会启动。", group);
+            return new LinkSwitchResult(
+                false,
+                $"切换存档组失败：{exception.Message}。",
+                false,
+                null);
+        }
+    }
+
+    private void RestoreLiveLink(string live, string? previousTarget)
+    {
+        try
+        {
+            if (previousTarget is not null)
+            {
+                _options.Linker.RemoveJunction(live, out _);
+                _options.Linker.CreateJunction(live, previousTarget, out _);
+            }
+            else
+            {
+                _options.Linker.RemoveJunction(live, out _);
+            }
+        }
+        catch (Exception exception)
+        {
+            _options.Logger?.Warn($"恢复存档链接失败：{exception.Message}");
         }
     }
 
