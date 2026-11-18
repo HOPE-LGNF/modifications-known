@@ -48,7 +48,7 @@ public sealed class SaveGroupDeleteTests
         var result = await context.Service.DeleteGroupAsync(context.Installation, second.Id);
 
         Assert.False(result.Success);
-        Assert.Contains("当前存档组", result.Message);
+        Assert.Contains("选定的存档组", result.Message);
         Assert.True(Directory.Exists(second.DirectoryPath));
         Assert.Equal(2, context.Service.GetGroups(context.Installation).Count);
         Assert.Empty(context.RecycleBin.SentPaths);
@@ -65,7 +65,7 @@ public sealed class SaveGroupDeleteTests
         var result = await context.Service.DeleteGroupAsync(context.Installation, first.Id);
 
         Assert.False(result.Success);
-        Assert.Contains("实际链接", result.Message);
+        Assert.Contains("正在使用", result.Message);
         Assert.True(Directory.Exists(first.DirectoryPath));
         Assert.Empty(context.RecycleBin.SentPaths);
     }

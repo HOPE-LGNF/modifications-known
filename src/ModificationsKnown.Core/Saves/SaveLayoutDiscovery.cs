@@ -62,6 +62,10 @@ public sealed class SaveGroupDetails
     /// <summary>Label of the newest save, or null when nothing is dated.</summary>
     public string? MostRecentLabel { get; init; }
 
+    /// <summary>Detailed description of the newest save (slot, depth, location,
+    /// difficulty, character and time), or null when nothing is dated.</summary>
+    public string? MostRecentDetail { get; init; }
+
     /// <summary>Short Chinese description for the group list.</summary>
     public string SummaryLabel { get; init; } = "尚无存档文件";
 

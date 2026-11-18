@@ -328,7 +328,7 @@ public sealed class SaveGroupService
                     return new SaveGroupOperationResult(
                         true,
                         $"已导入存档组「{normalized}」；当前存档链接属于另一个安装，未自动切换。" +
-                        "如需使用该组，请在存档页选择后点「应用当前存档组」。",
+                        "如需使用该组，请在存档页点击「选择存档组」。",
                         group);
                 }
 
@@ -408,7 +408,7 @@ public sealed class SaveGroupService
                     return new SaveGroupOperationResult(
                         true,
                         $"已创建空存档组「{normalized}」；当前存档链接属于另一个安装，未自动切换。" +
-                        "如需使用该组，请在存档页选择后点「应用当前存档组」。",
+                        "如需使用该组，请在存档页点击「选择存档组」。",
                         group);
                 }
 
@@ -422,7 +422,7 @@ public sealed class SaveGroupService
 
                 return new SaveGroupOperationResult(
                     true,
-                    $"已创建空存档组「{normalized}」并应用为当前存档；从 Steam 启动也会使用该组。",
+                    $"已创建空存档组「{normalized}」并应用为当前存档。",
                     group);
             }
 
@@ -1114,7 +1114,7 @@ public sealed class SaveGroupService
         return new SaveGroupOperationResult(
             true,
             switched.Switched
-                ? $"当前存档已切换到「{group.Name}」；从 Steam 启动也会使用该组。"
+                ? $"当前存档已切换到「{group.Name}」。"
                 : $"「{group.Name}」已经是当前存档。",
             group);
     }
@@ -1269,14 +1269,14 @@ public sealed class SaveGroupService
             return Fail("至少保留一个存档组；这是最后一个组，不能删除。");
 
         if (reconciled.Entry?.NextLaunchGroupId == groupId)
-            return Fail("这是当前存档组；请先选择并应用另一个组，再删除。");
+            return Fail("这是该实例选定的存档组；请先选定另一个组，再删除。");
 
         if (_options.Linker.Exists(_options.LiveSaveDirectory))
         {
             if (_options.Linker.TryGetTarget(_options.LiveSaveDirectory, out var liveTarget))
             {
                 if (PathEquals(liveTarget, group.DirectoryPath))
-                    return Fail("这是实际链接指向的存档组；请先切换到其他组，再删除。");
+                    return Fail("这是正在使用的存档组；请先切换到其他组，再删除。");
             }
             else if (IsReparsePoint(_options.LiveSaveDirectory))
             {

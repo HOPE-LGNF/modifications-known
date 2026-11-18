@@ -107,15 +107,11 @@
                     </StackPanel>
                 </StackPanel>
 
-                <StackPanel Grid.Row="2" Spacing="8">
+                <StackPanel Grid.Row="2">
                     <Button Classes="Primary launch"
                             Classes.danger="{Binding IsCloseAction}"
                             Content="{Binding LaunchButtonText}"
                             Command="{Binding LaunchGameCommand}" />
-                    <TextBlock Text="应用后会立即切换 LocalLow 链接；从 Steam 启动也使用当前存档组。"
-                               Classes="caption"
-                               TextWrapping="Wrap"
-                               HorizontalAlignment="Center" />
                 </StackPanel>
             </Grid>
         </Border>

@@ -847,9 +847,8 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
         var next = _pages.GetValueOrDefault(value.Key);
 
-        // Pending save-group selections are page-local UI state: leaving the
-        // saves page discards them, so it never reopens with a stale “待应用”
-        // that does not affect launching.
+        // Save-group choices are saved immediately. Leaving the page only clears
+        // transient row labels; the stored choice cannot become stale.
         if (CurrentPage is SavesViewModel leavingSaves && !ReferenceEquals(leavingSaves, next))
             leavingSaves.ResetTransientState();
 

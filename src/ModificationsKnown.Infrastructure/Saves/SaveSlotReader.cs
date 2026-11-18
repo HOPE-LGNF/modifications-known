@@ -191,6 +191,7 @@ public sealed class SaveSlotReader
             EmptySlotCount = declaredSlots > 0 ? Math.Max(0, declaredSlots - occupiedSlots) : 0,
             EmptySlots = emptySlots,
             MostRecentLabel = mostRecent?.Label,
+            MostRecentDetail = mostRecent is null ? null : DescribeRecent(mostRecent),
             SummaryLabel = BuildSummary(layout, ordered, slotCount, mostRecent)
         };
     }

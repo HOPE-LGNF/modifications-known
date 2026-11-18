@@ -100,12 +100,16 @@ public partial class SavesView : UserControl
         if (ReferenceEquals(_viewModel, viewModel)) return;
 
         if (_viewModel is not null)
+        {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        }
 
         _viewModel = viewModel;
 
         if (_viewModel is not null)
+        {
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
