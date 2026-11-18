@@ -1,0 +1,92 @@
+<views:DialogWindow xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:views="using:ModificationsKnown.App.Views"
+                    x:Class="ModificationsKnown.App.Views.UnmanagedSaveDialog"
+                    Title="处理现有存档">
+    <Grid>
+        <Border Name="DialogScrim"
+                Opacity="0"
+                Background="{DynamicResource DialogScrimBrush}" />
+
+        <Border Name="DialogCard"
+                Opacity="0"
+                RenderTransform="scale(0.97)"
+                RenderTransformOrigin="50%,50%"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                MinWidth="460"
+                MaxWidth="560"
+                Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="16"
+                Padding="26,24"
+                BoxShadow="0 20 56 0 #A0000000">
+            <StackPanel Spacing="12">
+                <TextBlock Name="TitleText"
+                           Text="发现现有游戏存档"
+                           FontSize="20"
+                           FontWeight="SemiBold" />
+                <TextBlock Name="SummaryText"
+                           Text=""
+                           Classes="muted"
+                           FontSize="13"
+                           TextWrapping="Wrap" />
+                <TextBlock Name="DirectoryText"
+                           Text=""
+                           Classes="mono"
+                           FontSize="10"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           TextWrapping="Wrap" />
+                <StackPanel Spacing="5">
+                    <TextBlock Text="接收版本" Classes="caption" />
+                    <ComboBox Name="InstanceCombo" MinWidth="360" />
+                    <TextBlock Name="InstanceHintText"
+                               Text=""
+                               Classes="caption"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+                <Border Background="{DynamicResource SurfaceAltBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="12,10">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="导入现存存档：复制到一个新的默认存档组，原目录保留为备份。"
+                                   Classes="caption"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="新建空组：同样保留原目录为备份，游戏从空存档开始。"
+                                   Classes="caption"
+                                   TextWrapping="Wrap" />
+                        <TextBlock Text="取消：不改动任何文件，本次也不会启动游戏。"
+                                   Classes="caption"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,8,0,0">
+                    <Button Grid.Column="0"
+                            Name="SettingsButton"
+                            Classes="Ghost"
+                            Content="找不到版本？去设置添加"
+                            Click="OnSettingsClick" />
+                    <StackPanel Grid.Column="2"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                HorizontalAlignment="Right">
+                        <Button Name="CancelButton"
+                                Classes="Ghost"
+                                Content="取消"
+                                Click="OnCancelClick" />
+                        <Button Name="EmptyButton"
+                                Content="新建空组"
+                                Click="OnEmptyClick" />
+                        <Button Name="ImportButton"
+                                Classes="Primary"
+                                Content="导入现存存档"
+                                Click="OnImportClick" />
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+    </Grid>
+</views:DialogWindow>

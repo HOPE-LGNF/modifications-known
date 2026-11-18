@@ -1,105 +1,497 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ModificationsKnown.App.Views.SavesView">
+
+
+    <UserControl.Styles>
+        <Style Selector="Border.group-row">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="12,10" />
+        </Style>
+        <Style Selector="Border.group-row">
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style Selector="Border.instance-header">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="6,5" />
+            <Setter Property="Margin" Value="-6,-5" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Border.instance-header:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+        </Style>
+        <Style Selector="Border.group-row:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentSoftBrush}" />
+        </Style>
+        <Style Selector="Border.group-row.selected">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="Border.group-row.selected:pointerover">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="Button.flat">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FocusAdorner" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Background="{TemplateBinding Background}"
+                                      Padding="{TemplateBinding Padding}"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.flat:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+        </Style>
+        <Style Selector="Button.flat:pressed">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+        </Style>
+        <Style Selector="Border.tag">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="7,2" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.tag TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        </Style>
+        <Style Selector="Border.tag.accent">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+        </Style>
+        <Style Selector="Border.tag.accent TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="Border.save-card">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="11,9" />
+        </Style>
+        <!-- Slot facts are the main reading surface: a step larger than the
+             compact tags used elsewhere. -->
+        <Style Selector="Border.save-card Border.tag">
+            <!-- The card already uses SurfaceAlt; a darker chip keeps the facts
+                 readable without inventing a per-layer colour. -->
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="Padding" Value="8,3" />
+        </Style>
+        <Style Selector="Border.save-card Border.tag TextBlock">
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+    </UserControl.Styles>
+
     <Grid RowDefinitions="Auto,*" RowSpacing="12">
-        <Grid ColumnDefinitions="*,Auto">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
             <StackPanel Spacing="3">
-                <TextBlock Text="存档管理" Classes="h2" />
-                <TextBlock Text="每个版本都有独立的托管存档目录；正式版与试玩版不会串档。备份会把文件复制到你选择的目录。"
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="存档管理" Classes="h2" />
+                    <Border Background="{DynamicResource AccentSoftBrush}"
+                            CornerRadius="5"
+                            Padding="7,2"
+                            VerticalAlignment="Center">
+                        <Grid>
+                            <TextBlock FontSize="10"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       IsVisible="{Binding HasLiveOwner}">
+                                <Run Text="当前 " />
+                                <Run Text="{Binding LiveOwnerInstanceName}" FontWeight="SemiBold" />
+                                <Run Text=" 使用存档组 " />
+                                <Run Text="{Binding LiveOwnerGroupName}" FontWeight="SemiBold" />
+                            </TextBlock>
+                            <TextBlock Text="当前没有正在使用的存档组"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       IsVisible="{Binding !HasLiveOwner}" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+                <TextBlock Text="每个游戏目录可有多个完整存档组。点击存档组后立即保存；当前实例会切换 LocalLow 链接，其他实例只更新选定组。游戏运行时锁定存档读写。"
                            Classes="muted"
                            FontSize="12"
                            TextWrapping="Wrap" />
             </StackPanel>
-            <Button Grid.Column="1"
-                    Classes="Primary"
-                    Content="刷新"
-                    Command="{Binding RefreshCommand}" />
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Top">
+                <Button Classes="Primary"
+                        Content="刷新"
+                        Command="{Binding RefreshCommand}" />
+            </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="1">
-            <TextBlock Text="{Binding EmptyMessage}"
+        <Grid Grid.Row="1" RowDefinitions="Auto,*" RowSpacing="10">
+            <Border IsVisible="{Binding AnyRunning}"
+                    Background="{DynamicResource SurfaceAltBrush}"
+                    BorderBrush="{DynamicResource WarningBrush}"
+                    BorderThickness="1"
+                    CornerRadius="9"
+                    Padding="12,9">
+                <TextBlock Text="{Binding RunningNotice}"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource WarningBrush}" />
+            </Border>
+
+            <TextBlock Grid.Row="1"
+                       Text="{Binding EmptyMessage}"
                        Classes="muted"
                        TextWrapping="Wrap"
                        IsVisible="{Binding EmptyMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Instances}">
+            <ScrollViewer x:Name="InstancesScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="InstancesItems" ItemsSource="{Binding Instances}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Classes="card" Margin="0,0,0,10" Padding="16">
-                                <StackPanel Spacing="10">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Name}"
-                                                       FontSize="15"
-                                                       FontWeight="SemiBold"
-                                                       VerticalAlignment="Center" />
-                                            <Border Background="{DynamicResource AccentSoftBrush}"
-                                                    CornerRadius="5"
-                                                    Padding="7,2"
-                                                    VerticalAlignment="Center"
-                                                    IsVisible="{Binding IsLive}">
-                                                <TextBlock Text="当前存档"
+                                <StackPanel Spacing="12">
+
+                                    <!-- Collapsed header: click anywhere to expand; no button chrome -->
+                                    <Border Classes="instance-header"
+                                            PointerPressed="OnInstallationHeaderPointerPressed">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <StackPanel Grid.Column="0"
+                                                        Spacing="2">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding Name}"
+                                                               FontSize="15"
+                                                               FontWeight="SemiBold"
+                                                               VerticalAlignment="Center" />
+                                                    <Border Background="{DynamicResource WarningBrush}"
+                                                            CornerRadius="5"
+                                                            Padding="7,2"
+                                                            VerticalAlignment="Center"
+                                                            IsVisible="{Binding IsRunning}">
+                                                        <TextBlock Text="游戏运行中"
+                                                                   FontSize="10"
+                                                                   Foreground="{DynamicResource AccentContrastBrush}" />
+                                                    </Border>
+                                                    <Border Background="{DynamicResource AccentSoftBrush}"
+                                                            CornerRadius="5"
+                                                            Padding="7,2"
+                                                            VerticalAlignment="Center"
+                                                            IsVisible="{Binding IsLiveOwner}">
+                                                        <TextBlock Text="当前使用"
+                                                                   FontSize="10"
+                                                                   Foreground="{DynamicResource AccentBrush}" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding GamePath}"
+                                                           Classes="mono"
                                                            FontSize="10"
-                                                           VerticalAlignment="Center"
-                                                           Foreground="{DynamicResource AccentBrush}" />
-                                            </Border>
-                                            <Border Background="{DynamicResource WarningBrush}"
-                                                    CornerRadius="5"
-                                                    Padding="7,2"
-                                                    VerticalAlignment="Center"
-                                                    IsVisible="{Binding IsRunning}">
-                                                <TextBlock Text="游戏运行中"
-                                                           FontSize="10"
-                                                           VerticalAlignment="Center"
-                                                           Foreground="{DynamicResource AccentContrastBrush}" />
-                                            </Border>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                            <Button Classes="Ghost" Content="打开目录" Command="{Binding OpenCommand}" />
-                                            <Button Classes="Ghost" Content="备份…" Command="{Binding BackupCommand}" />
-                                            <Button Classes="Danger"
-                                                    Content="删除存档"
-                                                    IsEnabled="{Binding CanDelete}"
-                                                    Command="{Binding DeleteCommand}" />
-                                        </StackPanel>
-                                    </Grid>
+                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip.Tip="{Binding GamePath}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1"
+                                                        Spacing="2"
+                                                        VerticalAlignment="Center"
+                                                        HorizontalAlignment="Right">
+                                                <Border Background="{DynamicResource AccentSoftBrush}"
+                                                        CornerRadius="5"
+                                                        Padding="7,2"
+                                                        HorizontalAlignment="Right">
+                                                    <TextBlock Text="{Binding GroupCountLabel}"
+                                                               FontSize="10"
+                                                               Foreground="{DynamicResource AccentBrush}" />
+                                                </Border>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
 
-                                    <TextBlock Text="{Binding ProfilePath}"
-                                               Classes="mono"
-                                               FontSize="10"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"
-                                               TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Spacing="12" IsVisible="{Binding IsExpanded}">
 
-                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                                        <TextBlock Text="{Binding FileCountLabel}" Classes="caption" />
-                                        <TextBlock Grid.Column="2"
-                                                   Text="{Binding UpdatedLabel, StringFormat='最后更新 {0}'}"
-                                                   Classes="caption" />
-                                    </Grid>
+                                        <Border IsVisible="{Binding HasNotice}"
+                                                Background="{DynamicResource SurfaceAltBrush}"
+                                                BorderBrush="{DynamicResource WarningBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="9"
+                                                Padding="12,9">
+                                            <TextBlock Text="{Binding NoticeMessage}"
+                                                       FontSize="11"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource WarningBrush}" />
+                                        </Border>
 
-                                    <ItemsControl ItemsSource="{Binding Files}" IsVisible="{Binding !IsEmpty}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                                                    <TextBlock Text="{Binding RelativePath}" Classes="mono" FontSize="10" />
-                                                    <TextBlock Grid.Column="1"
-                                                               Text="{Binding SizeLabel}"
+                                        <Border IsVisible="{Binding IsRunning}"
+                                                Background="{DynamicResource SurfaceAltBrush}"
+                                                BorderBrush="{DynamicResource WarningBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="9"
+                                                Padding="12,9">
+                                            <TextBlock Text="游戏正在运行；切换、创建、克隆、备份、导入、恢复、导出和删除已锁定，请关闭游戏后操作。"
+                                                       FontSize="11"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource WarningBrush}" />
+                                        </Border>
+
+                                        <!-- Selected group summary: read-only -->
+                                        <Border Background="{DynamicResource SurfaceAltBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="10"
+                                                Padding="12,10">
+                                            <Grid ColumnDefinitions="*,Auto"
+                                                  RowDefinitions="Auto,Auto"
+                                                  ColumnSpacing="16"
+                                                  RowSpacing="7">
+                                                <StackPanel Grid.Row="0"
+                                                            Grid.Column="0"
+                                                            Orientation="Horizontal"
+                                                            Spacing="8">
+                                                    <TextBlock Text="当前存档组"
                                                                Classes="caption"
-                                                               Margin="10,0,0,0" />
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding ChosenGroupName}"
+                                                               FontSize="15"
+                                                               FontWeight="SemiBold" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Row="0"
+                                                           Grid.Column="1"
+                                                           Text="{Binding ChosenSlotCountLabel}"
+                                                           Classes="caption"
+                                                           FontSize="11"
+                                                           HorizontalAlignment="Right"
+                                                           VerticalAlignment="Center" />
+                                                <Grid Grid.Row="1"
+                                                      Grid.Column="0"
+                                                      ColumnDefinitions="Auto,*"
+                                                      ColumnSpacing="8">
+                                                    <TextBlock Text="最近存档"
+                                                               Classes="caption"
+                                                               VerticalAlignment="Top" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding ChosenRecentSaveLabel}"
+                                                               Classes="caption"
+                                                               TextWrapping="Wrap" />
                                                 </Grid>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                    <TextBlock Text="还没有存档文件。首次从 MK 启动游戏后会出现。"
-                                               Classes="caption"
-                                               IsVisible="{Binding IsEmpty}" />
+                                                <TextBlock Grid.Row="1"
+                                                           Grid.Column="1"
+                                                           Text="{Binding ChosenAutosaveCountLabel}"
+                                                           Classes="caption"
+                                                           FontSize="11"
+                                                           HorizontalAlignment="Right"
+                                                           VerticalAlignment="Top" />
+                                            </Grid>
+                                        </Border>
+
+                                        <Grid ColumnDefinitions="*" ColumnSpacing="12">
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                                <Button Content="新建空组"
+                                                        Command="{Binding CreateEmptyCommand}"
+                                                        IsEnabled="{Binding CanEdit}"
+                                                        ToolTip.Tip="创建空的存档目录；不复制当前组，也不改 Mod 组" />
+                                                <Button Classes="Ghost"
+                                                        Content="克隆当前组"
+                                                        Command="{Binding CloneCommand}"
+                                                        IsEnabled="{Binding CanEdit}"
+                                                        ToolTip.Tip="复制所选组的完整存档目录；新组使用新的 ID，源组不变" />
+                                                <Button Classes="Ghost"
+                                                        Content="从 ZIP 导入…"
+                                                        Command="{Binding ImportCommand}"
+                                                        IsEnabled="{Binding CanImport}"
+                                                        ToolTip.Tip="校验后新建一个存档组；不覆盖或合并现有组" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <TextBlock Text="还没有存档组；点“新建空组”开始。"
+                                                   Classes="caption"
+                                                   IsVisible="{Binding HasNoGroups}" />
+
+                                        <!-- Group rows: click selects, chevron expands -->
+                                        <ItemsControl ItemsSource="{Binding Groups}"
+                                                      IsVisible="{Binding HasGroups}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Classes="group-row"
+                                                            Classes.selected="{Binding IsSelected}"
+                                                            PointerPressed="OnGroupRowPointerPressed">
+                                                        <StackPanel Spacing="8">
+                                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
+                                                                <StackPanel Grid.Column="0" Spacing="3">
+                                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                        <TextBlock Text="{Binding Name}"
+                                                                                   FontSize="13"
+                                                                                   FontWeight="SemiBold"
+                                                                                   VerticalAlignment="Center"
+                                                                                   TextTrimming="CharacterEllipsis" />
+                                                                        <Border Classes="tag accent" IsVisible="{Binding HasCurrentTag}">
+                                                                            <TextBlock Text="当前" />
+                                                                        </Border>
+                                                                        <Border Classes="tag" IsVisible="{Binding IsDefault}">
+                                                                            <TextBlock Text="初始组" />
+                                                                        </Border>
+                                                                    </StackPanel>
+                                                                    <TextBlock Text="{Binding SummaryLabel}"
+                                                                               Classes="caption"
+                                                                               TextWrapping="NoWrap"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                </StackPanel>
+
+                                                                <Button Grid.Column="1"
+                                                                        Classes="Primary"
+                                                                        Content="{Binding SelectLabel}"
+                                                                        Command="{Binding SelectCommand}"
+                                                                        FontSize="12"
+                                                                        Padding="10,4"
+                                                                        MinWidth="84"
+                                                                        VerticalAlignment="Top"
+                                                                        ToolTip.ShowOnDisabled="True"
+                                                                        ToolTip.Tip="{Binding SelectTip}" />
+
+                                                                <StackPanel Grid.Column="2"
+                                                                            Spacing="4"
+                                                                            HorizontalAlignment="Right"
+                                                                            VerticalAlignment="Top">
+                                                                    <Button Classes="flat"
+                                                                            Content="⋯"
+                                                                            FontSize="18"
+                                                                            Padding="8,2"
+                                                                            HorizontalContentAlignment="Center"
+                                                                            ToolTip.Tip="更多操作">
+                                                                        <Button.Flyout>
+                                                                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                                                                <MenuItem Header="打开目录"
+                                                                                          Command="{Binding OpenCommand}" />
+                                                                                <MenuItem Header="备份 / 导出…"
+                                                                                          Command="{Binding ExportCommand}"
+                                                                                          IsEnabled="{Binding CanExport}" />
+                                                                                <MenuItem Header="重命名…"
+                                                                                          Command="{Binding RenameCommand}"
+                                                                                          IsEnabled="{Binding CanEdit}" />
+                                                                                <Separator />
+                                                                                <MenuItem Header="删除"
+                                                                                          Foreground="{DynamicResource DangerBrush}"
+                                                                                          Command="{Binding DeleteCommand}"
+                                                                                          IsEnabled="{Binding CanDelete}"
+                                                                                          ToolTip.Tip="{Binding DeleteHint}"
+                                                                                          ToolTip.ShowOnDisabled="True" />
+                                                                            </MenuFlyout>
+                                                                        </Button.Flyout>
+                                                                    </Button>
+                                                                    <TextBlock Text="{Binding Chevron}"
+                                                                               FontSize="20"
+                                                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                               HorizontalAlignment="Right"
+                                                                               Margin="4,0,0,0"
+                                                                               IsHitTestVisible="False" />
+                                                                </StackPanel>
+                                                            </Grid>
+
+                                                            <TextBlock Text="{Binding DetailError}"
+                                                                       Classes="caption"
+                                                                       Foreground="{DynamicResource WarningBrush}"
+                                                                       TextWrapping="Wrap"
+                                                                       IsVisible="{Binding HasError}" />
+
+                                                            <StackPanel Spacing="6" IsVisible="{Binding IsExpanded}">
+                                                                <TextBlock Text="存档详情"
+                                                                           Classes="caption"
+                                                                           Margin="0,2,0,2" />
+
+                                                                <ItemsControl ItemsSource="{Binding Saves}">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <Border Classes="save-card"
+                                                                                    Margin="0,0,0,6">
+                                                                                <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="7">
+                                                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                                            <TextBlock Text="{Binding Label}"
+                                                                                                       FontSize="13"
+                                                                                                       FontWeight="SemiBold"
+                                                                                                       VerticalAlignment="Center" />
+                                                                                            <ItemsControl ItemsSource="{Binding Badges}">
+                                                                                                <ItemsControl.ItemsPanel>
+                                                                                                    <ItemsPanelTemplate>
+                                                                                                        <WrapPanel Orientation="Horizontal" />
+                                                                                                    </ItemsPanelTemplate>
+                                                                                                </ItemsControl.ItemsPanel>
+                                                                                                <ItemsControl.ItemTemplate>
+                                                                                                    <DataTemplate>
+                                                                                                        <Border Classes="tag" Margin="0,0,4,0">
+                                                                                                            <TextBlock Text="{Binding}" />
+                                                                                                        </Border>
+                                                                                                    </DataTemplate>
+                                                                                                </ItemsControl.ItemTemplate>
+                                                                                            </ItemsControl>
+                                                                                        </StackPanel>
+                                                                                        <TextBlock Grid.Column="1"
+                                                                                                   Text="{Binding FileLine}"
+                                                                                                   Classes="caption"
+                                                                                                   FontSize="11"
+                                                                                                   VerticalAlignment="Center" />
+                                                                                    </Grid>
+
+                                                                                    <ItemsControl Grid.Row="1" ItemsSource="{Binding Facts}">
+                                                                                        <ItemsControl.ItemsPanel>
+                                                                                            <ItemsPanelTemplate>
+                                                                                                <WrapPanel Orientation="Horizontal" />
+                                                                                            </ItemsPanelTemplate>
+                                                                                        </ItemsControl.ItemsPanel>
+                                                                                        <ItemsControl.ItemTemplate>
+                                                                                            <DataTemplate>
+                                                                                                <Border Classes="tag"
+                                                                                                            Margin="0,0,4,4"
+                                                                                                            ToolTip.Tip="{Binding Tip}">
+                                                                                                    <TextBlock Text="{Binding Text}" />
+                                                                                                </Border>
+                                                                                            </DataTemplate>
+                                                                                        </ItemsControl.ItemTemplate>
+                                                                                    </ItemsControl>
+
+                                                                                    <TextBlock Grid.Row="2"
+                                                                                               Text="{Binding Error}"
+                                                                                               Classes="caption"
+                                                                                               Foreground="{DynamicResource WarningBrush}"
+                                                                                               TextWrapping="Wrap"
+                                                                                               IsVisible="{Binding HasError}" />
+                                                                                </Grid>
+                                                                            </Border>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+
+                                                                <TextBlock Text="尚无存档文件；首次用该组启动游戏后会生成文件。"
+                                                                           Classes="caption"
+                                                                           TextWrapping="Wrap"
+                                                                           IsVisible="{Binding IsEmpty}" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
+
+            <!-- Keep the page colours intact while a refresh is reading save
+                 groups; this transparent layer only blocks pointer input. -->
+            <Border Grid.Row="1"
+                    Background="#01000000"
+                    Cursor="Wait"
+                    IsVisible="{Binding IsBusy}" />
         </Grid>
     </Grid>
 </UserControl>

@@ -3,6 +3,9 @@ using Avalonia.Platform.Storage;
 using ModificationsKnown.App.Views;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Nexus;
+using ModificationsKnown.Core.Saves;
+using ModificationsKnown.Infrastructure.Instances;
+using ModificationsKnown.Infrastructure.Saves;
 
 namespace ModificationsKnown.App.Services;
 
@@ -32,9 +35,18 @@ public interface IUserDialogService
 
     Task<InstanceDeletionPlan?> PickInstanceDeletionAsync(
         GameInstallation installation,
-        IReadOnlyList<InstanceSaveFile> saves,
-        string profileDirectory,
-        string suggestedTarget);
+        IReadOnlyList<SaveGroup> groups);
+
+    /// <summary>
+    /// Asks how to handle real saves that MK has not taken over yet, and which
+    /// registered installation should receive them. Returning null
+    /// (cancel/close) means the caller must not touch any file.
+    /// </summary>
+    Task<UnmanagedSaveDecision?> PickUnmanagedSaveAsync(
+        string liveDirectory,
+        int fileCount,
+        IReadOnlyList<UnmanagedSaveCandidate> candidates,
+        string? selectedInstallationKey);
 }
 
 public sealed class UserDialogService : IUserDialogService
@@ -128,14 +140,12 @@ public sealed class UserDialogService : IUserDialogService
 
     public async Task<InstanceDeletionPlan?> PickInstanceDeletionAsync(
         GameInstallation installation,
-        IReadOnlyList<InstanceSaveFile> saves,
-        string profileDirectory,
-        string suggestedTarget)
+        IReadOnlyList<SaveGroup> groups)
     {
         var owner = _ownerProvider();
         if (owner is null) return null;
 
-        var dialog = new DeleteInstanceDialog(installation, saves, profileDirectory, suggestedTarget);
+        var dialog = new DeleteInstanceDialog(installation, groups);
         return await dialog.ShowDialog<InstanceDeletionPlan?>(owner);
     }
 
@@ -146,6 +156,19 @@ public sealed class UserDialogService : IUserDialogService
 
         var dialog = new LinkNexusDialog(_nexus, gameDomain, suggestedName);
         return await dialog.ShowDialog<NexusMatch?>(owner);
+    }
+
+    public async Task<UnmanagedSaveDecision?> PickUnmanagedSaveAsync(
+        string liveDirectory,
+        int fileCount,
+        IReadOnlyList<UnmanagedSaveCandidate> candidates,
+        string? selectedInstallationKey)
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var dialog = new UnmanagedSaveDialog(liveDirectory, fileCount, candidates, selectedInstallationKey);
+        return await dialog.ShowDialog<UnmanagedSaveDecision?>(owner);
     }
 }
 
@@ -162,6 +185,10 @@ public interface IFilePickerService
     Task<string?> PickDataFolderAsync();
 
     Task<string?> PickBackupFolderAsync();
+
+    Task<string?> PickSaveArchiveTargetAsync(string suggestedFileName);
+
+    Task<string?> PickSaveArchiveAsync();
 }
 
 public sealed class FilePickerService : IFilePickerService
@@ -251,6 +278,44 @@ public sealed class FilePickerService : IFilePickerService
         });
 
         return folders.Count == 0 ? null : folders[0].Path.LocalPath;
+    }
+
+    public async Task<string?> PickSaveArchiveTargetAsync(string suggestedFileName)
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "导出存档组",
+            SuggestedFileName = suggestedFileName,
+            DefaultExtension = "zip",
+            ShowOverwritePrompt = true,
+            FileTypeChoices =
+            [
+                new FilePickerFileType("存档组 ZIP") { Patterns = ["*.zip"] }
+            ]
+        });
+
+        return file?.Path.LocalPath;
+    }
+
+    public async Task<string?> PickSaveArchiveAsync()
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "选择存档组 ZIP",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("存档组 ZIP") { Patterns = ["*.zip"] }
+            ]
+        });
+
+        return files.Count == 0 ? null : files[0].Path.LocalPath;
     }
 
     public async Task<string?> PickThemeFileAsync()

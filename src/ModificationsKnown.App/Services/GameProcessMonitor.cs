@@ -2,19 +2,27 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
+using ModificationsKnown.Core.Saves;
+using ModificationsKnown.Infrastructure.Diagnostics;
 
 namespace ModificationsKnown.App.Services;
 
 /// <summary>
-/// Polls running processes and maps them to installations by executable path
-/// (falling back to process names only when a path is unavailable). Multiple
-/// instances can run at once; state is tracked per game directory, including a
-/// process count for two copies of the same instance.
+/// Polls running processes and maps them to installations. Matching (path first,
+/// then process name) lives in <see cref="GameProcessProbe"/> so it can be
+/// tested without a UI.
+/// <para>
+/// The 3-second <see cref="Changed"/> snapshot is for display only. Save
+/// operations use <see cref="Probe"/> / <see cref="ProbeAnyRunning"/>, which
+/// enumerate processes again at call time and report <c>Unknown</c> rather than
+/// "not running" when a process cannot be inspected.
+/// </para>
 /// </summary>
 public sealed class GameProcessMonitor : IDisposable
 {
     private readonly GameContext _game;
     private readonly IAppLogger? _logger;
+    private readonly GameProcessProbe _probe;
     private readonly ConcurrentDictionary<string, int> _counts = new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource _cts = new();
     private readonly object _scanGate = new();
@@ -24,6 +32,7 @@ public sealed class GameProcessMonitor : IDisposable
     {
         _game = game;
         _logger = logger;
+        _probe = new GameProcessProbe(logger);
     }
 
     public event EventHandler? Changed;
@@ -39,8 +48,38 @@ public sealed class GameProcessMonitor : IDisposable
     public bool IsRunning(GameInstallation installation) =>
         Count(installation) > 0;
 
+    /// <summary>True while any registered installation has a live process.
+    /// Save-group writes are locked for every installation in that case: the
+    /// game always writes the one global LocalLow directory, whichever
+    /// installation owns the running process.</summary>
+    public bool AnyRunning => _counts.Values.Any(count => count > 0);
+
     public int Count(GameInstallation installation) =>
         _counts.TryGetValue(Normalize(installation.GameDirectory), out var count) ? count : 0;
+
+    /// <summary>
+    /// Fresh check for one installation, used right before a save write. It
+    /// never reads the cached snapshot, so a game started from Steam since the
+    /// last poll is still detected.
+    /// </summary>
+    public GameRunningState Probe(GameInstallation installation)
+    {
+        lock (_scanGate)
+        {
+            return _probe.Probe(Target(installation));
+        }
+    }
+
+    /// <summary>Fresh check across every installation and every known executable
+    /// name. A game launched outside MK (including a copy in an unregistered
+    /// folder) still locks all save writes.</summary>
+    public GameRunningState ProbeAnyRunning()
+    {
+        lock (_scanGate)
+        {
+            return _probe.ProbeAnyRunning(Targets());
+        }
+    }
 
     /// <summary>Fast poll used right after a launch command: scans every
     /// 350 ms until the instance appears or the timeout expires.</summary>
@@ -77,7 +116,7 @@ public sealed class GameProcessMonitor : IDisposable
         GameInstallation installation,
         CancellationToken cancellationToken = default)
     {
-        var pids = FindProcessIds(installation);
+        var pids = _probe.FindProcessIds(Target(installation));
         var closed = 0;
 
         foreach (var pid in pids)
@@ -127,46 +166,6 @@ public sealed class GameProcessMonitor : IDisposable
         }
     }
 
-    private List<int> FindProcessIds(GameInstallation installation)
-    {
-        var root = Normalize(installation.GameDirectory);
-        var exe = string.IsNullOrWhiteSpace(installation.ExecutablePath)
-            ? null
-            : Normalize(installation.ExecutablePath);
-
-        var result = new List<int>();
-        var processes = Process.GetProcesses();
-        try
-        {
-            foreach (var process in processes)
-            {
-                string? path = null;
-                try
-                {
-                    path = process.MainModule?.FileName;
-                }
-                catch
-                {
-                    // Same limitation as detection: no path for elevated processes.
-                }
-
-                if (string.IsNullOrWhiteSpace(path)) continue;
-                var normalized = Normalize(path);
-                if ((exe is not null && string.Equals(normalized, exe, StringComparison.OrdinalIgnoreCase))
-                    || normalized.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                {
-                    result.Add(process.Id);
-                }
-            }
-        }
-        finally
-        {
-            foreach (var process in processes) process.Dispose();
-        }
-
-        return result;
-    }
-
     private async Task LoopAsync(CancellationToken token)
     {
         while (!token.IsCancellationRequested)
@@ -212,76 +211,24 @@ public sealed class GameProcessMonitor : IDisposable
             return;
         }
 
-        var counts = installations.ToDictionary(
-            installation => Normalize(installation.GameDirectory),
-            _ => 0,
-            StringComparer.OrdinalIgnoreCase);
+        var scan = _probe.Scan(installations.Select(Target).ToList());
+        var active = scan.Counts;
 
-        var byExe = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var installation in installations)
-        {
-            if (!string.IsNullOrWhiteSpace(installation.ExecutablePath))
-                byExe[Normalize(installation.ExecutablePath)] = Normalize(installation.GameDirectory);
-        }
-
-        var processes = Process.GetProcesses();
-        try
-        {
-            foreach (var process in processes)
-            {
-                string? path = null;
-                try
-                {
-                    path = process.MainModule?.FileName;
-                }
-                catch
-                {
-                    // Elevated/other-session processes expose no module path.
-                }
-
-                string? directory = null;
-                if (!string.IsNullOrWhiteSpace(path))
-                {
-                    var normalized = Normalize(path);
-                    byExe.TryGetValue(normalized, out directory);
-                    directory ??= FindContaining(installations, normalized);
-                }
-
-                if (directory is null) continue;
-                if (counts.ContainsKey(directory)) counts[directory]++;
-            }
-        }
-        finally
-        {
-            foreach (var process in processes) process.Dispose();
-        }
-
-        var changed = counts.Count != _counts.Count
-                      || counts.Any(pair => !_counts.TryGetValue(pair.Key, out var current) || current != pair.Value);
-
-        if (!changed) return;
+        // Only running installations are part of the state; keeping explicit
+        // zero entries would make every idle scan look like a change.
+        if (!RunningStateDiff.HasChanged(active, _counts)) return;
 
         _counts.Clear();
-        foreach (var pair in counts)
-            if (pair.Value > 0) _counts[pair.Key] = pair.Value;
+        foreach (var pair in active) _counts[pair.Key] = pair.Value;
 
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    private static string? FindContaining(IReadOnlyList<GameInstallation> installations, string filePath)
-    {
-        string? best = null;
-        foreach (var installation in installations)
-        {
-            var root = Normalize(installation.GameDirectory);
-            if (!filePath.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                continue;
+    private IReadOnlyList<GameProcessTarget> Targets() =>
+        _game.Installations.Select(Target).ToList();
 
-            if (best is null || root.Length > best.Length) best = root;
-        }
-
-        return best;
-    }
+    private static GameProcessTarget Target(GameInstallation installation) =>
+        new(installation.GameDirectory, installation.ExecutablePath);
 
     private static string Normalize(string path) =>
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));

@@ -7,7 +7,9 @@ using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Nexus;
+using ModificationsKnown.Core.Saves;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Saves;
 using ModificationsKnown.Infrastructure.Storage;
 using ModificationsKnown.Infrastructure.Windows;
 
@@ -35,7 +37,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private readonly IAppSettingsService _settings;
     private readonly INexusModsClient _nexus;
     private readonly ActivityLogService _activity;
-    private readonly SaveIsolationService _saveIsolation;
+    private readonly SaveGroupService _saveGroups;
     private readonly GameProcessMonitor _processMonitor;
     private readonly NxmProtocolRegistrar _nxmRegistrar;
     private readonly IUserDialogService _dialogs;
@@ -89,6 +91,9 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private string _saveProfilePath = "—";
 
     [ObservableProperty]
+    private string _saveGroupLabel = "未创建";
+
+    [ObservableProperty]
     private string _dataRoot = "—";
 
     [ObservableProperty]
@@ -114,7 +119,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private Task LaunchGame() => _shell.LaunchGameAsync();
 
     [RelayCommand]
-    private async Task ChecklistActionAsync(HomeChecklistItem? item)
+    private void ChecklistAction(HomeChecklistItem? item)
     {
         if (item is null) return;
 
@@ -145,10 +150,10 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         IAppSettingsService settings,
         INexusModsClient nexus,
         ActivityLogService activity,
-        SaveIsolationService saveIsolation,
         GameProcessMonitor processMonitor,
         NxmProtocolRegistrar nxmRegistrar,
-        IUserDialogService dialogs)
+        IUserDialogService dialogs,
+        SaveGroupService saveGroups)
     {
         _shell = shell;
         _locator = locator;
@@ -157,7 +162,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         _settings = settings;
         _nexus = nexus;
         _activity = activity;
-        _saveIsolation = saveIsolation;
+        _saveGroups = saveGroups;
         _processMonitor = processMonitor;
         _nxmRegistrar = nxmRegistrar;
         _dialogs = dialogs;
@@ -202,6 +207,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
                 LastLaunchLabel = "尚未通过 MK 启动";
                 SaveIsolationLabel = "未选择版本";
                 SaveProfilePath = "—";
+                SaveGroupLabel = "未创建";
                 CurrentGroupLabel = "—";
                 IsRunning = false;
                 RunningLabel = "未运行";
@@ -216,7 +222,9 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             BepInExReady = installation.HasBepInEx;
             NexusConfigured = !string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey);
             LastLaunchLabel = FormatLastLaunch(_settings.Current.LastLaunchAt);
-            SaveProfilePath = _saveIsolation.GetProfileDirectory(installation);
+            var currentSaveGroup = _saveGroups.GetLiveGroup(installation);
+            SaveGroupLabel = currentSaveGroup?.Name ?? "未指定";
+            SaveProfilePath = currentSaveGroup?.DirectoryPath ?? "—";
             SaveIsolationLabel = DescribeIsolation(installation);
             CurrentGroupLabel = DescribeCurrentGroup(installation.GameDirectory);
             UpdateRunningState();
@@ -308,26 +316,22 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     {
         if (!OperatingSystem.IsWindows()) return "非 Windows：跳过存档隔离";
 
-        var live = _saveIsolation.GetLiveSaveDirectory();
-        var profile = _saveIsolation.GetProfileDirectory(installation);
         try
         {
-            if (!Directory.Exists(live)) return "首次启动时创建存档隔离";
-            var info = new DirectoryInfo(live);
-            if (!info.Attributes.HasFlag(FileAttributes.ReparsePoint)) return "当前存档目录未隔离";
+            var preview = _saveGroups.GetLaunchPreview(installation);
+            if (preview.NeedsInitialization || preview.Group is null)
+                return "尚未创建存档组";
 
-            var target = info.LinkTarget;
-            if (string.IsNullOrWhiteSpace(target)) return "存档链接不可读";
-            return string.Equals(
-                Path.GetFullPath(target).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(profile).TrimEnd(Path.DirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase)
-                ? "已隔离到当前版本"
-                : "存档链接指向其他版本";
+            var live = _saveGroups.GetLiveGroup(installation);
+            if (live is null)
+                return "当前链接未指向存档组";
+            if (live.Id != preview.Group.Id)
+                return $"链接指向「{live.Name}」，选择为「{preview.Group.Name}」";
+            return $"已指向「{live.Name}」";
         }
         catch
         {
-            return "存档链接状态未知";
+            return "存档组状态未知";
         }
     }
 

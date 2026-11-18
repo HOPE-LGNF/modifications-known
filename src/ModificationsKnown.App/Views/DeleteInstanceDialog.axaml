@@ -23,7 +23,7 @@
                 Padding="24"
                 BoxShadow="0 20 56 0 #A0000000">
             <Grid>
-                <!-- Step 1: preserve saves + folder choice -->
+                <!-- Step 1: what is removed, what is kept -->
                 <StackPanel Name="StepOnePanel" Spacing="12">
                     <StackPanel Spacing="3">
                         <TextBlock Text="删除版本" FontSize="20" FontWeight="SemiBold" />
@@ -40,73 +40,47 @@
 
                     <Border Height="1" Background="{DynamicResource BorderBrush}" />
 
-                    <TextBlock Text="存档处理" FontSize="13" FontWeight="SemiBold" />
-                    <TextBlock Text="MK 为这个实例维护了独立存档目录。先决定如何保留它："
-                               Classes="muted"
-                               FontSize="11"
-                               TextWrapping="Wrap" />
-
-                    <StackPanel Spacing="7">
-                        <RadioButton Name="CopyRadio"
-                                     GroupName="SaveMode"
-                                     Content="复制到指定目录（推荐）"
-                                     IsChecked="True"
-                                     Checked="OnSaveModeChanged" />
-                        <RadioButton Name="MoveRadio"
-                                     GroupName="SaveMode"
-                                     Content="移动到指定目录"
-                                     Checked="OnSaveModeChanged" />
-                        <RadioButton Name="KeepRadio"
-                                     GroupName="SaveMode"
-                                     Content="保持原位（不处理托管存档目录）"
-                                     Checked="OnSaveModeChanged" />
-                    </StackPanel>
-
-                    <Grid Name="TargetRow" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBox Name="TargetBox" Watermark="存档保存目录" />
-                        <Button Grid.Column="1"
-                                Name="BrowseButton"
-                                Classes="Ghost"
-                                Content="选择目录"
-                                Click="OnBrowseClick" />
-                    </Grid>
-
                     <Border Background="{DynamicResource SurfaceAltBrush}"
                             BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
-                            Padding="10">
+                            Padding="12">
                         <StackPanel Spacing="6">
-                            <TextBlock Name="SaveCountLabel"
+                            <TextBlock Name="SaveGroupsTitle"
+                                       FontSize="13"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Text="本操作只移除 MK 中的实例记录。所有存档组都保留在 MK 数据目录，不会被复制、移动、删除或重新链接；是否删除游戏安装目录也不会影响它们。"
+                                       Classes="muted"
                                        FontSize="11"
-                                       Foreground="{DynamicResource TextSecondaryBrush}" />
-                            <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto">
-                                <ItemsControl Name="SaveList">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                                                <TextBlock Text="{Binding RelativePath}"
-                                                           FontSize="11"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding SizeLabel}"
-                                                           FontSize="10"
-                                                           Foreground="{DynamicResource TextSecondaryBrush}"
-                                                           Margin="10,0,0,0" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                            <TextBlock Name="NoSavesLabel"
-                                       Text="该实例还没有存档文件。"
+                                       TextWrapping="Wrap" />
+                            <ItemsControl Name="SaveGroupList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}"
+                                                   FontSize="11"
+                                                   Margin="0,1"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Name="NoSaveGroupsLabel"
+                                       Text="该实例当前没有登记存档组。"
                                        Classes="caption"
                                        IsVisible="False" />
                         </StackPanel>
                     </Border>
 
+                    <TextBlock Text="将删除的 MK 记录"
+                               FontSize="13"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="  · 版本别名与实例记录（刷新后不再出现）&#10;  · 该实例的 Mod 组快照&#10;  · 该实例的 Nexus 手动关联与安装来源记录"
+                               Classes="muted"
+                               FontSize="11"
+                               TextWrapping="Wrap" />
+
                     <CheckBox Name="DeleteFolderCheck"
-                              Content="同时删除实例文件夹"
+                              Content="同时删除游戏安装目录"
                               IsChecked="False" />
                     <TextBlock Name="SteamWarning"
                                IsVisible="False"
@@ -115,17 +89,11 @@
                                TextWrapping="Wrap"
                                Margin="24,0,0,0"
                                Text="该实例位于 Steam 库。直接删除文件夹会让 Steam 认为安装损坏；建议先关闭 MK，用 Steam 的“卸载”清理，或在 Steam 中验证文件。" />
-                    <TextBlock Text="勾选后会连同游戏安装目录一起删除。该目录中的 BepInEx、模组和日志都会消失，且无法恢复。"
+                    <TextBlock Text="勾选后只删除游戏安装目录本身（BepInEx、模组与日志会消失，且无法恢复）。存档组不在该目录中，仍然全部保留。"
                                FontSize="11"
                                Foreground="{DynamicResource DangerBrush}"
                                TextWrapping="Wrap"
                                Margin="24,0,0,0" />
-
-                    <TextBlock Name="StepOneError"
-                               FontSize="11"
-                               Foreground="{DynamicResource DangerBrush}"
-                               TextWrapping="Wrap"
-                               IsVisible="False" />
 
                     <StackPanel Orientation="Horizontal"
                                 Spacing="8"
@@ -136,16 +104,17 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Step 2: red final confirmation -->
+                <!-- Step 2: final confirmation -->
                 <StackPanel Name="StepTwoPanel" Spacing="12" IsVisible="False">
                     <StackPanel Spacing="3">
                         <TextBlock Text="最终确认"
                                    FontSize="20"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource DangerBrush}" />
-                        <TextBlock Text="以下操作不可撤销，请逐项核对。"
+                        <TextBlock Text="请逐项核对；存档组不会受本次操作影响。"
                                    FontSize="12"
-                                   Foreground="{DynamicResource DangerBrush}" />
+                                   Foreground="{DynamicResource DangerBrush}"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
 
                     <Border Background="{DynamicResource SurfaceAltBrush}"
@@ -158,12 +127,6 @@
                                    TextWrapping="Wrap"
                                    LineHeight="20" />
                     </Border>
-
-                    <TextBlock Name="StepTwoError"
-                               FontSize="11"
-                               Foreground="{DynamicResource DangerBrush}"
-                               TextWrapping="Wrap"
-                               IsVisible="False" />
 
                     <StackPanel Orientation="Horizontal"
                                 Spacing="8"

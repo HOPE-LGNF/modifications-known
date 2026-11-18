@@ -1,18 +1,22 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Games;
+using ModificationsKnown.Core.Saves;
+using ModificationsKnown.Infrastructure.Instances;
 
 namespace ModificationsKnown.App.Views;
 
+/// <summary>
+/// Confirms removing an instance record. Save groups are never an option here:
+/// the dialog states how many groups stay behind and the only destructive
+/// choice is the optional game install folder.
+/// </summary>
 public partial class DeleteInstanceDialog : DialogWindow
 {
     private readonly GameInstallation _installation;
-    private readonly IReadOnlyList<InstanceSaveFile> _saves;
-    private readonly string _profileDirectory;
+    private readonly IReadOnlyList<SaveGroup> _groups;
     private DispatcherTimer? _confirmTimer;
     private int _confirmSeconds;
 
@@ -24,112 +28,47 @@ public partial class DeleteInstanceDialog : DialogWindow
                 null,
                 false,
                 false),
-            [],
-            string.Empty,
-            string.Empty)
+            [])
     {
     }
 
-    public DeleteInstanceDialog(
-        GameInstallation installation,
-        IReadOnlyList<InstanceSaveFile> saves,
-        string profileDirectory,
-        string suggestedTarget)
+    public DeleteInstanceDialog(GameInstallation installation, IReadOnlyList<SaveGroup> groups)
     {
         _installation = installation;
-        _saves = saves;
-        _profileDirectory = profileDirectory;
+        _groups = groups;
         InitializeComponent();
 
         InstanceLabel.Text = installation.DisplayLabel;
         InstancePath.Text = installation.GameDirectory;
-        TargetBox.Text = suggestedTarget;
-        SaveList.ItemsSource = saves;
-        SaveCountLabel.Text = saves.Count == 0
-            ? "没有找到存档文件。"
-            : $"找到 {saves.Count} 个存档文件：";
-        NoSavesLabel.IsVisible = saves.Count == 0;
+        DeleteFolderCheck.IsChecked = false;
         SteamWarning.IsVisible = installation.GameDirectory.Contains(
             "steamapps",
             StringComparison.OrdinalIgnoreCase);
 
+        SaveGroupsTitle.Text = groups.Count == 0
+            ? "存档组：0 个（没有需要保留的组）"
+            : $"存档组：{groups.Count} 个，全部保留";
+        SaveGroupList.ItemsSource = groups
+            .OrderByDescending(group => group.IsDefault)
+            .ThenBy(group => group.CreatedAt)
+            .Select(group => group.IsDefault ? $"  · {group.Name}（默认）" : $"  · {group.Name}")
+            .ToList();
+        SaveGroupList.IsVisible = groups.Count > 0;
+        NoSaveGroupsLabel.IsVisible = groups.Count == 0;
+
         KeyDown += OnWindowKeyDown;
-        Opened += (_, _) => CopyRadio.Focus();
-    }
-
-    private SaveDisposition Disposition => KeepRadio.IsChecked == true
-        ? SaveDisposition.Keep
-        : MoveRadio.IsChecked == true
-            ? SaveDisposition.Move
-            : SaveDisposition.Copy;
-
-    private void OnSaveModeChanged(object? sender, RoutedEventArgs e)
-    {
-        if (TargetRow is null || sender is not RadioButton radio) return;
-
-        // Use the radio that raised the event: while switching groups the old
-        // radio can still report IsChecked=true, which previously disabled the
-        // target row even after choosing Copy/Move.
-        var keep = ReferenceEquals(radio, KeepRadio);
-        TargetRow.IsEnabled = !keep;
-        BrowseButton.IsEnabled = !keep;
-    }
-
-    private async void OnBrowseClick(object? sender, RoutedEventArgs e)
-    {
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-        {
-            Title = "选择存档保存目录",
-            AllowMultiple = false
-        });
-
-        if (folders.Count > 0)
-            TargetBox.Text = folders[0].Path.LocalPath;
+        Opened += (_, _) => DeleteFolderCheck.Focus();
     }
 
     private void OnNextClick(object? sender, RoutedEventArgs e)
     {
-        StepOneError.IsVisible = false;
-        var disposition = Disposition;
-        var target = TargetBox.Text?.Trim() ?? string.Empty;
-
-        if (disposition is SaveDisposition.Copy or SaveDisposition.Move)
-        {
-            if (target.Length == 0)
-            {
-                ShowError(StepOneError, "请选择存档目录，或改为“保持原位”。");
-                return;
-            }
-
-            try
-            {
-                var full = Path.GetFullPath(target);
-                if (Directory.Exists(full) && Directory.EnumerateFileSystemEntries(full).Any())
-                {
-                    ShowError(StepOneError, "目标目录已存在且不为空，请换一个空目录。");
-                    return;
-                }
-
-                if (IsInside(full, _profileDirectory) || IsInside(_profileDirectory, full))
-                {
-                    ShowError(StepOneError, "存档目录不能位于实例托管存档目录内，也不能是它的上级目录。");
-                    return;
-                }
-            }
-            catch (Exception exception)
-            {
-                ShowError(StepOneError, $"目录无效：{exception.Message}");
-                return;
-            }
-        }
-
-        SummaryText.Text = BuildSummary(disposition, target);
+        SummaryText.Text = BuildSummary();
         StepOnePanel.IsVisible = false;
         StepTwoPanel.IsVisible = true;
         StartConfirmCountdown();
     }
 
-    private string BuildSummary(SaveDisposition disposition, string target)
+    private string BuildSummary()
     {
         var lines = new List<string>
         {
@@ -141,27 +80,20 @@ public partial class DeleteInstanceDialog : DialogWindow
             "  · 该实例的 Mod 组快照",
             "  · 该实例的 Nexus 手动关联与安装来源记录",
             string.Empty,
-            "存档："
+            "存档组：",
+            "  · 全部保留，不会被复制、移动、删除或重新链接"
         };
 
-        switch (disposition)
+        foreach (var group in _groups.OrderByDescending(group => group.IsDefault)
+                     .ThenBy(group => group.CreatedAt))
         {
-            case SaveDisposition.Copy:
-                lines.Add($"  · 复制到 {target}");
-                lines.Add("  · 复制完成后删除 MK 托管存档目录");
-                break;
-            case SaveDisposition.Move:
-                lines.Add($"  · 移动到 {target}");
-                break;
-            default:
-                lines.Add("  · 保持原位，不处理 MK 托管存档目录");
-                break;
+            lines.Add($"      - {group.Name}{(group.IsDefault ? "（默认）" : string.Empty)}");
         }
 
         lines.Add(string.Empty);
-        lines.Add("实例文件夹：");
+        lines.Add("游戏安装目录：");
         lines.Add(DeleteFolderCheck.IsChecked == true
-            ? $"  · 删除 {_installation.GameDirectory}"
+            ? $"  · 删除 {_installation.GameDirectory}（其中的 BepInEx、模组与日志一并删除，无法恢复）"
             : $"  · 保留 {_installation.GameDirectory}");
 
         return string.Join(Environment.NewLine, lines);
@@ -206,18 +138,8 @@ public partial class DeleteInstanceDialog : DialogWindow
         _confirmTimer = null;
     }
 
-    private void OnConfirmClick(object? sender, RoutedEventArgs e)
-    {
-        var disposition = Disposition;
-        var target = disposition == SaveDisposition.Keep
-            ? null
-            : TargetBox.Text?.Trim();
-
-        Close(new InstanceDeletionPlan(
-            disposition,
-            string.IsNullOrWhiteSpace(target) ? null : target,
-            DeleteFolderCheck.IsChecked == true));
-    }
+    private void OnConfirmClick(object? sender, RoutedEventArgs e) =>
+        Close(new InstanceDeletionPlan(DeleteFolderCheck.IsChecked == true));
 
     private void OnCancelClick(object? sender, RoutedEventArgs e)
     {
@@ -238,19 +160,5 @@ public partial class DeleteInstanceDialog : DialogWindow
         }
 
         Close(null);
-    }
-
-    private static void ShowError(TextBlock target, string message)
-    {
-        target.Text = message;
-        target.IsVisible = true;
-    }
-
-    private static bool IsInside(string path, string parent)
-    {
-        var full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
-        var root = Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar);
-        return full.Equals(root, StringComparison.OrdinalIgnoreCase)
-               || full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 }

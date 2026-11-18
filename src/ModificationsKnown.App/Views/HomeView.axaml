@@ -107,14 +107,11 @@
                     </StackPanel>
                 </StackPanel>
 
-                <StackPanel Grid.Row="2" Spacing="8">
+                <StackPanel Grid.Row="2">
                     <Button Classes="Primary launch"
                             Classes.danger="{Binding IsCloseAction}"
                             Content="{Binding LaunchButtonText}"
                             Command="{Binding LaunchGameCommand}" />
-                    <TextBlock Text="启动前会自动切换到该版本的独立存档。"
-                               Classes="caption"
-                               HorizontalAlignment="Center" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -255,7 +252,13 @@
                         <StackPanel Spacing="10">
                             <TextBlock Text="存档与数据" Classes="h2" />
                             <StackPanel Spacing="2">
-                                <TextBlock Text="存档 profile" Classes="caption" />
+                                <TextBlock Text="当前存档组" Classes="caption" />
+                                <TextBlock Text="{Binding SaveGroupLabel}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold" />
+                            </StackPanel>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="存档组目录" Classes="caption" />
                                 <TextBlock Text="{Binding SaveProfilePath}"
                                            Classes="mono"
                                            FontSize="10"

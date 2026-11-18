@@ -1,8 +1,7 @@
 using System.Text.Json;
 using ModificationsKnown.Core.Games;
-using ModificationsKnown.Infrastructure.Storage;
 
-namespace ModificationsKnown.App.Services;
+namespace ModificationsKnown.Infrastructure.Storage;
 
 /// <summary>Persisted instance record. Detection only refreshes this list on an
 /// explicit request; normal startup and startup-after-delete never re-scan

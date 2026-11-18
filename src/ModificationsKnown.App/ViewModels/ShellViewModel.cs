@@ -11,7 +11,11 @@ using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
+using ModificationsKnown.Core.Saves;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Games;
+using ModificationsKnown.Infrastructure.Instances;
+using ModificationsKnown.Infrastructure.Saves;
 using ModificationsKnown.Infrastructure.Storage;
 using ModificationsKnown.Infrastructure.Windows;
 
@@ -23,7 +27,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private readonly IGameLocator _locator;
     private readonly IGameLauncher _launcher;
     private readonly IUserDialogService _dialogs;
-    private readonly SaveIsolationService _saveIsolation;
+    private readonly SaveGroupService _saveGroups;
     private readonly ActivityLogService _activity;
     private readonly GameProcessMonitor _processMonitor;
     private readonly Dictionary<string, object> _pages;
@@ -67,10 +71,25 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
     private int _toastGeneration;
 
+    // Last-wins guard for the save-group sync that follows the active instance.
+    private int _saveGroupSyncVersion;
+
+    // Set while the initial instance list is loading: the sync runs once after
+    // it, instead of once per intermediate selection.
+    private bool _suppressInstanceSync;
+
     private static readonly TimeSpan ToastInfoDuration = TimeSpan.FromSeconds(3.5);
     private static readonly TimeSpan ToastAlertDuration = TimeSpan.FromSeconds(5);
 
     public bool CanLaunch => !IsLaunching && !IsClosing;
+
+    /// <summary>Switching the active instance now also moves the live save
+    /// group, and the game writes the one global LocalLow directory, so the
+    /// selector is locked while any installation runs (or while we are busy).</summary>
+    public bool CanSwitchInstance => !_processMonitor.AnyRunning && !IsBusy;
+
+    partial void OnIsBusyChanged(bool value) =>
+        OnPropertyChanged(nameof(CanSwitchInstance));
 
     public bool IsSelectedInstanceRunning =>
         Game.Selected is { } installation && _processMonitor.IsRunning(installation);
@@ -119,15 +138,27 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
         var instanceStore = new GameInstanceStore();
         Game = new GameContext(instanceStore);
-        _saveIsolation = new SaveIsolationService(logger);
         _activity = new ActivityLogService();
         _processMonitor = new GameProcessMonitor(Game, logger);
+        _saveGroups = new SaveGroupService(new SaveGroupOptions
+        {
+            // The game always writes the one global LocalLow directory, so any
+            // running installation locks every save-group write. The probe scans
+            // at call time and reports Unknown when process info is hidden,
+            // which the service treats as “running”.
+            ProbeGameRunningState = _ => _processMonitor.ProbeAnyRunning()
+        });
         _processMonitor.Start();
+        var saveArchive = new SaveGroupArchiveService(
+            isGameRunning: () => _processMonitor.ProbeAnyRunning() != GameRunningState.NotRunning,
+            // Export/import share the save-group write lock with apply/delete.
+            coordinator: _saveGroups);
         _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
         {
             OnPropertyChanged(nameof(IsSelectedInstanceRunning));
             OnPropertyChanged(nameof(LaunchButtonText));
             OnPropertyChanged(nameof(IsCloseAction));
+            OnPropertyChanged(nameof(CanSwitchInstance));
         });
         Settings.Changed += (_, _) =>
         {
@@ -155,17 +186,17 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         var nxmRegistrar = new NxmProtocolRegistrar();
         var deletion = new InstanceDeletionService(
             instanceStore,
-            modGroups,
-            manualMatches,
+            modGroups.RemoveAll,
+            manualMatches.RemoveAll,
             sources,
-            _saveIsolation,
-            logger);
+            isRunning: _processMonitor.IsRunning,
+            logger: logger);
         _pages = new Dictionary<string, object>
         {
-            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor, nxmRegistrar, dialogs),
+            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _processMonitor, nxmRegistrar, dialogs, _saveGroups),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs, updates, logger),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor, downloader, updates, nxmRegistrar, logger),
-            ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger, _processMonitor),
+            ["saves"] = new SavesViewModel(this, _saveGroups, saveArchive, new SaveSlotReader(), filePicker, dialogs, logger, _processMonitor, new GameExecutableVersionReader()),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion, _processMonitor)
@@ -181,6 +212,12 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             OnPropertyChanged(nameof(IsSelectedInstanceRunning));
             OnPropertyChanged(nameof(LaunchButtonText));
             OnPropertyChanged(nameof(IsCloseAction));
+            OnPropertyChanged(nameof(CanSwitchInstance));
+
+            // The active instance carries its own save group: follow it, unless
+            // the initial list is still loading (one sync after that instead).
+            if (!_suppressInstanceSync)
+                _ = SyncActiveSaveGroupAsync(Game.Selected, announce: true);
         };
     }
 
@@ -358,9 +395,23 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         try
         {
             if (rediscover)
+            {
                 await Game.RefreshAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
+            }
             else
-                await Game.InitializeAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
+            {
+                // One sync after the list is ready, instead of one per
+                // intermediate selection while instances load.
+                _suppressInstanceSync = true;
+                try
+                {
+                    await Game.InitializeAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
+                }
+                finally
+                {
+                    _suppressInstanceSync = false;
+                }
+            }
 
             if (Game.Selected is null)
             {
@@ -376,6 +427,13 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             Settings.Current.PreferredGamePath = Game.Selected.GameDirectory;
             await Settings.SaveAsync();
             SetStatus($"已检测到 {Game.Selected.Profile.EditionLabel}：{Game.Selected.GameDirectory}", StatusKind.Success);
+
+            // Follow the restored instance: point the live junction at its group
+            // now, so a launch from Steam uses the same group. Silent on success;
+            // problems (running game, failed switch) still surface. A manual
+            // re-detect already synced through Game.Changed.
+            if (!rediscover)
+                await SyncActiveSaveGroupAsync(Game.Selected, announce: false);
         }
         catch (Exception exception)
         {
@@ -428,6 +486,269 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         }
     }
 
+    /// <summary>
+    /// Keeps the live junction on the group the active instance would use next.
+    /// Runs when the active instance changes and once at startup. A stale run is
+    /// dropped when a newer selection arrived meanwhile (last switch wins).
+    /// </summary>
+    private async Task SyncActiveSaveGroupAsync(GameInstallation? installation, bool announce)
+    {
+        if (installation is null) return;
+        var version = ++_saveGroupSyncVersion;
+
+        var result = await _saveGroups.EnsureActiveGroupAsync(installation);
+        if (version != _saveGroupSyncVersion) return;
+
+        // Unmanaged real saves are never touched silently: ask first (including
+        // which registered copy should receive them), then act on that choice.
+        if (result.State == SaveGroupActivationState.NeedsUnmanagedChoice)
+        {
+            var decision = await _dialogs.PickUnmanagedSaveAsync(
+                result.LiveDirectory,
+                result.UnmanagedFileCount,
+                BuildUnmanagedCandidates(),
+                _saveGroups.GetInstallationKey(installation));
+            if (version != _saveGroupSyncVersion) return;
+
+            if (decision is null)
+            {
+                SetStatus("已取消；未改动任何存档。", StatusKind.Info);
+                return;
+            }
+
+            if (decision.Choice == UnmanagedSaveChoice.OpenInstanceSettings)
+            {
+                NavigateTo("settings");
+                SetStatus("在设置里添加游戏实例后，回到这里会重新询问如何处理现有存档。", StatusKind.Info);
+                return;
+            }
+
+            var target = decision.TargetInstallationKey is { } targetKey
+                ? Game.Installations.FirstOrDefault(candidate =>
+                    string.Equals(_saveGroups.GetInstallationKey(candidate), targetKey,
+                        StringComparison.OrdinalIgnoreCase))
+                : installation;
+
+            if (target is null)
+            {
+                SetStatus("找不到目标版本；未做任何修改。", StatusKind.Error);
+                return;
+            }
+
+            var targetHasGroups = _saveGroups.GetGroups(target).Count > 0;
+
+            if (decision.Choice == UnmanagedSaveChoice.Import && targetHasGroups)
+            {
+                var imported = await _saveGroups.ImportLiveIntoNewGroupAsync(target);
+                if (version != _saveGroupSyncVersion) return;
+
+                if (!imported.Success)
+                {
+                    SetStatus(imported.Message, StatusKind.Error);
+                    return;
+                }
+
+                var targetLabel = target.DisplayLabel;
+                Game.Selected = target;
+                SetStatus($"已导入到「{targetLabel}」的「{imported.Group?.Name}」，并切换到该版本。",
+                    StatusKind.Success);
+                await ActivateCurrentPageAsync();
+                return;
+            }
+
+            if (decision.Choice == UnmanagedSaveChoice.CreateEmpty && targetHasGroups)
+            {
+                SetStatus("该版本已有存档组；请到存档管理里新建空组。", StatusKind.Warning);
+                return;
+            }
+
+            var action = decision.Choice == UnmanagedSaveChoice.Import
+                ? UnmanagedSaveAction.Import
+                : UnmanagedSaveAction.CreateEmpty;
+            result = await _saveGroups.EnsureActiveGroupAsync(target, action);
+            if (version != _saveGroupSyncVersion) return;
+
+            if (result.Success && !ReferenceEquals(target, installation))
+            {
+                var targetLabel = target.DisplayLabel;
+                Game.Selected = target;
+                SetStatus($"已把现有存档交给「{targetLabel}」，并切换到该版本。", StatusKind.Success);
+                await ActivateCurrentPageAsync();
+                return;
+            }
+        }
+
+        switch (result.State)
+        {
+            case SaveGroupActivationState.Switched:
+                if (announce)
+                    SetStatus($"已切换到「{result.Group?.Name}」的存档组。", StatusKind.Success);
+                await ActivateCurrentPageAsync();
+                break;
+
+            case SaveGroupActivationState.AlreadyActive:
+                break;
+
+            case SaveGroupActivationState.RunningLocked:
+                SetStatus(result.Message, StatusKind.Warning);
+                break;
+
+            default:
+                SetStatus(result.Message, StatusKind.Error);
+                break;
+        }
+    }
+
+    /// <summary>Every registered copy can receive the unmanaged saves; the
+    /// dialog shows how many groups each one already has.</summary>
+    private IReadOnlyList<UnmanagedSaveCandidate> BuildUnmanagedCandidates()
+    {
+        var candidates = new List<UnmanagedSaveCandidate>();
+        foreach (var installation in Game.Installations)
+        {
+            int groupCount;
+            try
+            {
+                groupCount = _saveGroups.GetGroups(installation).Count;
+            }
+            catch (Exception exception)
+            {
+                _logger.Warn($"读取「{installation.DisplayLabel}」的存档组失败：{exception.Message}");
+                groupCount = 0;
+            }
+
+            candidates.Add(new UnmanagedSaveCandidate(
+                _saveGroups.GetInstallationKey(installation),
+                installation.DisplayLabel,
+                installation.GameDirectory,
+                groupCount));
+        }
+
+        return candidates;
+    }
+
+    /// <summary>
+    /// Save groups must be ready before any launch: unmanaged saves need an
+    /// explicit choice, and a failed switch blocks the launch instead of
+    /// letting the game write into the wrong profile. Selecting a group is an
+    /// explicit action on the saves page, so launching never asks again.
+    /// </summary>
+    private async Task<bool> PrepareSaveGroupForLaunchAsync(GameInstallation installation)
+    {
+        // A second copy of the game may only start when the live link already
+        // points at the selected group; any group write is locked meanwhile.
+        if (_processMonitor.AnyRunning)
+        {
+            var current = _saveGroups.GetLaunchPreview(installation);
+            if (!current.NeedsInitialization && current.Group is not null && !current.NeedsSwitch)
+                return true;
+
+            SetStatus("游戏正在运行；请先关闭游戏再切换或创建存档组。", StatusKind.Warning);
+            return false;
+        }
+
+        var init = await _saveGroups.InitializeAsync(installation);
+        if (init.State == SaveGroupInitializationState.NeedsUnmanagedChoice)
+        {
+            var decision = await _dialogs.PickUnmanagedSaveAsync(
+                init.LiveDirectory,
+                init.UnmanagedFileCount,
+                BuildUnmanagedCandidates(),
+                _saveGroups.GetInstallationKey(installation));
+            if (decision is null)
+            {
+                SetStatus("已取消启动；未改动任何存档。", StatusKind.Info);
+                return false;
+            }
+
+            if (decision.Choice == UnmanagedSaveChoice.OpenInstanceSettings)
+            {
+                NavigateTo("settings");
+                SetStatus("在设置里添加游戏实例后再启动。", StatusKind.Info);
+                return false;
+            }
+
+            var target = decision.TargetInstallationKey is { } targetKey
+                ? Game.Installations.FirstOrDefault(candidate =>
+                    string.Equals(_saveGroups.GetInstallationKey(candidate), targetKey,
+                        StringComparison.OrdinalIgnoreCase))
+                : installation;
+
+            if (target is null)
+            {
+                SetStatus("找不到目标版本；未做任何修改。", StatusKind.Error);
+                return false;
+            }
+
+            var wantsImport = decision.Choice == UnmanagedSaveChoice.Import;
+            if (!ReferenceEquals(target, installation))
+            {
+                var targetHasGroups = _saveGroups.GetGroups(target).Count > 0;
+
+                if (wantsImport && targetHasGroups)
+                {
+                    var imported = await _saveGroups.ImportLiveIntoNewGroupAsync(target);
+                    if (!imported.Success)
+                    {
+                        SetStatus(imported.Message, StatusKind.Error);
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (!wantsImport && targetHasGroups)
+                    {
+                        SetStatus("该版本已有存档组；请到存档管理里新建空组。", StatusKind.Warning);
+                        return false;
+                    }
+
+                    var received = await _saveGroups.EnsureActiveGroupAsync(
+                        target,
+                        wantsImport ? UnmanagedSaveAction.Import : UnmanagedSaveAction.CreateEmpty);
+                    if (!received.Success)
+                    {
+                        SetStatus(received.Message, StatusKind.Error);
+                        return false;
+                    }
+                }
+
+                var targetLabel = target.DisplayLabel;
+                Game.Selected = target;
+                SetStatus($"已把现有存档交给「{targetLabel}」；请启动这个版本。", StatusKind.Success);
+                return false;
+            }
+
+            init = await _saveGroups.InitializeAsync(
+                installation,
+                wantsImport ? UnmanagedSaveAction.Import : UnmanagedSaveAction.CreateEmpty);
+        }
+
+        if (!init.Success)
+        {
+            SetStatus(init.Message, StatusKind.Error);
+            return false;
+        }
+
+        var preview = _saveGroups.GetLaunchPreview(installation);
+        if (preview.NeedsInitialization || preview.Group is null)
+        {
+            SetStatus("还没有可用的存档组；请先在存档管理中创建或导入。", StatusKind.Error);
+            return false;
+        }
+
+        var prepared = await _saveGroups.PrepareLaunchAsync(installation);
+        if (!prepared.Success)
+        {
+            SetStatus(prepared.Message, StatusKind.Error);
+            return false;
+        }
+
+        if (prepared.Switched && prepared.Group is not null)
+            SetStatus($"本次使用「{prepared.Group.Name}」的存档。", StatusKind.Info);
+
+        return true;
+    }
+
     public async Task LaunchGameAsync()
     {
         if (IsLaunching || IsClosing) return;
@@ -447,12 +768,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         IsLaunching = true;
         try
         {
-            var saveIsolation = await _saveIsolation.PrepareAsync(installation);
-            if (!saveIsolation.Success)
-            {
-                SetStatus(saveIsolation.Message, StatusKind.Error);
-                return;
-            }
+            if (!await PrepareSaveGroupForLaunchAsync(installation)) return;
 
             SetStatus($"正在启动 {installation.DisplayLabel}…");
             _logger.Info($"Launch requested for {installation.Profile.EditionLabel} at {installation.GameDirectory}");
@@ -529,7 +845,15 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     partial void OnSelectedNavigationChanged(NavigationItem? value)
     {
         if (value is null) return;
-        CurrentPage = _pages.GetValueOrDefault(value.Key);
+
+        var next = _pages.GetValueOrDefault(value.Key);
+
+        // Save-group choices are saved immediately. Leaving the page only clears
+        // transient row labels; the stored choice cannot become stale.
+        if (CurrentPage is SavesViewModel leavingSaves && !ReferenceEquals(leavingSaves, next))
+            leavingSaves.ResetTransientState();
+
+        CurrentPage = next;
         OnPropertyChanged(nameof(IsGameSkinOverlayVisible));
         _ = ActivateCurrentPageAsync();
     }
