@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using ModificationsKnown.Core.Games;
+using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Infrastructure.Installation;
 
 namespace ModificationsKnown.Tests;
@@ -83,4 +84,69 @@ public sealed class ArchiveModInstallerTests
         Assert.False(result.Success);
         Assert.True(Directory.Exists(existing));
     }
+
+    [Fact]
+    public async Task InstallsTargetPackageWithAuxiliaryFilesWhenAllowed()
+    {
+        using var temp = new TempDirectory();
+        Directory.CreateDirectory(Path.Combine(temp.Path, "BepInEx", "plugins"));
+        Directory.CreateDirectory(Path.Combine(temp.Path, "BepInEx", "patchers"));
+        var archive = CreateArchive(
+            temp,
+            "together.zip",
+            ("BepInEx/plugins/Together/Together.dll", "fake dll"),
+            ("BepInEx/plugins/CUCoreLib.dll", "fake core"),
+            ("BepInEx/patchers/CT_AutoUpdateApplier.dll", "fake patcher"));
+
+        var installer = new ArchiveModInstaller();
+        var result = await installer.InstallArchiveAsync(
+            CreateInstallation(temp.Path),
+            archive,
+            options: new ArchiveInstallOptions("Together", AllowAuxiliaryFiles: true));
+
+        Assert.True(result.AllSucceeded, result.Message);
+        Assert.True(File.Exists(Path.Combine(temp.Path, "BepInEx", "plugins", "Together", "Together.dll")));
+        Assert.True(File.Exists(Path.Combine(temp.Path, "BepInEx", "plugins", "CUCoreLib.dll")));
+        Assert.True(File.Exists(Path.Combine(temp.Path, "BepInEx", "patchers", "CT_AutoUpdateApplier.dll")));
+        Assert.Contains("BepInEx/plugins/CUCoreLib.dll", result.AuxiliaryFiles!);
+    }
+
+    [Fact]
+    public async Task RejectsLooseRootDllWithoutAuxiliaryOption()
+    {
+        using var temp = new TempDirectory();
+        Directory.CreateDirectory(Path.Combine(temp.Path, "BepInEx", "plugins"));
+        var archive = CreateArchive(
+            temp,
+            "together.zip",
+            ("BepInEx/plugins/Together/Together.dll", "fake dll"),
+            ("BepInEx/plugins/CUCoreLib.dll", "fake core"));
+
+        var installer = new ArchiveModInstaller();
+        var result = await installer.InstallArchiveAsync(CreateInstallation(temp.Path), archive);
+
+        Assert.False(result.Success);
+        Assert.False(Directory.Exists(Path.Combine(temp.Path, "BepInEx", "plugins", "Together")));
+    }
+
+    [Fact]
+    public async Task ReportsPartialArchiveAsNotAllSucceeded()
+    {
+        using var temp = new TempDirectory();
+        Directory.CreateDirectory(Path.Combine(temp.Path, "BepInEx", "plugins", "Existing"));
+        File.WriteAllText(Path.Combine(temp.Path, "BepInEx", "plugins", "Existing", "Existing.dll"), "old");
+        var archive = CreateArchive(
+            temp,
+            "multi.zip",
+            ("BepInEx/plugins/A/A.dll", "a"),
+            ("BepInEx/plugins/Existing/Existing.dll", "new"));
+
+        var installer = new ArchiveModInstaller();
+        var result = await installer.InstallArchiveAsync(CreateInstallation(temp.Path), archive);
+
+        Assert.True(result.Success);
+        Assert.False(result.AllSucceeded);
+        Assert.True(Directory.Exists(Path.Combine(temp.Path, "BepInEx", "plugins", "A")));
+    }
+
 }

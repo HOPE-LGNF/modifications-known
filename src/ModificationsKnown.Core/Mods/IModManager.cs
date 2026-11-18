@@ -46,5 +46,6 @@ public interface IModInstaller
         string archivePath,
         IProgress<double>? progress = null,
         PackageSource? source = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        ArchiveInstallOptions? options = null);
 }

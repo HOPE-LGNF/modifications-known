@@ -32,7 +32,8 @@ public sealed class ModOperationService
         string archivePath,
         PackageSource? source = null,
         IProgress<double>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ArchiveInstallOptions? options = null)
     {
         var gate = GetGate(installation);
         await gate.WaitAsync(cancellationToken);
@@ -43,7 +44,8 @@ public sealed class ModOperationService
                 archivePath,
                 progress,
                 source,
-                cancellationToken);
+                cancellationToken,
+                options);
         }
         finally
         {

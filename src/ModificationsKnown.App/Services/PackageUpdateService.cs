@@ -39,6 +39,7 @@ public sealed class PackageUpdateService
         if (!Directory.Exists(targetPath))
             return new PackageUpdateResult(false, "旧版本目录不存在。");
 
+        var wasEnabled = target.IsEnabled;
         var staged = targetPath + ".mk-old-" + Guid.NewGuid().ToString("N")[..8];
         var backupPath = keepBackup
             ? Path.Combine(
@@ -72,17 +73,21 @@ public sealed class PackageUpdateService
                 archivePath,
                 source,
                 progress,
-                cancellationToken);
+                cancellationToken,
+                new ArchiveInstallOptions(target.PackageId, AllowAuxiliaryFiles: true));
 
-            if (!installed.Success)
+            if (!installed.AllSucceeded)
             {
-                TryRestore(staged, targetPath);
+                var restored = TryRestore(staged, targetPath);
                 return new PackageUpdateResult(
                     false,
-                    $"{installed.Message} 已恢复旧版本。",
+                    restored
+                        ? $"{installed.Message} 已恢复旧版本。"
+                        : $"{installed.Message} 更新未完成，且旧版本未能自动恢复；暂存目录：{staged}",
                     backupPath);
             }
 
+            if (!wasEnabled) DisablePackage(targetPath);
             TryDelete(staged);
             _logger?.Info($"Updated package {target.PackageId}; backup={backupPath ?? "none"}");
             return new PackageUpdateResult(
@@ -94,22 +99,50 @@ public sealed class PackageUpdateService
         }
         catch (Exception exception)
         {
-            TryRestore(staged, targetPath);
-            _logger?.Warn($"Update failed: {exception.Message}");
-            return new PackageUpdateResult(false, $"更新失败：{exception.Message}（已尝试恢复旧版本）", backupPath);
+            var restored = TryRestore(staged, targetPath);
+            _logger?.Warn($"Update failed: {exception.Message}; restored={restored}");
+            return new PackageUpdateResult(
+                false,
+                restored
+                    ? $"更新失败：{exception.Message}（已恢复旧版本）"
+                    : $"更新失败：{exception.Message}；旧版本未能自动恢复，暂存目录：{staged}",
+                backupPath);
         }
     }
 
-    private static void TryRestore(string staged, string target)
+    private static bool TryRestore(string staged, string target)
     {
+        // If staging never happened, target is still the live install. Do not
+        // delete it just because a rollback was requested.
+        if (!Directory.Exists(staged)) return false;
+
         try
         {
             if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
-            if (Directory.Exists(staged)) Directory.Move(staged, target);
+            Directory.Move(staged, target);
+            return true;
         }
         catch
         {
-            // Report through the caller's message; backup/staging remains on disk.
+            // Keep the staged copy and report the failed restore to the caller.
+            return false;
+        }
+    }
+
+    private static void DisablePackage(string packagePath)
+    {
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(packagePath, "*.dll", SearchOption.AllDirectories))
+            {
+                if (file.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)) continue;
+                var destination = file + ".disabled";
+                if (!File.Exists(destination)) File.Move(file, destination);
+            }
+        }
+        catch
+        {
+            // Best effort: preserving the install is more important than the flag.
         }
     }
 

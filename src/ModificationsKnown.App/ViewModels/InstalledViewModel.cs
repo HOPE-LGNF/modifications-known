@@ -126,8 +126,18 @@ public sealed partial class InstalledModItemViewModel : ObservableObject
         get => Mod.IsEnabled;
         set
         {
-            if (value != Mod.IsEnabled)
-                _ = _toggle(Mod);
+            if (value == Mod.IsEnabled) return;
+
+            _ = _toggle(Mod);
+            // The CheckBox is TwoWay and has already written the clicked value.
+            // Re-read the model on the next dispatcher turn so a rejected or
+            // busy toggle snaps back instead of lying until page re-entry.
+            Dispatcher.UIThread.Post(() =>
+            {
+                OnPropertyChanged(nameof(IsEnabled));
+                OnPropertyChanged(nameof(IsDisabled));
+                OnPropertyChanged(nameof(State));
+            });
         }
     }
 
@@ -733,10 +743,24 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
         try
         {
+            var installation = _shell.Game.Selected;
             foreach (var item in _allItems.ToList())
             {
                 if (item.NexusMatch is null || string.IsNullOrWhiteSpace(item.NexusMatch.GameScopedId))
                     continue;
+
+                // Loose plugins-root DLLs are separate scanner rows but cannot
+                // be safely replaced as a package; don't advertise an update
+                // that PackageUpdateService will always refuse.
+                if (installation is not null
+                    && string.Equals(
+                        Path.GetFullPath(item.Mod.DirectoryPath).TrimEnd(Path.DirectorySeparatorChar),
+                        Path.GetFullPath(installation.PluginsDirectory).TrimEnd(Path.DirectorySeparatorChar),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    ClearUpdate(item);
+                    continue;
+                }
 
                 checkedCount++;
                 try
@@ -763,12 +787,23 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             }
 
             HasUpdates = updates > 0;
+            var allFailed = checkedCount > 0 && failed == checkedCount;
             UpdateSummary = checkedCount == 0
                 ? "没有可检查的 Nexus 模组；先关联模组或配置 API Key。"
-                : updates > 0
-                    ? $"发现 {updates} 个可更新" + (failed > 0 ? $"，{failed} 个检查失败" : "")
-                    : "已是最新版本" + (failed > 0 ? $"，{failed} 个检查失败" : "");
-            _shell.SetStatus(UpdateSummary, updates > 0 ? StatusKind.Warning : StatusKind.Success);
+                : allFailed
+                    ? $"检查更新失败（{failed} 个）"
+                    : updates > 0
+                        ? $"发现 {updates} 个可更新" + (failed > 0 ? $"，{failed} 个检查失败" : "")
+                        : "已是最新版本" + (failed > 0 ? $"，{failed} 个检查失败" : "");
+            _shell.SetStatus(
+                UpdateSummary,
+                checkedCount == 0
+                    ? StatusKind.Info
+                    : allFailed
+                        ? StatusKind.Error
+                        : updates > 0 || failed > 0
+                            ? StatusKind.Warning
+                            : StatusKind.Success);
         }
         finally
         {
@@ -1117,7 +1152,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             foreach (var path in paths)
             {
                 last = await _operations.InstallArchiveAsync(installation, path);
-                if (!last.Success) failures.Add($"{Path.GetFileName(path)}：{last.Message}");
+                if (!last.AllSucceeded) failures.Add($"{Path.GetFileName(path)}：{last.Message}");
             }
 
             if (paths.Count == 1)

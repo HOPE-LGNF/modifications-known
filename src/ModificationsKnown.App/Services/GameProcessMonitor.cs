@@ -256,14 +256,19 @@ public sealed class GameProcessMonitor : IDisposable
             foreach (var process in processes) process.Dispose();
         }
 
-        var changed = counts.Count != _counts.Count
-                      || counts.Any(pair => !_counts.TryGetValue(pair.Key, out var current) || current != pair.Value);
+        var runningCounts = counts
+            .Where(pair => pair.Value > 0)
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+
+        var changed = runningCounts.Count != _counts.Count
+                      || runningCounts.Any(pair =>
+                          !_counts.TryGetValue(pair.Key, out var current) || current != pair.Value);
 
         if (!changed) return;
 
         _counts.Clear();
-        foreach (var pair in counts)
-            if (pair.Value > 0) _counts[pair.Key] = pair.Value;
+        foreach (var pair in runningCounts)
+            _counts[pair.Key] = pair.Value;
 
         Changed?.Invoke(this, EventArgs.Empty);
     }

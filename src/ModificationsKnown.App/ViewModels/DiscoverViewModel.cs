@@ -562,7 +562,9 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     card.Summary.Id,
                     card.Summary.Version,
                     file?.Id);
-                _shell.SetStatus(installed.Message, StatusKind.Success);
+                _shell.SetStatus(
+                    installed.Message,
+                    installed.AllSucceeded ? StatusKind.Success : StatusKind.Warning);
                 DownloadStatus = updateTarget is null ? "安装完成。" : "更新完成。";
                 _shell.NotifyModsChanged(
                     installed.Packages.Where(package => package.Success)
@@ -896,8 +898,14 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                         .ToList());
             }
 
-            _shell.SetStatus(installed.Message, installed.Success ? StatusKind.Success : StatusKind.Error);
-            DownloadStatus = installed.Success ? "安装完成。" : "安装未完成。";
+            _shell.SetStatus(
+                installed.Message,
+                installed.AllSucceeded
+                    ? StatusKind.Success
+                    : installed.Success
+                        ? StatusKind.Warning
+                        : StatusKind.Error);
+            DownloadStatus = installed.AllSucceeded ? "安装完成。" : "安装未完成。";
         }
         catch (NexusApiException exception)
         {

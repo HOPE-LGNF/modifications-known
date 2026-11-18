@@ -30,6 +30,13 @@
 
 ### Fixed
 
+- **更新安全**：`TryRestore` 只在暂存目录确实存在时才删除/恢复目标；包目录移动失败不再删除仍在使用的安装。
+- **部分成功**：更新只有全部包成功才删除暂存旧包；`ModInstallResult.AllSucceeded` 区分“至少一个成功”和“全部成功”。
+- **Together 多 DLL 更新**：允许已知更新目标携带 `plugins` 根目录 DLL 与 `BepInEx/patchers` 附属文件；附属文件与目标包一起暂存/回滚；更新后保留禁用状态。
+- **复选框回滚**：游戏运行/IsBusy 拒绝切换时，TwoWay 复选框会在下一个 dispatcher tick 重新读取模型，不再保持错误勾选。
+- **状态语义**：检查更新全失败显示 Error，部分失败显示 Warning；部分安装不再显示绿色成功；散放 plugins 根 DLL 不再显示可更新徽标。
+- **自更新脚本**：PowerShell 替换失败会恢复 `.bak`、写 `apply.log`，不再盲目重启；等待进程退出有 30 秒上限。
+- **进程监控**：无游戏运行时不再每 3 秒触发 `Changed`，避免已安装/存档页无故重扫。
 - 启动按钮在部分主题/视觉树下落入 disabled 样式而发黑。
 - 关闭按钮 hover 变成系统灰色。
 - 跨卷 `Directory.Move` 备份失败。

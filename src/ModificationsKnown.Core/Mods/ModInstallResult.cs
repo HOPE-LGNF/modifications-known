@@ -13,7 +13,13 @@ public sealed record InstalledPackageResult(
 public sealed record ModInstallResult(
     bool Success,
     string Message,
-    IReadOnlyList<InstalledPackageResult> Packages)
+    IReadOnlyList<InstalledPackageResult> Packages,
+    IReadOnlyList<string>? AuxiliaryFiles = null)
 {
+    /// <summary>True only when every package committed. <see cref="Success"/>
+    /// means at least one package committed, which is not enough for an update.</summary>
+    public bool AllSucceeded =>
+        Packages.Count > 0 && Packages.All(package => package.Success);
+
     public static ModInstallResult Failure(string message) => new(false, message, []);
 }

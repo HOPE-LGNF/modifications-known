@@ -38,11 +38,12 @@ public sealed class ArchiveModInstaller : IModInstaller
         string archivePath,
         IProgress<double>? progress = null,
         PackageSource? source = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ArchiveInstallOptions? options = null)
     {
         _logger?.Info($"Installing archive: {archivePath}");
         return Task.Run(
-            () => InstallCore(installation, archivePath, progress, source, cancellationToken),
+            () => InstallCore(installation, archivePath, progress, source, cancellationToken, options),
             cancellationToken);
     }
 
@@ -51,7 +52,8 @@ public sealed class ArchiveModInstaller : IModInstaller
         string archivePath,
         IProgress<double>? progress,
         PackageSource? source,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ArchiveInstallOptions? options)
     {
         if (!File.Exists(archivePath))
             return ModInstallResult.Failure("安装包不存在。");
@@ -80,12 +82,27 @@ public sealed class ArchiveModInstaller : IModInstaller
             progress?.Report(0.45);
 
             var pluginsRoot = FindBepInExPluginsDirectory(tempRoot);
+            var allowAuxiliary = options?.AllowAuxiliaryFiles == true;
             var packages = pluginsRoot is not null
-                ? CollectPackagesFromPluginsRoot(pluginsRoot)
+                ? CollectPackagesFromPluginsRoot(pluginsRoot, allowLooseFiles: allowAuxiliary)
                 : CollectPackagesFromArchiveRoot(tempRoot, archivePath);
 
             if (packages.Count == 0)
                 return ModInstallResult.Failure("压缩包里没有找到可安装的 DLL。");
+
+            if (!string.IsNullOrWhiteSpace(options?.TargetPackageName))
+            {
+                var targetName = options.TargetPackageName;
+                packages = packages
+                    .Where(package => string.Equals(package.PackageName, targetName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (packages.Count == 0)
+                    return ModInstallResult.Failure($"归档中没有找到目标包「{targetName}」；未修改现有安装。");
+            }
+
+            var auxiliary = allowAuxiliary && pluginsRoot is not null
+                ? CollectAuxiliaryCandidates(pluginsRoot)
+                : [];
 
             // Preflight every target before writing anything. Existing or
             // duplicate package names are reported as failures, but other
@@ -149,7 +166,59 @@ public sealed class ArchiveModInstaller : IModInstaller
                     ? $"已安装 {installed} 个模组包。"
                     : $"已安装 {installed} 个，{failed} 个失败：{string.Join("；", results.Where(result => !result.Success).Select(result => result.Message))}";
 
-            return new ModInstallResult(installed > 0, message, results);
+            var auxiliaryFiles = new List<string>();
+            if (auxiliary.Count > 0 && failed == 0)
+            {
+                var backupRoot = Path.Combine(stagingRoot, "aux-backup");
+                var copied = new List<string>();
+                var backups = new List<(string Destination, string Backup)>();
+                try
+                {
+                    foreach (var item in auxiliary)
+                    {
+                        var destination = Path.GetFullPath(Path.Combine(
+                            installation.GameDirectory,
+                            item.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+                        if (!PathSafety.IsWithinDirectory(destination, installation.GameDirectory))
+                            throw new InvalidDataException($"附属文件越界：{item.RelativePath}");
+
+                        if (File.Exists(destination))
+                        {
+                            var backup = Path.Combine(backupRoot, item.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+                            Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
+                            File.Copy(destination, backup, overwrite: true);
+                            backups.Add((destination, backup));
+                        }
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                        File.Copy(item.SourcePath, destination, overwrite: true);
+                        copied.Add(destination);
+                        auxiliaryFiles.Add(item.RelativePath);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    foreach (var path in copied)
+                    {
+                        try { if (File.Exists(path)) File.Delete(path); } catch { }
+                    }
+
+                    foreach (var (destination, backup) in backups)
+                    {
+                        try { File.Copy(backup, destination, overwrite: true); } catch { }
+                    }
+
+                    foreach (var package in planned)
+                    {
+                        try { if (Directory.Exists(package.TargetDirectory)) Directory.Delete(package.TargetDirectory, recursive: true); } catch { }
+                    }
+
+                    _logger?.Warn($"Auxiliary install failed: {exception.Message}");
+                    return ModInstallResult.Failure($"安装附属文件失败：{exception.Message}；已撤销本次安装。");
+                }
+            }
+
+            return new ModInstallResult(installed > 0, message, results, auxiliaryFiles);
         }
         catch (OperationCanceledException)
         {
@@ -205,11 +274,14 @@ public sealed class ArchiveModInstaller : IModInstaller
         return null;
     }
 
-    private static List<PackageCandidate> CollectPackagesFromPluginsRoot(string pluginsRoot)
+    private static List<PackageCandidate> CollectPackagesFromPluginsRoot(
+        string pluginsRoot,
+        bool allowLooseFiles = false)
     {
         // A package owns a directory. Loose files directly in BepInEx/plugins
-        // have no unambiguous ownership, so a strict installer refuses them.
-        if (Directory.EnumerateFiles(pluginsRoot, "*", SearchOption.TopDirectoryOnly).Any())
+        // have no unambiguous ownership, so the strict path refuses them.
+        if (!allowLooseFiles
+            && Directory.EnumerateFiles(pluginsRoot, "*", SearchOption.TopDirectoryOnly).Any())
             throw new InvalidDataException("BepInEx/plugins 根目录存在散放文件，无法确定它们属于哪个模组；已拒绝安装。");
 
         var packages = new List<PackageCandidate>();
@@ -389,6 +461,33 @@ public sealed class ArchiveModInstaller : IModInstaller
             // Temporary cleanup is best effort.
         }
     }
+
+    private static List<AuxiliaryCandidate> CollectAuxiliaryCandidates(string pluginsRoot)
+    {
+        var result = new List<AuxiliaryCandidate>();
+        foreach (var file in Directory.EnumerateFiles(pluginsRoot, "*.dll", SearchOption.TopDirectoryOnly))
+        {
+            result.Add(new AuxiliaryCandidate(
+                file,
+                $"BepInEx/plugins/{Path.GetFileName(file)}"));
+        }
+
+        var bepInExRoot = Directory.GetParent(pluginsRoot)?.FullName;
+        if (bepInExRoot is null) return result;
+
+        var patchers = Path.Combine(bepInExRoot, "patchers");
+        if (!Directory.Exists(patchers)) return result;
+
+        foreach (var file in Directory.EnumerateFiles(patchers, "*.dll", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(bepInExRoot, file).Replace('\\', '/');
+            result.Add(new AuxiliaryCandidate(file, $"BepInEx/{relative}"));
+        }
+
+        return result;
+    }
+
+    private sealed record AuxiliaryCandidate(string SourcePath, string RelativePath);
 
     private sealed record PackageCandidate(string SourceDirectory, string PackageName);
 

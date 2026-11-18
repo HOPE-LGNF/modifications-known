@@ -38,9 +38,16 @@
 4. 将旧包移动到**同盘**的暂存目录 `包目录.mk-old-<id>`；
 5. 若勾选备份，把暂存目录复制到：
    `%APPDATA%\ModificationsKnown\backups\<yyyyMMdd-HHmmss>\<包名>`
-6. 调用安装器安装新包；
-7. 成功：删除暂存目录，保留备份（如勾选）；
-8. 失败：删除半成品，把暂存目录移回原位置。
+6. 调用安装器安装新包；如果归档是已知目标包，允许同时携带 `plugins` 根 DLL 与 `BepInEx/patchers` 附属文件；
+7. 只有**全部包成功**才删除暂存目录并保留备份（如勾选）；
+8. 失败：删除半成品，把暂存目录移回原位置；暂存不存在时绝不删除仍存活的安装。
+
+Together 这类归档的严格路径：
+
+- 目标包目录：`BepInEx/plugins/Together/`；
+- 附属文件：`BepInEx/plugins/CUCoreLib.dll`、`BepInEx/patchers/CT_AutoUpdateApplier.dll`；
+- `ArchiveInstallOptions(TargetPackageName, AllowAuxiliaryFiles)` 只在已知更新目标时启用附属文件；
+- 普通安装仍拒绝无法归属的散放文件；散放根 DLL 不再出现在“可更新”列表。
 
 为什么先移动到同盘：
 

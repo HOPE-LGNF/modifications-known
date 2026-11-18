@@ -754,13 +754,30 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
             var escapedSource = downloaded.Replace("'", "''");
             var scriptPath = Path.Combine(downloadDirectory, $"apply-{Guid.NewGuid():N}.ps1");
             var script = $$"""
+                $ErrorActionPreference = 'Stop'
                 $pidToWait = {{Environment.ProcessId}}
+                $deadline = (Get-Date).AddSeconds(30)
                 while (Get-Process -Id $pidToWait -ErrorAction SilentlyContinue) {
+                    if ((Get-Date) -gt $deadline) { exit 1 }
                     Start-Sleep -Milliseconds 400
                 }
-                Copy-Item -LiteralPath '{{escapedSource}}' -Destination '{{escapedTarget}}' -Force
-                Start-Process -FilePath '{{escapedTarget}}'
-                Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force
+                $target = '{{escapedTarget}}'
+                $source = '{{escapedSource}}'
+                $new = $target + '.new'
+                $backup = $target + '.bak'
+                try {
+                    Copy-Item -LiteralPath $source -Destination $new -Force
+                    if ((Get-Item -LiteralPath $new).Length -ne (Get-Item -LiteralPath $source).Length) { throw 'copy length mismatch' }
+                    if (Test-Path -LiteralPath $target) { Move-Item -LiteralPath $target -Destination $backup -Force }
+                    Move-Item -LiteralPath $new -Destination $target -Force
+                    Start-Process -FilePath $target
+                    Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force
+                }
+                catch {
+                    if (Test-Path -LiteralPath $backup) { Move-Item -LiteralPath $backup -Destination $target -Force }
+                    Set-Content -LiteralPath (Join-Path (Split-Path $source) 'apply.log') -Value $_.Exception.Message
+                    exit 1
+                }
                 """;
             File.WriteAllText(scriptPath, script);
 
