@@ -145,7 +145,9 @@ public sealed class SaveGroupServiceTests
         Assert.Equal("默认", group.Name);
         Assert.Equal(group.Id, result.NextLaunchGroupId);
         Assert.True(Directory.Exists(group.DirectoryPath));
-        Assert.False(context.Linker.TryGetTarget(context.Live, out _));
+        // 首个组在初始化时就成为实际 Current，不再等到下次启动。
+        Assert.True(context.Linker.TryGetTarget(context.Live, out var target));
+        Assert.Equal(group.DirectoryPath, target);
     }
 
     [Fact]
@@ -157,7 +159,7 @@ public sealed class SaveGroupServiceTests
         var launch = await context.Service.PrepareLaunchAsync(context.Installation);
 
         Assert.True(launch.Success, launch.Message);
-        Assert.True(launch.Switched);
+        Assert.False(launch.Switched);
         Assert.True(context.Linker.TryGetTarget(context.Live, out var target));
         Assert.Equal(init.Groups[0].DirectoryPath, target);
     }
@@ -176,7 +178,7 @@ public sealed class SaveGroupServiceTests
         var launch = await context.Service.PrepareLaunchAsync(context.Installation);
 
         Assert.True(launch.Success, launch.Message);
-        Assert.True(launch.Switched);
+        Assert.False(launch.Switched);
         Assert.True(context.Linker.TryGetTarget(context.Live, out var target));
         Assert.Equal(init.Groups[0].DirectoryPath, target);
         Assert.Equal("legacy-save", File.ReadAllText(Path.Combine(context.InstallationDirectory, "save.sv")));
@@ -186,11 +188,13 @@ public sealed class SaveGroupServiceTests
     public async Task PrepareLaunch_WhenSwitchFails_RestoresPreviousLinkAndBlocksLaunch()
     {
         using var context = new SaveGroupTestContext();
-        context.WriteLegacyFile("save.sv", "legacy-save");
-        context.CreateLiveDirectory();
-        context.Linker.CreateJunction(context.Live, context.InstallationDirectory, out _);
         var init = await context.Service.InitializeAsync(context.Installation);
         Assert.True(init.Success, init.Message);
+        var first = Assert.Single(init.Groups);
+
+        var second = await context.Service.CreateEmptyAsync(context.Installation, "第二组");
+        Assert.True(second.Success, second.Message);
+        Assert.True((await context.Service.SelectNextLaunchAsync(context.Installation, second.Group!.Id)).Success);
 
         context.Linker.FailNextCreate = 1;
         var launch = await context.Service.PrepareLaunchAsync(context.Installation);
@@ -198,8 +202,7 @@ public sealed class SaveGroupServiceTests
         Assert.False(launch.Success);
         Assert.Contains("不会启动", launch.Message);
         Assert.True(context.Linker.TryGetTarget(context.Live, out var target));
-        Assert.Equal(context.InstallationDirectory, target);
-        Assert.Equal("legacy-save", File.ReadAllText(Path.Combine(context.InstallationDirectory, "save.sv")));
+        Assert.Equal(first.DirectoryPath, target);
     }
 
     [Fact]

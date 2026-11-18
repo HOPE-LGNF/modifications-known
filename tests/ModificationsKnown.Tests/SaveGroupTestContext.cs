@@ -124,6 +124,10 @@ internal sealed class SaveGroupTestContext : IDisposable
 
     public bool Running { get; set; }
 
+    /// <summary>Forces the fresh probe result (e.g. <c>Unknown</c> when process
+    /// information cannot be read). Null follows <see cref="Running"/>.</summary>
+    public GameRunningState? ProbeState { get; set; }
+
     public SaveGroupService Service { get; }
 
     public string InstallationKey => SaveGroupFormat.GetInstallationKey(GameDirectory);
@@ -140,7 +144,9 @@ internal sealed class SaveGroupTestContext : IDisposable
             LiveSaveDirectory = Live,
             Linker = Linker,
             RecycleBin = RecycleBin,
-            IsGameRunning = _ => Running
+            IsGameRunning = _ => Running,
+            ProbeGameRunningState = _ => ProbeState
+                                         ?? (Running ? GameRunningState.Running : GameRunningState.NotRunning)
         });
 
     public string WriteLegacyFile(string relative, string content)

@@ -407,14 +407,208 @@ public sealed class SaveGroupArchiveTests
         Assert.Contains("重复", inspection.Message);
     }
 
+    [Fact]
+    public async Task Export_RejectsATargetInsideTheSourceGroup()
+    {
+        using var fixture = new ArchiveFixture();
+        fixture.WriteSourceFile("save.sv", "save-data");
+        var before = fixture.SourceFiles();
+        var nested = Directory.CreateDirectory(Path.Combine(fixture.GroupDirectory, "backups")).FullName;
+        var target = Path.Combine(nested, "backup.zip");
+
+        var result = await fixture.Service.ExportAsync(fixture.Group, FullGame, target);
+
+        Assert.False(result.Success);
+        Assert.Contains("存档组目录内", result.Message);
+        Assert.False(File.Exists(target));
+        fixture.AssertSourceUnchanged(before);
+        Assert.Empty(fixture.TemporaryFiles());
+    }
+
+    [Fact]
+    public async Task Export_TwiceToAnExternalPath_NeverEmbedsThePreviousArchive()
+    {
+        using var fixture = new ArchiveFixture();
+        fixture.WriteSourceFile("save.sv", "save-data");
+        var second = Path.Combine(fixture.TargetDirectory, "second.zip");
+
+        var first = await fixture.Service.ExportAsync(fixture.Group, FullGame, fixture.Target);
+        var again = await fixture.Service.ExportAsync(fixture.Group, FullGame, second);
+
+        Assert.True(first.Success, first.Message);
+        Assert.True(again.Success, again.Message);
+
+        foreach (var path in new[] { fixture.Target, second })
+        {
+            using var archive = ZipFile.OpenRead(path);
+            Assert.Single(archive.Entries, entry => entry.FullName == "files/save.sv");
+            Assert.DoesNotContain(archive.Entries, entry => entry.FullName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
+    public async Task Inspect_RejectsTooManyEntries()
+    {
+        using var fixture = new ArchiveFixture();
+        var manifest = fixture.NewManifest();
+        for (var index = 0; index <= SaveGroupArchiveLimits.MaxEntries; index++)
+            manifest.Files.Add(new SaveGroupArchiveFile($"file_{index}.sv", 0, new string('0', 64)));
+        manifest.FileCount = manifest.Files.Count;
+        fixture.WriteArchive(manifest);
+
+        var inspection = await fixture.Service.InspectAsync(fixture.Target);
+
+        Assert.False(inspection.Success);
+        Assert.Contains("超过上限", inspection.Message);
+    }
+
+    [Fact]
+    public async Task Inspect_RejectsAnOversizedManifest()
+    {
+        using var fixture = new ArchiveFixture();
+        var padding = Encoding.UTF8.GetBytes(
+            "{\"SchemaVersion\":1,\"GroupId\":\"" + Guid.NewGuid() + "\",\"Files\":[],\"pad\":\"" +
+            new string('x', SaveGroupArchiveLimits.MaxManifestBytes + 4096) + "\"}");
+
+        using (var stream = File.Create(fixture.Target))
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create))
+        {
+            var entry = archive.CreateEntry(SaveGroupFormat.ArchiveManifestFileName, CompressionLevel.NoCompression);
+            using var entryStream = entry.Open();
+            entryStream.Write(padding);
+        }
+
+        var inspection = await fixture.Service.InspectAsync(fixture.Target);
+
+        Assert.False(inspection.Success);
+        Assert.Contains("归档清单过大", inspection.Message);
+    }
+
+    [Fact]
+    public async Task Inspect_RejectsAnEntryDeclaredLargerThanTheSingleFileLimit()
+    {
+        using var fixture = new ArchiveFixture();
+        var manifest = fixture.NewManifest();
+        var size = SaveGroupArchiveLimits.MaxEntryBytes + 1;
+        manifest.FileCount = 1;
+        manifest.TotalBytes = size;
+        manifest.Files.Add(new SaveGroupArchiveFile("huge.sv", size, new string('a', 64)));
+        fixture.WriteArchive(manifest);
+
+        var inspection = await fixture.Service.InspectAsync(fixture.Target);
+
+        Assert.False(inspection.Success);
+        Assert.Contains("单文件上限", inspection.Message);
+    }
+
+    [Fact]
+    public async Task Inspect_RejectsACompressionBombBeforeHashingIt()
+    {
+        using var fixture = new ArchiveFixture();
+        var payload = new byte[40 * 1024 * 1024];
+        var hash = Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
+        var manifest = fixture.NewManifest();
+        manifest.FileCount = 1;
+        manifest.TotalBytes = payload.Length;
+        manifest.Files.Add(new SaveGroupArchiveFile("bomb.sv", payload.Length, hash));
+        fixture.WriteArchive(manifest, ("files/bomb.sv", payload));
+
+        var inspection = await fixture.Service.InspectAsync(fixture.Target);
+
+        Assert.False(inspection.Success);
+        Assert.Contains("压缩比", inspection.Message);
+    }
+
+    [Fact]
+    public async Task Export_RejectsATargetReachedThroughTheLiveJunction()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        using var fixture = new ArchiveFixture();
+        fixture.WriteSourceFile("save.sv", "save-data");
+        fixture.CreateLiveJunction();
+        var before = fixture.SourceFiles();
+
+        // Textually this is not under GroupDirectory; the junction makes it so.
+        var target = Path.Combine(fixture.LiveDirectory, "backup.zip");
+
+        var result = await fixture.Service.ExportAsync(fixture.Group, FullGame, target);
+
+        Assert.False(result.Success);
+        Assert.Contains("存档组目录内", result.Message);
+        Assert.False(File.Exists(Path.Combine(fixture.GroupDirectory, "backup.zip")));
+        fixture.AssertSourceUnchanged(before);
+    }
+
+    [Fact]
+    public async Task Export_HoldsTheSaveLock_SoAConcurrentDeleteWaits()
+    {
+        using var context = new SaveGroupTestContext();
+        var created = await context.Service.CreateEmptyAsync(context.Installation, "导出组");
+        Assert.True(created.Success, created.Message);
+        var group = created.Group!;
+        for (var index = 0; index < 5; index++)
+            await File.WriteAllTextAsync(Path.Combine(group.DirectoryPath, $"save_{index}.sv"), $"data-{index}");
+
+        using var fixture = new ArchiveFixture(context.Service);
+        var target = Path.Combine(fixture.TargetDirectory, "export.zip");
+        Task<SaveGroupOperationResult>? deletion = null;
+
+        fixture.Service.FileWrittenHook = _ =>
+        {
+            deletion ??= Task.Run(
+                () => context.Service.DeleteGroupAsync(context.Installation, group.Id));
+            Thread.Sleep(250);
+
+            // The delete must be waiting on the save lock held by the export.
+            Assert.False(deletion.IsCompleted);
+        };
+
+        var result = await fixture.Service.ExportAsync(group, FullGame, target);
+
+        Assert.True(result.Success, result.Message);
+        Assert.NotNull(deletion);
+        var deleted = await deletion!;
+        Assert.False(string.IsNullOrWhiteSpace(deleted.Message));
+
+        using var archive = ZipFile.OpenRead(target);
+        Assert.Equal(5, archive.Entries.Count(entry => entry.FullName.StartsWith("files/")));
+    }
+
+    [Fact]
+    public async Task Export_WhenTheGameStartsMidway_DiscardsThePackage()
+    {
+        using var context = new SaveGroupTestContext();
+        var created = await context.Service.CreateEmptyAsync(context.Installation, "导出组");
+        Assert.True(created.Success, created.Message);
+        var group = created.Group!;
+        await File.WriteAllTextAsync(Path.Combine(group.DirectoryPath, "save.sv"), "data");
+
+        var running = false;
+        using var fixture = new ArchiveFixture(context.Service, () => running);
+        var target = Path.Combine(fixture.TargetDirectory, "export.zip");
+        fixture.Service.FileWrittenHook = _ => running = true;
+
+        var result = await fixture.Service.ExportAsync(group, FullGame, target);
+
+        Assert.False(result.Success);
+        Assert.Contains("游戏", result.Message);
+        Assert.False(File.Exists(target));
+        Assert.Empty(fixture.TemporaryFiles());
+    }
+
     private sealed class ArchiveFixture : IDisposable
     {
         private readonly TempDirectory _temp = new();
 
-        public ArchiveFixture()
+        public ArchiveFixture(
+            SaveGroupService? coordinator = null,
+            Func<bool>? isGameRunning = null)
         {
+            Service = new SaveGroupArchiveService(isGameRunning: isGameRunning, coordinator: coordinator);
             GroupDirectory = _temp.CreateDirectory("profiles", "install", "group");
             TargetDirectory = _temp.CreateDirectory("out");
+            LiveDirectory = Path.Combine(_temp.Path, "LocalLow", "CasualtiesUnknown");
             Target = Path.Combine(TargetDirectory, "default.mk-save.zip");
 
             var id = Guid.NewGuid();
@@ -433,13 +627,23 @@ public sealed class SaveGroupArchiveTests
 
         public string GroupDirectory { get; }
 
+        public string LiveDirectory { get; }
+
+        private readonly WindowsJunctionLinker _linker = new();
+
+        public void CreateLiveJunction()
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LiveDirectory)!);
+            Assert.True(_linker.CreateJunction(LiveDirectory, GroupDirectory, out var error), error);
+        }
+
         public string TargetDirectory { get; }
 
         public string Target { get; }
 
         public SaveGroup Group { get; }
 
-        public SaveGroupArchiveService Service { get; } = new();
+        public SaveGroupArchiveService Service { get; }
 
         public string WriteSourceFile(string relative, string content)
         {
@@ -526,7 +730,11 @@ public sealed class SaveGroupArchiveTests
             });
         }
 
-        public void Dispose() => _temp.Dispose();
+        public void Dispose()
+        {
+            _linker.RemoveJunction(LiveDirectory, out _);
+            _temp.Dispose();
+        }
 
         private static string Sha256(string path) =>
             Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant();

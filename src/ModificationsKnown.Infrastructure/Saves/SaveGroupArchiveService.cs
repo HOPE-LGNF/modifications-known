@@ -71,26 +71,36 @@ public sealed class SaveGroupArchiveService
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        MaxDepth = SaveGroupArchiveLimits.MaxManifestDepth
     };
 
     private readonly Func<DateTimeOffset> _utcNow;
     private readonly Func<bool>? _isGameRunning;
+    private readonly SaveGroupService? _coordinator;
 
     public SaveGroupArchiveService(
         Func<DateTimeOffset>? utcNow = null,
-        Func<bool>? isGameRunning = null)
+        Func<bool>? isGameRunning = null,
+        SaveGroupService? coordinator = null)
     {
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
         _isGameRunning = isGameRunning;
+        _coordinator = coordinator;
     }
+
+    /// <summary>Test seam: called with the index of each file after it was
+    /// written into the temporary package.</summary>
+    internal Action<int>? FileWrittenHook { get; set; }
 
     public Task<SaveGroupExportResult> ExportAsync(
         SaveGroup group,
         SaveGameInfo source,
         string targetZipPath,
         CancellationToken cancellationToken = default) =>
-        Task.Run(() => ExportCore(group, source, targetZipPath, cancellationToken), cancellationToken);
+        Task.Run(
+            () => RunLocked(() => ExportCore(group, source, targetZipPath, cancellationToken)),
+            cancellationToken);
 
     public Task<SaveGroupArchiveInspection> InspectAsync(
         string zipPath,
@@ -114,9 +124,23 @@ public sealed class SaveGroupArchiveService
         string? targetVersion = null,
         CancellationToken cancellationToken = default) =>
         Task.Run(
-            () => ImportCore(zipPath, installation, groups, groupName, allowEditionMismatch, targetVersion,
-                cancellationToken),
+            () =>
+            {
+                if (groups is null) return ImportFailure("存档组服务不可用。");
+
+                // The whole import (inspection + extraction + registration)
+                // runs under the save lock so apply/delete cannot change the
+                // groups while files are being restored.
+                return groups.RunExclusive(
+                    () => ImportCore(zipPath, installation, groups, groupName, allowEditionMismatch,
+                        targetVersion, cancellationToken));
+            },
             cancellationToken);
+
+    /// <summary>Export uses the shared save lock when a coordinator is available,
+    /// so a delete/apply cannot move or recycle the group mid-backup.</summary>
+    private T RunLocked<T>(Func<T> operation) =>
+        _coordinator is null ? operation() : _coordinator.RunExclusive(operation);
 
     private SaveGroupImportResult ImportCore(
         string zipPath,
@@ -194,6 +218,7 @@ public sealed class SaveGroupArchiveService
             return ImportFailure($"无法创建导入暂存目录：{exception.Message}");
         }
 
+        long totalImported = 0;
         try
         {
             using (var archive = ZipFile.OpenRead(zipPath))
@@ -230,7 +255,14 @@ public sealed class SaveGroupArchiveService
                             hash.AppendData(buffer, 0, read);
                             output.Write(buffer, 0, read);
                             size += read;
+
+                            if (size > SaveGroupArchiveLimits.MaxEntryBytes)
+                                throw new InvalidDataException($"归档文件超过大小上限：{file.Path}");
                         }
+
+                        totalImported += size;
+                        if (totalImported > SaveGroupArchiveLimits.MaxTotalBytes)
+                            throw new InvalidDataException("归档展开后的总大小超过上限。");
 
                         if (size != file.Size)
                             throw new InvalidDataException($"归档文件大小不符：{file.Path}");
@@ -360,12 +392,38 @@ public sealed class SaveGroupArchiveService
                 : Failure($"存档组目录不存在：{group.DirectoryPath}");
         }
 
+        // A ZIP written inside the group becomes part of the next export, and
+        // the archive grows every time. Refuse before any temp file exists.
+        // The comparison must resolve junctions: "%LocalLow%\…\backup.zip"
+        // is not textually under the group directory but lands inside it
+        // through the live junction.
+        var resolvedTargetDirectory = ResolveFinalPath(Path.GetDirectoryName(target)!);
+        var resolvedTarget = Path.Combine(resolvedTargetDirectory, Path.GetFileName(target));
+        if (IsUnder(target, group.DirectoryPath)
+            || IsUnder(resolvedTarget, ResolveFinalPath(group.DirectoryPath)))
+        {
+            return Failure(
+                $"导出目标位于存档组目录内，已拒绝：{target}。请选择存档组之外的位置，" +
+                "否则归档会被再次打包进源组。");
+        }
+
         var temporaryPath = $"{target}.tmp-{Guid.NewGuid():N}";
         try
         {
             var files = CollectFiles(group.DirectoryPath, cancellationToken);
+            var tooLarge = CheckExportSize(files);
+            if (tooLarge is not null) return Failure(tooLarge);
+
             var manifest = WritePackage(temporaryPath, group, source, files, cancellationToken);
             VerifyPackage(temporaryPath, manifest, cancellationToken);
+
+            if (_isGameRunning?.Invoke() == true)
+            {
+                DeleteFileQuietly(temporaryPath);
+                return Failure(
+                    "导出期间游戏启动了，存档可能在写入；本次备份已放弃，未生成目标文件。请关闭游戏后重试。");
+            }
+
             File.Move(temporaryPath, target, overwrite: false);
 
             return new SaveGroupExportResult(
@@ -434,8 +492,9 @@ public sealed class SaveGroupArchiveService
         var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
         try
         {
-            foreach (var file in files)
+            for (var index = 0; index < files.Count; index++)
             {
+                var file = files[index];
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var entry = archive.CreateEntry(
@@ -458,6 +517,7 @@ public sealed class SaveGroupArchiveService
                 manifest.Files.Add(new SaveGroupArchiveFile(
                     file.RelativePath, size, ToLowerHex(hash.GetHashAndReset())));
                 manifest.TotalBytes += size;
+                FileWrittenHook?.Invoke(index);
             }
         }
         finally
@@ -500,11 +560,20 @@ public sealed class SaveGroupArchiveService
         if (manifestEntry is null)
             return InspectionFailure($"归档缺少 {SaveGroupArchiveFormat.ManifestFileName}。");
 
+        if (manifestEntry.Length > SaveGroupArchiveLimits.MaxManifestBytes)
+            return InspectionFailure($"归档清单过大（{manifestEntry.Length} 字节），拒绝读取。");
+
         SaveGroupArchiveManifest? manifest;
         try
         {
-            using var stream = manifestEntry.Open();
+            using var entryStream = manifestEntry.Open();
+            using var stream = new CappedReadStream(
+                entryStream, SaveGroupArchiveLimits.MaxManifestBytes, "归档清单");
             manifest = JsonSerializer.Deserialize<SaveGroupArchiveManifest>(stream, ManifestJsonOptions);
+        }
+        catch (InvalidDataException exception)
+        {
+            return InspectionFailure(exception.Message);
         }
         catch (JsonException)
         {
@@ -519,6 +588,13 @@ public sealed class SaveGroupArchiveService
         if (manifest.Files is null) return InspectionFailure("归档清单缺少文件列表。");
         if (manifest.FileCount != manifest.Files.Count)
             return InspectionFailure("归档清单的文件数量与文件列表不一致。");
+        if (manifest.Files.Count > SaveGroupArchiveLimits.MaxEntries)
+            return InspectionFailure(
+                $"归档包含 {manifest.Files.Count} 个文件，超过上限 {SaveGroupArchiveLimits.MaxEntries}。");
+        if (manifest.TotalBytes > SaveGroupArchiveLimits.MaxTotalBytes)
+            return InspectionFailure("归档清单声明的总大小超过上限。");
+        if (archive.Entries.Count > SaveGroupArchiveLimits.MaxEntries + 2)
+            return InspectionFailure("归档条目数超过上限。");
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         long totalBytes = 0;
@@ -534,11 +610,23 @@ public sealed class SaveGroupArchiveService
             if (SaveGroupFormat.IsInternalFile(Path.GetFileName(file.Path)))
                 return InspectionFailure($"归档清单包含 MK 内部文件：{file.Path}");
             if (file.Size < 0) return InspectionFailure($"归档清单包含无效文件大小：{file.Path}");
+            if (file.Size > SaveGroupArchiveLimits.MaxEntryBytes)
+                return InspectionFailure($"归档文件超过单文件上限（{SaveGroupArchiveLimits.MaxEntryBytes} 字节）：{file.Path}");
+            if (totalBytes + file.Size > SaveGroupArchiveLimits.MaxTotalBytes)
+                return InspectionFailure("归档展开后的总大小超过上限。");
             if (!IsSha256(file.Sha256)) return InspectionFailure($"归档清单包含无效 SHA-256：{file.Path}");
 
             var entry = archive.GetEntry(SaveGroupArchiveFormat.FilesPrefix + file.Path);
             if (entry is null) return InspectionFailure($"归档缺少文件：{file.Path}");
             if (entry.Length != file.Size) return InspectionFailure($"归档文件大小不符：{file.Path}");
+
+            if (entry.Length >= SaveGroupArchiveLimits.CompressionRatioFloorBytes
+                && entry.CompressedLength > 0
+                && entry.Length / entry.CompressedLength > SaveGroupArchiveLimits.MaxCompressionRatio)
+            {
+                return InspectionFailure($"归档文件压缩比异常（疑似压缩炸弹）：{file.Path}");
+            }
+
             if (!HashMatches(entry, file.Sha256)) return InspectionFailure($"归档文件校验失败：{file.Path}");
 
             totalBytes += file.Size;
@@ -590,8 +678,10 @@ public sealed class SaveGroupArchiveService
 
     private static bool HashMatches(ZipArchiveEntry entry, string expected)
     {
-        using var stream = entry.Open();
-        return string.Equals(ToLowerHex(SHA256.HashData(stream)), expected, StringComparison.OrdinalIgnoreCase);
+        using var raw = entry.Open();
+        using var capped = new CappedReadStream(
+            raw, SaveGroupArchiveLimits.MaxEntryBytes, $"归档文件 {entry.FullName} ");
+        return string.Equals(ToLowerHex(SHA256.HashData(capped)), expected, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsSha256(string? value) =>
@@ -607,6 +697,77 @@ public sealed class SaveGroupArchiveService
 
     private static SaveGroupArchiveInspection InspectionFailure(string message) =>
         new(false, message, null, 0);
+
+    /// <summary>Same limits as import, checked before writing the temp ZIP so a
+    /// hostile-sized group fails without filling the disk first.</summary>
+    private static string? CheckExportSize(IReadOnlyList<ArchiveSourceFile> files)
+    {
+        if (files.Count > SaveGroupArchiveLimits.MaxEntries)
+            return $"存档组包含 {files.Count} 个文件，超过归档上限 {SaveGroupArchiveLimits.MaxEntries}。";
+
+        long total = 0;
+        foreach (var file in files)
+        {
+            long size;
+            try
+            {
+                size = new FileInfo(file.FullPath).Length;
+            }
+            catch (Exception exception)
+            {
+                return $"无法读取存档文件大小：{file.RelativePath}（{exception.Message}）";
+            }
+
+            if (size > SaveGroupArchiveLimits.MaxEntryBytes)
+                return $"存档文件超过单文件上限（{SaveGroupArchiveLimits.MaxEntryBytes} 字节）：{file.RelativePath}";
+
+            total += size;
+            if (total > SaveGroupArchiveLimits.MaxTotalBytes)
+                return "存档组总大小超过归档上限，已拒绝导出。";
+        }
+
+        return null;
+    }
+
+    /// <summary>Resolves every reparse point on the existing part of a path so a
+    /// junction cannot hide the real destination from the containment check.</summary>
+    private static string ResolveFinalPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(full) ?? string.Empty;
+        var current = root;
+
+        foreach (var segment in full[root.Length..].Split(
+                     [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, segment);
+
+            try
+            {
+                var info = new DirectoryInfo(current);
+                if (!info.Exists || !info.Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+
+                var resolved = info.ResolveLinkTarget(returnFinalTarget: true);
+                if (resolved is not null) current = Path.GetFullPath(resolved.FullName);
+            }
+            catch
+            {
+                // Unresolvable segments keep their lexical form; the lexical
+                // check above still covers the normal case.
+            }
+        }
+
+        return current;
+    }
+
+    private static bool IsUnder(string path, string root)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var rootFull = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        return full.Equals(rootFull, StringComparison.OrdinalIgnoreCase)
+               || full.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static void DeleteFileQuietly(string path)
     {

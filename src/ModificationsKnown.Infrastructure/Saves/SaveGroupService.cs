@@ -15,9 +15,14 @@ public sealed class SaveGroupOptions
 
     public string? StagingRoot { get; init; }
 
-    public string LiveSaveDirectory { get; init; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        "AppData", "LocalLow", "Orsoniks", "CasualtiesUnknown");
+    public string LiveSaveDirectory { get; init; } = ResolveLiveSaveDirectory();
+
+    private static string ResolveLiveSaveDirectory() =>
+        AppPaths.AcceptanceRoot is { } acceptanceRoot
+            ? Path.Combine(acceptanceRoot, "LocalLow", "Orsoniks", "CasualtiesUnknown")
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "AppData", "LocalLow", "Orsoniks", "CasualtiesUnknown");
 
     public ISaveLinker Linker { get; init; } = new WindowsJunctionLinker();
 
@@ -30,6 +35,15 @@ public sealed class SaveGroupOptions
     /// <summary>Set by the app from the process monitor. Every operation that
     /// writes or copies saves must refuse while any game instance is running.</summary>
     public Func<GameInstallation, bool>? IsGameRunning { get; init; }
+
+    /// <summary>
+    /// Fresh, three-state probe used by every mutating operation. It is called
+    /// while the save-group write lock is held, so it must scan the process list
+    /// again instead of returning a cached monitor snapshot. <c>Unknown</c> is
+    /// treated as running (fail closed); when unset, <see cref="IsGameRunning"/>
+    /// is used and cannot report <c>Unknown</c>.
+    /// </summary>
+    public Func<GameInstallation, GameRunningState>? ProbeGameRunningState { get; init; }
 }
 
 public enum SaveGroupInitializationState
@@ -87,6 +101,11 @@ public sealed class SaveGroupService
     private readonly SaveGroupScanner _scanner;
     private readonly object _gate = new();
 
+    // One lock for every operation that can change the live junction or move
+    // group files. The running-state probe runs while it is held, so a launch
+    // can never slip between "game is not running" and the switch itself.
+    private readonly object _writeGate = new();
+
     public SaveGroupService(SaveGroupOptions? options = null)
     {
         _options = options ?? new SaveGroupOptions();
@@ -119,6 +138,9 @@ public sealed class SaveGroupService
     /// </summary>
     public IReadOnlyList<SaveGroup> GetGroups(GameInstallation installation)
     {
+        // Reads may repair the index, so they take the same lock as writes:
+        // a read's Load→modify→Save must not overwrite a concurrent write.
+        lock (_writeGate)
         lock (_gate)
         {
             return Reconcile(installation, persist: true).Groups;
@@ -127,6 +149,7 @@ public sealed class SaveGroupService
 
     public Guid? GetNextLaunchGroupId(GameInstallation installation)
     {
+        lock (_writeGate)
         lock (_gate)
         {
             return Reconcile(installation, persist: true).Entry?.NextLaunchGroupId;
@@ -200,11 +223,14 @@ public sealed class SaveGroupService
     private SaveGroupOperationResult AdoptGroupCore(
         GameInstallation installation,
         string stagingDirectory,
+        string name) =>
+        Mutate(installation, "导入存档组", () => AdoptGroupBody(installation, stagingDirectory, name), Fail);
+
+    private SaveGroupOperationResult AdoptGroupBody(
+        GameInstallation installation,
+        string stagingDirectory,
         string name)
     {
-        if (IsGameRunning(installation))
-            return Fail("游戏正在运行；请先关闭游戏再导入存档组。");
-
         var validated = ValidateNewName(installation, name, null, out var normalized);
         if (validated is not null) return validated;
 
@@ -239,6 +265,38 @@ public sealed class SaveGroupService
                 isFirst,
                 _options.UtcNow());
             _options.Logger?.Info($"已导入存档组「{normalized}」：{group.DirectoryPath}");
+
+            if (isFirst)
+            {
+                if (LiveLinkBelongsToAnotherInstallation(installation))
+                {
+                    _options.Logger?.Info(
+                        $"导入的首个存档组「{normalized}」未自动应用：当前链接属于另一个安装。");
+                    return new SaveGroupOperationResult(
+                        true,
+                        $"已导入存档组「{normalized}」；当前存档链接属于另一个安装，未自动切换。" +
+                        "如需使用该组，请在存档页选择后点「应用当前存档组」。",
+                        group);
+                }
+
+                var applied = SwitchLiveLink(group, _options.LiveSaveDirectory);
+                if (!applied.Success)
+                {
+                    // The imported copy is kept: deleting it would destroy data
+                    // the user just asked to restore.
+                    _options.Logger?.Warn($"导入首个存档组后切换链接失败：{applied.Message}");
+                    return new SaveGroupOperationResult(
+                        false,
+                        $"已导入存档组「{normalized}」，但未能应用为当前存档：{applied.Message}",
+                        group);
+                }
+
+                return new SaveGroupOperationResult(
+                    true,
+                    $"已导入存档组「{normalized}」并应用为当前存档。",
+                    group);
+            }
+
             return new SaveGroupOperationResult(true, $"已导入存档组「{normalized}」。", group);
         }
         catch (Exception exception)
@@ -272,20 +330,49 @@ public sealed class SaveGroupService
         }
     }
 
-    private SaveGroupOperationResult CreateEmptyCore(GameInstallation installation, string name)
-    {
-        if (IsGameRunning(installation))
-            return Fail("游戏正在运行；请先关闭游戏再创建存档组。");
+    private SaveGroupOperationResult CreateEmptyCore(GameInstallation installation, string name) =>
+        Mutate(installation, "创建存档组", () => CreateEmptyBody(installation, name), Fail);
 
+    private SaveGroupOperationResult CreateEmptyBody(GameInstallation installation, string name)
+    {
         var validated = ValidateNewName(installation, name, null, out var normalized);
         if (validated is not null) return validated;
 
+        var isFirst = Reconcile(installation, persist: true).Groups.Count == 0;
         var staging = NewStagingDirectory(out var groupId);
         SaveGroup? group = null;
         try
         {
             group = CommitGroup(installation, staging, groupId, normalized, isDefault: false, _options.UtcNow());
             _options.Logger?.Info($"已创建空存档组「{normalized}」：{group.DirectoryPath}");
+
+            if (isFirst)
+            {
+                if (LiveLinkBelongsToAnotherInstallation(installation))
+                {
+                    _options.Logger?.Info(
+                        $"首个存档组「{normalized}」未自动应用：当前链接属于另一个安装。");
+                    return new SaveGroupOperationResult(
+                        true,
+                        $"已创建空存档组「{normalized}」；当前存档链接属于另一个安装，未自动切换。" +
+                        "如需使用该组，请在存档页选择后点「应用当前存档组」。",
+                        group);
+                }
+
+                var applied = SwitchLiveLink(group, _options.LiveSaveDirectory);
+                if (!applied.Success)
+                {
+                    RollbackGroup(installation, group);
+                    _options.Logger?.Warn($"首个存档组创建后切换链接失败：{applied.Message}");
+                    return Fail($"创建存档组失败，已回滚：{applied.Message}");
+                }
+
+                return new SaveGroupOperationResult(
+                    true,
+                    $"已创建空存档组「{normalized}」并应用为当前存档；从 Steam 启动也会使用该组。",
+                    group);
+            }
+
             return new SaveGroupOperationResult(
                 true,
                 $"已创建空存档组「{normalized}」；首次用该组启动游戏后会生成存档文件。",
@@ -303,11 +390,14 @@ public sealed class SaveGroupService
     private SaveGroupOperationResult CloneCore(
         GameInstallation installation,
         Guid sourceGroupId,
+        string name) =>
+        Mutate(installation, "克隆存档组", () => CloneBody(installation, sourceGroupId, name), Fail);
+
+    private SaveGroupOperationResult CloneBody(
+        GameInstallation installation,
+        Guid sourceGroupId,
         string name)
     {
-        if (IsGameRunning(installation))
-            return Fail("游戏正在运行；请先关闭游戏再克隆存档组。");
-
         var validated = ValidateNewName(installation, name, null, out var normalized);
         if (validated is not null) return validated;
 
@@ -351,11 +441,14 @@ public sealed class SaveGroupService
     private SaveGroupOperationResult RenameCore(
         GameInstallation installation,
         Guid groupId,
+        string name) =>
+        Mutate(installation, "重命名存档组", () => RenameBody(installation, groupId, name), Fail);
+
+    private SaveGroupOperationResult RenameBody(
+        GameInstallation installation,
+        Guid groupId,
         string name)
     {
-        if (IsGameRunning(installation))
-            return Fail("游戏正在运行；请先关闭游戏再重命名存档组。");
-
         var validated = ValidateNewName(installation, name, groupId, out var normalized);
         if (validated is not null) return validated;
 
@@ -401,11 +494,11 @@ public sealed class SaveGroupService
         }
     }
 
-    private SaveGroupOperationResult SelectNextLaunchCore(GameInstallation installation, Guid groupId)
-    {
-        if (IsGameRunning(installation))
-            return Fail("游戏正在运行；请先关闭游戏再选择下次启动的存档组。");
+    private SaveGroupOperationResult SelectNextLaunchCore(GameInstallation installation, Guid groupId) =>
+        Mutate(installation, "选择下次启动的存档组", () => SelectNextLaunchBody(installation, groupId), Fail);
 
+    private SaveGroupOperationResult SelectNextLaunchBody(GameInstallation installation, Guid groupId)
+    {
         lock (_gate)
         {
             var group = Reconcile(installation, persist: true).Groups
@@ -543,6 +636,11 @@ public sealed class SaveGroupService
 
     private SaveGroupInitializationResult InitializeCore(
         GameInstallation installation,
+        UnmanagedSaveAction? unmanagedAction) =>
+        Mutate(installation, "初始化存档组", () => InitializeBody(installation, unmanagedAction), Failed);
+
+    private SaveGroupInitializationResult InitializeBody(
+        GameInstallation installation,
         UnmanagedSaveAction? unmanagedAction)
     {
         if (!_options.Linker.IsSupported)
@@ -553,9 +651,6 @@ public sealed class SaveGroupService
                 null,
                 "非 Windows 环境");
         }
-
-        if (IsGameRunning(installation))
-            return Failed("游戏正在运行；请先关闭游戏再操作存档组。");
 
         var reconciled = Reconcile(installation, persist: true);
         if (reconciled.Groups.Count > 0)
@@ -584,7 +679,7 @@ public sealed class SaveGroupService
                         $"现有存档链接指向 MK 之外的位置：{target}。为避免覆盖，未做任何修改。");
                 }
 
-                if (!PathEquals(target, installationDirectory))
+                if (!PathEquals(target, installationDirectory) && !IsUnder(target, installationDirectory))
                 {
                     return Failed(
                         $"现有存档链接指向另一个安装的存档目录：{target}。未做任何修改。");
@@ -651,6 +746,7 @@ public sealed class SaveGroupService
 
     public SaveGroup? GetLiveGroup(GameInstallation installation)
     {
+        lock (_writeGate)
         lock (_gate)
         {
             var groups = Reconcile(installation, persist: true).Groups;
@@ -667,6 +763,7 @@ public sealed class SaveGroupService
 
     public SaveLaunchPreview GetLaunchPreview(GameInstallation installation)
     {
+        lock (_writeGate)
         lock (_gate)
         {
             var reconciled = Reconcile(installation, persist: true);
@@ -693,13 +790,26 @@ public sealed class SaveGroupService
         CancellationToken cancellationToken = default) =>
         Task.Run(() => DeleteGroupCore(installation, groupId), cancellationToken);
 
-    private SaveGroupOperationResult ApplyCurrentCore(GameInstallation installation, Guid groupId)
+    /// <summary>
+    /// Runs an external save operation (ZIP export/import) under the same lock
+    /// as apply/delete/create. The lock is reentrant, so the operation may call
+    /// back into this service (AdoptGroup) on the same thread.
+    /// </summary>
+    public T RunExclusive<T>(Func<T> operation)
+    {
+        lock (_writeGate)
+        {
+            return operation();
+        }
+    }
+
+    private SaveGroupOperationResult ApplyCurrentCore(GameInstallation installation, Guid groupId) =>
+        Mutate(installation, "应用存档组", () => ApplyCurrentBody(installation, groupId), Fail);
+
+    private SaveGroupOperationResult ApplyCurrentBody(GameInstallation installation, Guid groupId)
     {
         if (!_options.Linker.IsSupported)
             return Fail("非 Windows 环境，无法切换存档链接。");
-
-        if (IsGameRunning(installation))
-            return Fail("游戏正在运行；请先关闭游戏再应用存档组。");
 
         var reconciled = Reconcile(installation, persist: true);
         var group = reconciled.Groups.FirstOrDefault(candidate => candidate.Id == groupId);
@@ -728,9 +838,22 @@ public sealed class SaveGroupService
         }
         catch (Exception exception)
         {
-            RestoreLiveLink(live, switched.PreviousTarget);
+            string linkState;
+            if (!switched.Switched)
+            {
+                linkState = "存档链接未改动";
+            }
+            else
+            {
+                var restore = RestoreLiveLink(live, switched.PreviousTarget);
+                var expected = switched.PreviousTarget ?? "（原本没有链接）";
+                linkState = restore.Success
+                    ? $"已恢复原链接：{expected}"
+                    : $"原链接未恢复（{restore.Stage}失败：{restore.Error}），请手动检查 {live}，预期指向 {expected}";
+            }
+
             _options.Logger?.Warn($"应用存档组时保存索引失败：{exception.Message}");
-            return Fail($"应用存档组失败，已恢复原链接：{exception.Message}");
+            return Fail($"应用存档组失败，存档索引未保存；{linkState}。原因：{exception.Message}");
         }
 
         _options.Logger?.Info($"当前存档组已应用：{group.Name}（{group.DirectoryPath}）");
@@ -742,11 +865,11 @@ public sealed class SaveGroupService
             group);
     }
 
-    private SaveGroupOperationResult DeleteGroupCore(GameInstallation installation, Guid groupId)
-    {
-        if (IsGameRunning(installation))
-            return Fail("游戏正在运行；请先关闭游戏再删除存档组。");
+    private SaveGroupOperationResult DeleteGroupCore(GameInstallation installation, Guid groupId) =>
+        Mutate(installation, "删除存档组", () => DeleteGroupBody(installation, groupId), Fail);
 
+    private SaveGroupOperationResult DeleteGroupBody(GameInstallation installation, Guid groupId)
+    {
         var reconciled = Reconcile(installation, persist: true);
         var groups = reconciled.Groups;
         var group = groups.FirstOrDefault(candidate => candidate.Id == groupId);
@@ -759,11 +882,21 @@ public sealed class SaveGroupService
         if (reconciled.Entry?.NextLaunchGroupId == groupId)
             return Fail("这是当前存档组；请先选择并应用另一个组，再删除。");
 
-        if (_options.Linker.Exists(_options.LiveSaveDirectory)
-            && _options.Linker.TryGetTarget(_options.LiveSaveDirectory, out var liveTarget)
-            && PathEquals(liveTarget, group.DirectoryPath))
+        if (_options.Linker.Exists(_options.LiveSaveDirectory))
         {
-            return Fail("这是实际链接指向的存档组；请先切换到其他组，再删除。");
+            if (_options.Linker.TryGetTarget(_options.LiveSaveDirectory, out var liveTarget))
+            {
+                if (PathEquals(liveTarget, group.DirectoryPath))
+                    return Fail("这是实际链接指向的存档组；请先切换到其他组，再删除。");
+            }
+            else if (IsReparsePoint(_options.LiveSaveDirectory))
+            {
+                // A link that exists but cannot be read could point anywhere,
+                // including at the group about to be recycled: refuse.
+                return Fail(
+                    $"无法确认当前存档链接的目标（{_options.LiveSaveDirectory}）；为避免误删，未删除。" +
+                    "请手动检查该链接后再试。");
+            }
         }
 
         if (!Directory.Exists(group.DirectoryPath))
@@ -802,13 +935,15 @@ public sealed class SaveGroupService
             group);
     }
 
-    private SaveLaunchResult PrepareLaunchCore(GameInstallation installation)
+    private SaveLaunchResult PrepareLaunchCore(GameInstallation installation) =>
+        Mutate(installation, "切换存档组",
+            () => PrepareLaunchBody(installation),
+            message => new SaveLaunchResult(false, message));
+
+    private SaveLaunchResult PrepareLaunchBody(GameInstallation installation)
     {
         if (!_options.Linker.IsSupported)
             return new SaveLaunchResult(true, "非 Windows 环境，跳过存档隔离。");
-
-        if (IsGameRunning(installation))
-            return new SaveLaunchResult(false, "游戏正在运行；请先关闭游戏再切换存档组。");
 
         var reconciled = Reconcile(installation, persist: true);
         var group = SelectGroup(reconciled.Groups, reconciled.Entry?.NextLaunchGroupId);
@@ -874,10 +1009,10 @@ public sealed class SaveGroupService
 
                     if (!_options.Linker.CreateJunction(live, group.DirectoryPath, out var createError))
                     {
-                        var restored = _options.Linker.CreateJunction(live, current, out var restoreError);
-                        var recovery = restored
+                        var restore = RestoreLiveLink(live, current);
+                        var recovery = restore.Success
                             ? $"已恢复原链接：{current}"
-                            : $"未能恢复原链接（{restoreError}），请手动检查 {live}。";
+                            : $"原链接未恢复（{restore.Stage}失败：{restore.Error}），请手动检查 {live}，预期指向 {current}。";
                         return new LinkSwitchResult(
                             false,
                             $"切换存档组失败：{createError}。{recovery}",
@@ -931,23 +1066,37 @@ public sealed class SaveGroupService
         }
     }
 
-    private void RestoreLiveLink(string live, string? previousTarget)
+    private sealed record LinkRestoreResult(bool Success, string Stage, string? Error);
+
+    /// <summary>
+    /// Undoes a junction switch and reports exactly what happened. Callers must
+    /// only claim "已恢复" when <c>Success</c> is true; a silent failure here
+    /// would leave the game pointed at the wrong profile.
+    /// </summary>
+    private LinkRestoreResult RestoreLiveLink(string live, string? previousTarget)
     {
         try
         {
-            if (previousTarget is not null)
+            if (!_options.Linker.RemoveJunction(live, out var removeError))
             {
-                _options.Linker.RemoveJunction(live, out _);
-                _options.Linker.CreateJunction(live, previousTarget, out _);
+                _options.Logger?.Warn($"恢复存档链接失败（移除当前链接）：{removeError}");
+                return new LinkRestoreResult(false, "移除当前链接", removeError);
             }
-            else
+
+            if (previousTarget is null) return new LinkRestoreResult(true, "移除当前链接", null);
+
+            if (!_options.Linker.CreateJunction(live, previousTarget, out var createError))
             {
-                _options.Linker.RemoveJunction(live, out _);
+                _options.Logger?.Warn($"恢复存档链接失败（重建原链接）：{createError}");
+                return new LinkRestoreResult(false, "重建原链接", createError);
             }
+
+            return new LinkRestoreResult(true, "重建原链接", null);
         }
         catch (Exception exception)
         {
             _options.Logger?.Warn($"恢复存档链接失败：{exception.Message}");
+            return new LinkRestoreResult(false, "恢复链接", exception.Message);
         }
     }
 
@@ -968,8 +1117,16 @@ public sealed class SaveGroupService
             _options.Logger?.Info(
                 $"已把旧存档 profile 迁移到默认存档组：{sourceDirectory} -> {group.DirectoryPath}（源目录保留为回退副本）");
 
+            var applied = SwitchLiveLink(group, live);
+            if (!applied.Success)
+            {
+                RollbackGroup(installation, group);
+                _options.Logger?.Warn($"迁移旧存档后切换链接失败：{applied.Message}");
+                return Failed($"迁移旧存档后切换链接失败，新组已回滚；原存档未改动：{applied.Message}");
+            }
+
             return Ready(
-                $"已把旧存档迁移到默认存档组；原目录保留为回退副本（{sourceDirectory}）。",
+                $"已把旧存档迁移到默认存档组并应用为当前存档；原目录保留为回退副本（{sourceDirectory}）。",
                 GroupListAfterCommit(installation),
                 group.Id,
                 live);
@@ -998,9 +1155,12 @@ public sealed class SaveGroupService
 
             if (!_options.Linker.CreateJunction(live, group.DirectoryPath, out var linkError))
             {
-                RestoreBackup(backup, live);
-                RollbackGroup(installation, group);
-                return Failed($"导入存档后创建隔离链接失败，已恢复原目录：{linkError}");
+                var restore = RestoreBackup(backup, live);
+                if (restore.Success) RollbackGroup(installation, group);
+                return Failed(restore.Success
+                    ? $"导入存档后创建隔离链接失败，原目录已恢复：{linkError}"
+                    : $"创建隔离链接失败（{linkError}），且原目录未能恢复到 {live}（{restore.Error}）；" +
+                      $"原目录仍在 {backup}，导入的存档组「{group.Name}」已保留，请手动处理。");
             }
 
             return Ready(
@@ -1012,10 +1172,13 @@ public sealed class SaveGroupService
         catch (Exception exception)
         {
             DeleteDirectoryQuietly(staging);
-            if (backup is not null) RestoreBackup(backup, live);
-            if (group is not null) RollbackGroup(installation, group);
+            var restored = backup is null ? true : RestoreBackup(backup, live).Success;
+            if (group is not null && restored) RollbackGroup(installation, group);
             _options.Logger?.Warn($"导入未托管存档失败：{exception.Message}");
-            return Failed($"导入未托管存档失败，原存档保持不变：{exception.Message}");
+            return Failed(restored
+                ? $"导入未托管存档失败，原存档保持不变：{exception.Message}"
+                : $"导入未托管存档失败：{exception.Message}；原目录未能恢复到 {live}，仍保留在 {backup}。" +
+                  $"已复制到存档组的副本也已保留，请手动检查后再操作。");
         }
     }
 
@@ -1031,9 +1194,12 @@ public sealed class SaveGroupService
 
             if (!_options.Linker.CreateJunction(live, group.DirectoryPath, out var linkError))
             {
-                RestoreBackup(backup, live);
-                RollbackGroup(installation, group);
-                return Failed($"新建空组后创建隔离链接失败，已恢复原目录：{linkError}");
+                var restore = RestoreBackup(backup, live);
+                if (restore.Success) RollbackGroup(installation, group);
+                return Failed(restore.Success
+                    ? $"新建空组后创建隔离链接失败，原目录已恢复：{linkError}"
+                    : $"创建隔离链接失败（{linkError}），且原目录未能恢复到 {live}（{restore.Error}）；" +
+                      $"原存档目录仍在 {backup}，请手动处理。");
             }
 
             return Ready(
@@ -1045,10 +1211,12 @@ public sealed class SaveGroupService
         catch (Exception exception)
         {
             DeleteDirectoryQuietly(staging);
-            if (backup is not null) RestoreBackup(backup, live);
+            var restored = backup is null ? true : RestoreBackup(backup, live).Success;
             if (group is not null) RollbackGroup(installation, group);
             _options.Logger?.Warn($"新建空组失败：{exception.Message}");
-            return Failed($"新建空组失败，原存档保持不变：{exception.Message}");
+            return Failed(restored
+                ? $"新建空组失败，原存档保持不变：{exception.Message}"
+                : $"新建空组失败：{exception.Message}；原存档目录未能恢复到 {live}，仍保留在 {backup}。");
         }
     }
 
@@ -1058,7 +1226,20 @@ public sealed class SaveGroupService
         try
         {
             var group = CommitGroup(installation, staging, groupId, "默认", isDefault: true, _options.UtcNow());
-            return Ready(message, GroupListAfterCommit(installation), group.Id, _options.LiveSaveDirectory);
+
+            var applied = SwitchLiveLink(group, _options.LiveSaveDirectory);
+            if (!applied.Success)
+            {
+                RollbackGroup(installation, group);
+                _options.Logger?.Warn($"创建默认存档组后切换链接失败：{applied.Message}");
+                return Failed($"创建默认存档组后切换链接失败，已回滚：{applied.Message}");
+            }
+
+            return Ready(
+                $"{message} 已应用为当前存档。",
+                GroupListAfterCommit(installation),
+                group.Id,
+                _options.LiveSaveDirectory);
         }
         catch (Exception exception)
         {
@@ -1112,10 +1293,13 @@ public sealed class SaveGroupService
             entry.NextLaunchGroupId ??= groupId;
             _catalog.Save(catalog);
         }
-        catch
+        catch (Exception exception)
         {
-            DeleteDirectoryQuietly(finalDirectory);
-            throw;
+            // The directory already holds verified data and carries its manifest,
+            // so Reconcile can rebuild the index later. Deleting it here would
+            // destroy the only copy of an imported group.
+            _options.Logger?.Warn(
+                $"存档组「{name}」已写入 {finalDirectory}，但更新索引失败：{exception.Message}；刷新后会重新登记。");
         }
 
         return new SaveGroup(groupId, name, createdAt, isDefault, finalDirectory);
@@ -1292,20 +1476,48 @@ public sealed class SaveGroupService
         return backup;
     }
 
-    private void RestoreBackup(string backup, string live)
+    /// <summary>
+    /// Moves the pre-import directory back to the live path. It reports failure
+    /// instead of swallowing it: the caller may only delete the freshly imported
+    /// copy when the user's original data is actually back in place.
+    /// </summary>
+    private BackupRestoreResult RestoreBackup(string backup, string live)
     {
         try
         {
-            if (Directory.Exists(live) && !Directory.EnumerateFileSystemEntries(live).Any())
-                Directory.Delete(live, recursive: false);
-            if (!Directory.Exists(live) && Directory.Exists(backup))
-                Directory.Move(backup, live);
+            if (!Directory.Exists(backup))
+                return new BackupRestoreResult(false, $"备份目录不存在：{backup}");
+
+            if (Directory.Exists(live))
+            {
+                var info = new DirectoryInfo(live);
+                if (info.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                {
+                    if (!_options.Linker.RemoveJunction(live, out var removeError))
+                        return new BackupRestoreResult(false, $"残留链接无法移除：{removeError}");
+                }
+                else if (Directory.EnumerateFileSystemEntries(live).Any())
+                {
+                    return new BackupRestoreResult(false, "目标路径已存在且非空，未覆盖。");
+                }
+                else
+                {
+                    Directory.Delete(live, recursive: false);
+                }
+            }
+
+            Directory.Move(backup, live);
+            _options.Logger?.Info($"原存档目录已恢复到 {live}");
+            return new BackupRestoreResult(true, null);
         }
         catch (Exception exception)
         {
             _options.Logger?.Warn($"恢复原存档目录失败：{exception.Message}");
+            return new BackupRestoreResult(false, exception.Message);
         }
     }
+
+    private sealed record BackupRestoreResult(bool Success, string? Error);
 
     private IReadOnlyList<string> CollectDataFiles(string sourceDirectory)
     {
@@ -1368,11 +1580,83 @@ public sealed class SaveGroupService
         }
     }
 
+    /// <summary>True when the live link points into another installation's save
+    /// folder. Auto-apply must not silently take it over; an explicit Apply may.</summary>
+    private bool LiveLinkBelongsToAnotherInstallation(GameInstallation installation)
+    {
+        var live = _options.LiveSaveDirectory;
+        if (!_options.Linker.Exists(live) || !_options.Linker.TryGetTarget(live, out var target))
+            return false;
+
+        var current = Path.GetFullPath(target);
+        if (!IsUnder(current, ProfilesRoot)) return false;
+
+        return !IsUnder(current, GetInstallationDirectory(installation));
+    }
+
+    private static bool IsReparsePoint(string path)
+    {
+        try
+        {
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static bool IsGroupDirectory(string directory) =>
         File.Exists(SaveGroupManifestStore.GetManifestPath(directory));
 
     private bool IsGameRunning(GameInstallation installation) =>
         _options.IsGameRunning?.Invoke(installation) == true;
+
+    /// <summary>
+    /// Serializes every mutating operation and re-probes the game process right
+    /// before the body runs. A cached monitor snapshot is not good enough: the
+    /// user can start the game from Steam between two 3-second scans, and the
+    /// junction switch would then race the running game.
+    /// </summary>
+    private T Mutate<T>(GameInstallation installation, string action, Func<T> body, Func<string, T> fail)
+    {
+        lock (_writeGate)
+        {
+            var blocked = RunningBlockMessage(installation, action);
+            return blocked is null ? body() : fail(blocked);
+        }
+    }
+
+    private string? RunningBlockMessage(GameInstallation installation, string action)
+    {
+        var state = ProbeRunningState(installation);
+        return state switch
+        {
+            GameRunningState.Running => $"游戏正在运行；请先关闭游戏再{action}。",
+            GameRunningState.Unknown =>
+                $"无法确认游戏是否正在运行（进程信息不可读）；为避免损坏存档，已停止{action}。请关闭游戏后重试。",
+            _ => null
+        };
+    }
+
+    private GameRunningState ProbeRunningState(GameInstallation installation)
+    {
+        try
+        {
+            if (_options.ProbeGameRunningState is not null)
+                return _options.ProbeGameRunningState(installation);
+
+            return IsGameRunning(installation)
+                ? GameRunningState.Running
+                : GameRunningState.NotRunning;
+        }
+        catch (Exception exception)
+        {
+            // A failed probe must never be read as "not running".
+            _options.Logger?.Warn($"读取游戏运行状态失败：{exception.Message}");
+            return GameRunningState.Unknown;
+        }
+    }
 
     private SaveGroupInitializationResult Ready(
         string message,

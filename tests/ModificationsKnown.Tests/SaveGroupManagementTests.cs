@@ -29,7 +29,9 @@ public sealed class SaveGroupManagementTests
         Assert.Empty(dataFiles);
         Assert.True(SaveGroupManifestStore.TryRead(group.DirectoryPath, out var manifest));
         Assert.Equal(context.InstallationKey, manifest.InstallationKey);
-        Assert.False(context.Linker.TryGetTarget(context.Live, out _));
+        // 第一组创建后立即成为实际 Current。
+        Assert.True(context.Linker.TryGetTarget(context.Live, out var liveTarget));
+        Assert.Equal(group.DirectoryPath, liveTarget);
     }
 
     [Fact]
@@ -233,7 +235,9 @@ public sealed class SaveGroupManagementTests
         Assert.True(selected.Success, selected.Message);
         Assert.Equal(second.Group.Id, selected.Group?.Id);
         Assert.Equal(second.Group.Id, context.BuildService().GetNextLaunchGroupId(context.Installation));
-        Assert.False(context.Linker.TryGetTarget(context.Live, out _));
+        // 只有偏好变了：链接仍指向第一组（首组创建即应用）。
+        Assert.True(context.Linker.TryGetTarget(context.Live, out var current));
+        Assert.Equal(first.Group!.DirectoryPath, current);
 
         var launch = await context.Service.PrepareLaunchAsync(context.Installation);
         Assert.True(launch.Success, launch.Message);

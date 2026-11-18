@@ -54,9 +54,16 @@ public sealed class SaveGroupCatalogStore
             var directory = Path.GetDirectoryName(_path);
             if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
 
-            var temporary = _path + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(catalog, JsonOptions));
-            File.Move(temporary, _path, overwrite: true);
+            var temporary = $"{_path}.tmp-{Guid.NewGuid():N}";
+            try
+            {
+                File.WriteAllText(temporary, JsonSerializer.Serialize(catalog, JsonOptions));
+                File.Move(temporary, _path, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(temporary)) File.Delete(temporary);
+            }
         }
     }
 

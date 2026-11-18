@@ -12,7 +12,15 @@ public static class AppPaths
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         ApplicationFolderName);
 
-    public static string RootDirectory { get; } = ResolveRoot();
+    /// <summary>
+    /// QA-only isolation root (<c>MK_ACCEPTANCE_ROOT</c>). When set, settings,
+    /// instances, save profiles, the catalog and the live LocalLow directory all
+    /// live under this directory, so UI acceptance never reads the player's real
+    /// configuration or saves. Unset in normal use.
+    /// </summary>
+    public static string? AcceptanceRoot { get; } = ResolveAcceptanceRoot();
+
+    public static string RootDirectory { get; } = AcceptanceRoot ?? ResolveRoot();
 
     public static string SettingsFile { get; } = Path.Combine(RootDirectory, "settings.json");
 
@@ -21,7 +29,10 @@ public static class AppPaths
     /// <summary>Save profiles deliberately stay under the default AppData root:
     /// the live game folder is a junction into them, so relocating the rest of
     /// the data root must not move or orphan them.</summary>
-    public static string SaveProfilesDirectory { get; } = Path.Combine(DefaultRootDirectory, "save-profiles");
+    public static string SaveProfilesDirectory { get; } =
+        AcceptanceRoot is { } acceptanceRoot
+            ? Path.Combine(acceptanceRoot, "save-profiles")
+            : Path.Combine(DefaultRootDirectory, "save-profiles");
 
     public static string CacheDirectory { get; } = Path.Combine(RootDirectory, "cache");
 
@@ -38,6 +49,21 @@ public static class AppPaths
         Directory.CreateDirectory(CacheDirectory);
         Directory.CreateDirectory(DownloadsDirectory);
         Directory.CreateDirectory(TempDirectory);
+    }
+
+    private static string? ResolveAcceptanceRoot()
+    {
+        var configured = Environment.GetEnvironmentVariable("MK_ACCEPTANCE_ROOT");
+        if (string.IsNullOrWhiteSpace(configured)) return null;
+
+        try
+        {
+            return Path.GetFullPath(configured);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string ResolveRoot()
