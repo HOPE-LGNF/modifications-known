@@ -1,0 +1,138 @@
+using ModificationsKnown.Core.Games;
+using ModificationsKnown.Core.Saves;
+using ModificationsKnown.Infrastructure.Saves;
+
+namespace ModificationsKnown.Tests;
+
+internal sealed class FakeSaveLinker : ISaveLinker
+{
+    public bool IsSupported { get; set; } = true;
+
+    public Dictionary<string, string> Targets { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Fail the next N create calls (used to simulate a failed switch
+    /// while still allowing the rollback re-create to succeed).</summary>
+    public int FailNextCreate { get; set; }
+
+    public bool FailRemove { get; set; }
+
+    public bool Exists(string path) => Directory.Exists(path);
+
+    public bool TryGetTarget(string path, out string target)
+    {
+        if (Targets.TryGetValue(Normalize(path), out var value))
+        {
+            target = value;
+            return true;
+        }
+
+        target = string.Empty;
+        return false;
+    }
+
+    public bool CreateJunction(string linkPath, string targetPath, out string error)
+    {
+        if (FailNextCreate > 0)
+        {
+            FailNextCreate--;
+            error = "simulated create failure";
+            return false;
+        }
+
+        Targets[Normalize(linkPath)] = Normalize(targetPath);
+        Directory.CreateDirectory(linkPath);
+        error = string.Empty;
+        return true;
+    }
+
+    public bool RemoveJunction(string linkPath, out string error)
+    {
+        if (FailRemove)
+        {
+            error = "simulated remove failure";
+            return false;
+        }
+
+        Targets.Remove(Normalize(linkPath));
+        if (Directory.Exists(linkPath)) Directory.Delete(linkPath, recursive: false);
+        error = string.Empty;
+        return true;
+    }
+
+    private static string Normalize(string path) =>
+        Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+}
+
+internal sealed class SaveGroupTestContext : IDisposable
+{
+    public SaveGroupTestContext()
+    {
+        Temp = new TempDirectory();
+        ProfilesRoot = Temp.CreateDirectory("profiles");
+        BackupsRoot = Temp.CreateDirectory("backups");
+        StagingRoot = Temp.CreateDirectory("staging");
+        Live = Path.Combine(Temp.Path, "LocalLow", "Orsoniks", "CasualtiesUnknown");
+        CatalogPath = Path.Combine(Temp.Path, "save-groups.json");
+        GameDirectory = Temp.CreateDirectory("game");
+        Installation = new GameInstallation(KnownGameProfiles.Full, GameDirectory, null, false, false);
+        Service = BuildService();
+    }
+
+    public TempDirectory Temp { get; }
+
+    public string ProfilesRoot { get; }
+
+    public string BackupsRoot { get; }
+
+    public string StagingRoot { get; }
+
+    public string Live { get; }
+
+    public string CatalogPath { get; }
+
+    public string GameDirectory { get; }
+
+    public GameInstallation Installation { get; }
+
+    public FakeSaveLinker Linker { get; } = new();
+
+    public bool Running { get; set; }
+
+    public SaveGroupService Service { get; }
+
+    public string InstallationKey => SaveGroupFormat.GetInstallationKey(GameDirectory);
+
+    public string InstallationDirectory => Path.Combine(ProfilesRoot, InstallationKey);
+
+    public SaveGroupService BuildService(string? profilesRoot = null) =>
+        new(new SaveGroupOptions
+        {
+            ProfilesRoot = profilesRoot ?? ProfilesRoot,
+            CatalogPath = CatalogPath,
+            BackupsRoot = BackupsRoot,
+            StagingRoot = StagingRoot,
+            LiveSaveDirectory = Live,
+            Linker = Linker,
+            IsGameRunning = _ => Running
+        });
+
+    public string WriteLegacyFile(string relative, string content)
+    {
+        var path = Path.Combine(InstallationDirectory, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+        return path;
+    }
+
+    public string WriteLiveFile(string relative, string content)
+    {
+        var path = Path.Combine(Live, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
+        return path;
+    }
+
+    public void CreateLiveDirectory() => Directory.CreateDirectory(Live);
+
+    public void Dispose() => Temp.Dispose();
+}
