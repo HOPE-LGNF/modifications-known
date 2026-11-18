@@ -16,7 +16,9 @@ DiscoverView
       or GetNxmDownloadLinksAsync              (v1 download_link with key/expires)
   → DownloadFile
   → ArchiveModInstaller.InstallArchiveAsync    (local archive logic)
+  → PackageUpdateService                        (更新：同盘暂存/备份/回滚)
   → RecordSourceAsync                          (Nexus source + sidecar)
+  → Shell.NotifyModsChanged                     (已安装页清除更新徽标)
 ```
 
 ## 依赖等级
@@ -31,7 +33,8 @@ DiscoverView
 | 压缩包安装 | 本地布局/清单 | 纯逻辑 | 与来源无关 |
 | 扫描/启停/卸载 | BepInEx 文件 | 纯逻辑 | 与来源无关 |
 | 手动关联 | NexusMatch | 强 | `GameScopedId/ModUid` 是 Nexus 标识 |
-| 更新检测 | 尚未实现 | — | 未来需要来源适配 |
+| 更新检查/更新 | v3 files/versions/download-link | 强（Nexus 特有） | 已实现；按来源检查最高文件版本，免费账号回退文件页 |
+| 启动器自更新 | GitHub Releases API + asset digest | 弱（可替换为任意发布源） | 已实现 SHA-256 校验；未签名 |
 
 ## 必须抽象的边界
 

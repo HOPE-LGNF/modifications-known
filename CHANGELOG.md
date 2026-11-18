@@ -1,29 +1,48 @@
 # Changelog
 
-## [0.7.0] - 2026-11-14
+## [0.7.0-beta] - 2026-11-15
+
+首个公开 Beta。主题从“日光默认”回到苔原，并把模组更新、免费账号 NXM、BepInEx 卸载和启动器自更新补成完整链路。
 
 ### Added
 
-- Light “日光” palette as the new default theme (existing explicit ember/slate/
-  custom choices are preserved; the old moss default is migrated once).
-- A-style shell: 64 px title bar with centred, horizontally scrollable tabs
-  (wheel/drag, no scrollbar), launcher column + dashboard, persisted activity
-  trail, save-profile management page, dynamic first-run checklist.
-- Drag-and-drop archive install with an explicit multi-file confirmation.
-- Settings sticky save bar with unsaved-change detection and discard.
+- **模组更新**：已安装页手动检查 Nexus 来源包；单项更新与一键更新；最新版本以“全部文件/版本中的最高文件版本”为准。
+- **安全替换**：更新前将旧包移到同盘暂存目录；可选复制备份到 `backups/<时间>/<包名>`；跨卷备份；安装失败自动恢复旧目录。
+- **BepInEx 卸载**：两步危险确认 + 5 秒最终倒计时，删除 loader 目录、根目录 loader 文件和该实例全部模组/配置。
+- **启动器自更新**：设置页检查 GitHub Release；下载后校验 GitHub asset SHA-256 digest；退出后由 PowerShell 辅助脚本替换 exe 并重启。
+- 免费账号且未注册 NXM 时，下载/更新前提示注册，并带“NXM 是什么？”说明。
+- 首页清单新增“注册 NXM 链接”，位于 API Key 与安装第一个模组之间。
+- 发现页/详情页增加“可能 Demo / 作者提到 Demo”提示（日期 + 作者文本关键词，保守提示，不作兼容性断言）。
+- 自绘标题栏、hazard 测试图标、BETA 标识；标题过长不再遮住 Demo 徽标。
+- 设置深链：首页“安装 BepInEx”会滚动并高亮当前实例 `⋯`；“注册 NXM”跳到 NXM 小节。
+- 关闭游戏按钮 hover 修正：普通深红、hover 亮红；启动后先保持“正在启动…”，捕捉到进程再变为“关闭游戏”。
 
 ### Changed
 
-- Cherry-picked from the UI PR: `CoverImage` blurred-backdrop covers, selected
-  mod-card state, 11 px minimum labels, category ComboBox fix, 401 message,
-  single-`v` version labels, and in-memory thumbnail cache so toggling a mod
-  does not re-fetch covers.
-- Toast lasts 5 s (success/info) or 6.5 s (warning/error).
-- Save page lists per-instance profiles with open/backup/delete actions.
-- Installed-page update check (manual, Nexus-linked packages only) with a
-  “可更新” badge; downloading a newer version from Discover now verifies the
-  installed version, backs up the old package and replaces it, restoring the
-  backup if install fails.
+- 默认主题恢复为 **苔原**；日光/夜航保留；旧 ember 迁移为苔原。
+- 更新检查/更新统一使用最新文件版本，修复“检查说有更新、更新却说已是最新”。
+- 更新成功即时清除“可更新”徽标和摘要，无需手动复查。
+- NXM 链接不再强制从已安装页跳转到模组发现，后台处理并保持当前页面。
+- 403 回退页始终携带 `file_id`（可解析时）与 `nmm=1`；更新流程使用同一文件页。
+- 非 Steam 实例只使用自身 exe 启动，不再错误回退 `steam://`。
+- Toast/状态点、成功类文字改用主题 Accent；Success 状态点不再固定绿色。
+- 设置页新增“启动器更新”卡片；README 重做并加入 5 张截图。
+
+### Fixed
+
+- 启动按钮在部分主题/视觉树下落入 disabled 样式而发黑。
+- 关闭按钮 hover 变成系统灰色。
+- 跨卷 `Directory.Move` 备份失败。
+- 更新徽标在更新后仍显示。
+- NXM 参数在回退页丢失。
+- 长标题遮住 Demo 提示。
+
+### Notes
+
+- 63 个测试通过；Windows 真机仍需回归更新安装、BepInEx 卸载、启动等待与自更新。
+- GitHub `/releases/latest` 默认不返回预发布版本，因此 Beta 不会被稳定版自更新通道自动推送；需手动下载。
+- 未签名；启动器自更新仍缺 Authenticode、差分与自动回滚。
+
 ## [0.6.1] - 2026-11-13
 
 ### Fixed

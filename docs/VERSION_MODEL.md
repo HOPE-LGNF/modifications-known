@@ -1,78 +1,99 @@
-# 游戏版本与 Mod 组：方案 A
+# 游戏版本、实例与 Mod 组
 
-决策：采用 **版本即实例（Instance-per-version）+ Mod 组快照**。每个游戏版本拥有自己的
-游戏目录、BepInEx 和 plugins；Mod 组只保存该实例下的启用集合，不跨版本共享。
+> 最后更新：2026-11-18（0.7.0-beta）
 
-## 数据模型
+## 决策
+
+采用 **版本即实例（Instance-per-version）+ Mod 组快照**。每个游戏目录拥有自己的
+`BepInEx/plugins`、存档 profile、Nexus 来源和 Mod 组；Mod 组不跨实例共享。
+
+## 数据模型（当前实现）
 
 ```text
-GameInstance
-  id                稳定 GUID
-  profileId         casual-unknown / casual-unknown-demo / 未来版本
-  rootPath          游戏根目录
-  alias             用户可重命名的显示名
-  versionLabel      原始版本/edition 标签
-  loaderState       none / installed / broken
-  lastSeenAt
+SavedGameInstance (game-instances.json, schema v2)
+  path              游戏根目录，实例身份
+  alias             用户显示名
+  profileId         full / demo / 自定义
+  edition           正式版 / 试玩版
+  steamAppId
+  executablePath    手动添加或探测到的 exe
 
-ModGroup
+ModGroup (mod-groups.json，按游戏目录隔离)
   id
-  gameInstanceId
   name
   isDefault
   enabledPackageIds[]
   createdAt
 
-ActiveGroupId        按 GameInstance 保存
+AppSettings
+  PreferredGamePath
+  PreferredInstallationId（旧字段，兼容回退）
 ```
 
-持久化：
+说明：
 
-- `game-instances.json`
-- `mod-groups.json`
-- `AppSettings.ActiveInstanceId`
-- `AppSettings.ActiveGroupId`
+- `path` 是实例身份，不能只用 `profileId` 区分“同一版本的多个副本”；
+- 启动时读取 `game-instances.json`，不再自动重新扫描 Steam；
+- 只有显式“重新探测”或添加实例才更新列表；
+- 删除实例会写 `hidden-instances.json`，防止被重新探测复活。
 
 ## 交互
 
 ### 版本管理（设置页）
 
-- 列出所有实例：别名、原始 edition、路径、BepInEx 状态；
+- 列出实例：别名、edition、BepInEx 状态、路径；
 - 重命名只改 `alias`，不改目录；
-- 检测到同一路径的新版本时更新 `versionLabel`，不重复添加；
-- 当前实例切换写入 `ActiveInstanceId`；
-- 未安装 BepInEx 的实例显示“安装 BepInEx”。
+- 当前实例由 `Game.Selected` / `PreferredGamePath` 决定；
+- 每个实例的 `⋯` 菜单包含：安装/卸载 BepInEx、下载 BepInEx、删除版本；
+- 设置页支持首页深链：安装 BepInEx 时滚动并高亮当前实例的 `⋯`。
 
-### BepInEx 安装
+### BepInEx
 
-- 只在选定实例根目录解压；
-- 校验 `BepInEx/core`、`winhttp.dll`、`BepInEx/plugins`；
-- 失败不留下半成品；
+- 安装：本地 zip 或打开 GitHub 最新稳定版；
+- 安装前校验 `BepInEx/core`、`winhttp.dll`、`BepInEx/plugins`；
+- 已存在 loader 时拒绝覆盖；
+- 卸载：删除 `BepInEx/`、`winhttp.dll`、`doorstop_config.ini`、`.doorstop_version`，**同时删除该实例所有模组/配置**；两步确认 + 5 秒倒计时；
 - 不跨实例复用 DLL。
 
 ### Mod 组
 
 - 组属于实例；
-- “新建组”快照当前启用 package id；
-- “应用组”逐包调用现有 `SetEnabledAsync`，显示逐包失败；
-- 未托管包默认不纳入组，可在组编辑器里手动勾选；
-- 组切换不改 manifest、不移动整个目录，只改 `.dll` / `.dll.disabled`。
+- “保存当前状态”快照当前启用 package id；
+- “应用该组”逐包调用 `SetEnabledAsync`，显示逐包失败；
+- 默认组自动创建，不可重命名/删除；
+- 未托管包默认不纳入组；
+- 组切换不改 manifest、不移动目录，只改 `.dll` / `.dll.disabled`。
+
+### 存档隔离
+
+- 每个实例按游戏目录 hash 生成独立 profile；
+- 启动前将 `%LocalLow%\Orsoniks\CasualtiesUnknown` junction 到当前 profile；
+- profile 固定在默认 AppData 目录，不跟随自定义数据目录移动；
+- 用户已确认 2026-11-15 真机回归成功；删除实例的存档复制/移动/保留流程也已确认。
+
+### 更新
+
+- 已安装页按 Nexus 来源检查最新文件版本；
+- 单项/一键更新走 `PackageUpdateService`：同盘暂存、可选跨卷备份、失败恢复；
+- 更新完成后通知已安装页清除徽标；
+- 组不记录“更新前版本”，当前没有按组回滚更新。
 
 ## 迁移
 
 1. 旧 `GamePath` / `PreferredInstallationId` 生成默认实例；
-2. 旧清单、manifest、enabled 状态不变；
-3. 组功能未启用时行为与当前版本一致；
-4. 后续再迁移下载缓存和更新检测键（实例 + package + source）。
+2. 旧 schema v1 的 path→alias map 迁移到 v2 完整记录；
+3. 清单、manifest、enabled 状态不变；
+4. 旧来源 sidecar 保留为兼容回退，manifest source 优先。
 
 ## 分阶段
 
-1. 实例注册表、设置页版本列表、别名、当前实例；
-2. 每实例 BepInEx 检测/安装；
-3. Mod 组快照/应用/持久化；
-4. 更新检测按实例 + 来源工作。
+1. ✅ 实例注册表、别名、当前实例；
+2. ✅ 每实例 BepInEx 检测/安装/卸载；
+3. ✅ Mod 组快照/应用/持久化；
+4. ✅ 更新检测按实例 + Nexus 来源；
+5. ⏳ 启动器自更新签名校验/回滚、按组回滚更新。
 
-## 为什么不选单安装 + 部署层
+## 为什么不选“单安装 + 部署层”
 
 BepInEx 通过物理 DLL 加载，不提供虚拟文件系统；部署层需要硬链接/符号链接/复制，
 会引入 Windows 权限、跨盘、杀软、备份和卸载所有权问题。当前阶段收益不足。

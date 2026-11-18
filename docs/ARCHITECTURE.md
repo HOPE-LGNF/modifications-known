@@ -25,7 +25,8 @@ ModificationsKnown.Infrastructure
 ModificationsKnown.App
   ├─ ViewModels   shell, pages, commands, view state
   ├─ Views        Avalonia XAML only; no file-system logic
-  ├─ Services     game context, dialogs, file picker, thumbnail cache
+  ├─ Services     game context, dialogs, file picker, thumbnail cache,
+  │                package update transactions, app self-update
   └─ Theming      palette records and DynamicResource application
 ```
 
@@ -67,7 +68,10 @@ broken or malicious plugin is not executed during a scan.
 `ArchiveModInstaller` extracts to a temp directory, validates every archive entry
 against path traversal, then copies package folders into a staging directory next
 to the plugins directory. Only a validated staging folder is moved into place.
-Existing packages are not overwritten.
+Normal installs do not overwrite existing packages. Updates go through
+`PackageUpdateService`, which moves the old package to a same-volume staging
+directory, optionally copies a backup, installs the new archive, and restores
+the old directory on failure.
 
 ### 6. Nexus v3 is an adapter
 
@@ -86,11 +90,19 @@ resource without touching page XAML.
 ## What is deliberately not here yet
 
 - dependency resolution and conflict graph
-- backup/rollback and version pinning
+- full operation history / restore the last N operations
 - crash log attribution
 - game skin package management
-- launcher self-update
+- signed launcher updates / differential updates / update rollback
 - a server-side mod index
+
+Implemented update-related pieces:
+
+- `PackageUpdateService` for single-package replace with same-volume staging and
+  optional cross-volume backup;
+- read-only Nexus update check plus one-click updates in `InstalledViewModel`;
+- `AppUpdateService` for GitHub release checks and SHA-256-verified self-update;
+- BepInEx uninstall (two-step dialog) in `SettingsViewModel`.
 
 These are tracked in [ROADMAP.md](ROADMAP.md). The interfaces for some of them
 will be added only after the file/package semantics are proven by tests.

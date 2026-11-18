@@ -1,294 +1,236 @@
 # 已知改装 / Modifications Known — 交接文档
 
-> 更新时间：2026-11-10  
-> 当前版本：`0.6.1`  
+> 更新时间：2026-11-18  
+> 当前版本：`0.7.0-beta`  
 > 仓库：<https://github.com/HOPE-LGNF/modifications-known>  
-> 最新 Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.6.1>  
-> 最新功能提交：`7c7b891 fix: compact version rows, centred toast and Nexus thumbnails`
+> Beta Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.7.0-beta>  
+> 构建：.NET 8 / Avalonia 11.3 / Windows x64 单文件  
+> 测试：63 passed / 0 failed  
+> 许可证：Apache-2.0
 
 ---
 
 ## 1. 当前状态
 
-### 已验证
+### 已完成并验证
 
-- 52 个自动化测试通过。
 - `dotnet build` 0 warning / 0 error。
-- GitHub Actions CI 成功。
-- Windows 单文件 exe 已发布并复制到桌面。
-- 之前已验证：
-  - NXM 协议注册、单实例转发；
-  - NXM key/expires 下载；
-  - 包清单、接管、按清单卸载；
-  - 本地压缩包安装；
-  - 手动关联 Nexus；
-  - 发现页选择保持；
-  - C/A 布局基础行为。
+- `dotnet test`：63 passed。
+- GitHub `main` 已推送，Beta Release 已发布：
+  - tag：`v0.7.0-beta`
+  - 资产：`ModificationsKnown-v0.7.0-beta-win-x64.exe`
+  - SHA-256：`aeba515098bd8f1318362efd9a664d85ba9093227351819b7c6adb90cb3d54f0`
+  - GitHub asset digest 与本地一致。
+- 用户已确认真机成功：
+  - 存档隔离真机回归；
+  - 版本/实例删除真机回归。
+- 已实现并完成代码级验证：
+  - 发现页、已安装页、存档页、设置页、主题页；
+  - 多实例、BepInEx 安装/卸载、托管包清单；
+  - Nexus 浏览/下载、NXM 回退；
+  - 检查更新、单项更新、一键更新、跨卷备份/失败恢复；
+  - 启动器 GitHub Release 检查、SHA-256 校验、退出后替换重启；
+  - 自绘标题栏、hazard 图标、BETA 标识、三套主题；
+  - 首页动态清单（含 NXM 步骤）与设置深链。
 
-### 尚未由用户实测完成
+### 尚未由用户真机完成
 
-- v0.6.1 的功能（作者已在 Linux 离屏渲染/编译检查，Windows 真机待确认）：
-  - 版本卡片单行 + 操作收进 ⋯；
-  - 页顶 Toast 居中、5 秒、淡入淡出；
-  - 已安装模组 Nexus 缩略图（需要 API Key/关联）；
-  - 模组操作改为菜单列表；
-  - PCL 风格预览图（仅设计，未改布局）。
-- v0.6.0 的功能（作者已在 Linux 离屏渲染/编译检查，Windows 真机待确认）：
-  - 实例列表 v2 持久化：启动不再自动扫描 Steam，只有显式“重新探测”才更新；
-  - 删除版本倒计时、Steam 目录提示；
-  - 添加实例菜单、移除“设为当前”、日志行对齐；
-  - 可选数据目录（存档 profile 固定在默认目录）；
-  - Hover Card 提示与页顶 Toast；
-  - BepInEx 仅 GitHub 最新稳定版 + 本地导入。
-- v0.5.0 的功能（作者已在 Linux 离屏渲染/编译检查，Windows 真机待确认）：
-  - 版本删除两步向导、存档复制/移动/保持、可选删除实例文件夹；
-  - 隐藏实例记录，刷新后不再复活；
-  - 重命名按钮脏检查、Enter/Esc、保存中禁用；
-  - Nexus 账号类型展示；
-  - 图片灯箱（方图完整显示、滚轮缩放、拖拽、Esc）；
-  - 设置页“游戏与版本”合并。
-- v0.4.2 的弹窗/遮罩/外观卡（作者已在 Linux 离屏渲染检查，Windows 真机待确认）：
-  - 弹窗背景改为可控 6px 模糊 + 180ms 淡入缩放；
-  - 游戏皮肤遮罩只覆盖页面行，不再盖住顶部启动栏；
-  - 启动器外观头部卡重排。
-- v0.4.1 的界面修复：
-  - 概览三张统计卡不再重叠；
-  - hero 版本卡不再被拉高，字号已放大；
-  - “当前”badge 已移到 BepInEx 状态之后；
-  - 已安装页按钮分组与 Mod 组工具栏；
-  - 弹窗改为居中圆角 + 背景压暗/模糊。
-- v0.4.1 的 Mod 组重构：
-  - 默认组初始化；
-  - 新建/重命名/保存当前/应用/删除；
-  - 未保存拦截与取消后恢复选中；
-  - 同名、空名、默认组保护。
-- v0.4.0 的存档隔离：
-  - **没有在真实 Windows 存档上执行过完整回归**；
-  - junction 创建、切换、回滚只在代码层审查过。
-- v0.4.0 的 BepInEx 来源入口和本地 zip 安装（未变）：
-  - 单元测试覆盖安装器；
-  - Windows UI 流程未完整回归。
+- 更新安装全流程（跨盘备份、失败恢复、更新后徽标清除、一键更新）。
+- BepInEx 卸载流程（两步确认、倒计时、运行中拦截、卸载后状态）。
+- 启动器自更新替换/重启（代码已实现，未在真实 Windows 上完成一次升级）。
+- 自绘标题栏在多 DPI、多屏、最大化/Snap Layouts 下的表现。
+- 启动等待 20 秒、350ms 进程扫描在真实 Steam/非 Steam 游戏上的表现。
 
 ### 最新产物
 
 ```text
-Release: ModificationsKnown-v0.6.1-win-x64.exe
-SHA-256: 49eb9164a065f6d8ec62d19a1a387b4cfb8416cafdfd8af3520707444273da85
-
-桌面:
-C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.6.1-win-x64.exe
+Release: ModificationsKnown-v0.7.0-beta-win-x64.exe
+SHA-256: aeba515098bd8f1318362efd9a664d85ba9093227351819b7c6adb90cb3d54f0
 ```
 
-桌面目录应只保留最新版；旧版本 exe 删除。当前 `Downloads` 里的 v0.1.0 不属于桌面发布目录，未动。
-
----
-
-## 2. 重要风险：存档隔离
-
-正式版与 Demo 共用：
+桌面交付目录：
 
 ```text
-%USERPROFILE%\AppData\LocalLow\Orsoniks\CasualtiesUnknown
+C:\Users\liuchunyan\Desktop\Modifications Known\
 ```
 
-存档为 `save.sv`，没有版本号字段。v0.4.0 在每次从 MK 启动前：
+配置文件备份（清理前）：
 
-1. 按游戏目录 hash 生成独立 profile：
-   `%APPDATA%\ModificationsKnown\save-profiles\<hash>\`
-2. 首次遇到真实存档目录时：
-   - 复制到 profile；
-   - 原目录移动到 `save-backups\<profile>-<timestamp>`；
-   - 创建 NTFS junction 指向 profile。
-3. 切换版本启动时重定向 junction。
-4. 真实目录和 profile 都已有文件时拒绝修改并阻止启动。
-5. junction 指向 MK 之外时拒绝修改。
-6. 创建/切换失败会尝试恢复，失败则阻止启动。
+```text
+C:\Users\liuchunyan\Desktop\MK-config-backup-20261115-1300.zip
+```
 
-### 必须注意
-
-- **不要在没有备份的情况下让测试者直接启动正式版/Demo。**
-- 第一次迁移会移动真实存档目录；虽然保留 `save-backups`，仍应先让用户复制一份 `CasualtiesUnknown`。
-- 从 MK 之外启动游戏时，游戏使用最后一次 MK 选中的 profile。
-- 游戏目录移动后会生成新的 profile；旧 profile 不会自动迁移。
-- 存档隔离只防止串档，不解决“旧存档没有版本字段、读入正式版走默认值”的游戏内部兼容问题。
-- `DirectoryInfo.LinkTarget` 对 junction 的读取、`Directory.Delete` 对 junction 的删除行为，需要在真实 Windows 上验证；不要只依赖单元测试。
-- 非 Windows 环境直接跳过隔离，不能作为 Windows 行为已验证的依据。
-
-### 建议验证顺序
-
-1. 复制一份可丢弃的 `CasualtiesUnknown` 存档目录；
-2. 用 Demo 启动，创建测试存档；
-3. 切正式版启动，确认不会看到 Demo 存档；
-4. 切回 Demo，确认原存档仍在；
-5. 检查 `save-profiles` 两个目录、`save-backups` 备份；
-6. 再测试 junction 创建失败/外部 junction 的拒绝路径。
+> 2026-11-15 已按要求删除当时整个 `%APPDATA%\ModificationsKnown`（设置、实例、来源、Mod 组、活动、缓存、日志、save-profiles）；游戏目录与 BepInEx 未动。备份 zip 中保留了当时的 `save-profiles`。
 
 ---
 
-> 统一搁置清单见 `docs/DEFERRED.md`；新手引导分析见 `docs/ONBOARDING_ANALYSIS.md`。
+## 2. 当前架构
 
-## 3. 当前功能和关键文件
+```text
+src/
+  ModificationsKnown.Core/           领域模型、接口、路径安全
+    Games/                           GameProfile, GameInstallation, launcher interfaces
+    Mods/                            InstalledMod, PackageManifest, IModManager/IModInstaller
+    Nexus/                           provider-neutral Nexus models
+    Settings/                        AppSettings
+    Network/                         IFileDownloader
+    Common/                          OperationResult, PathSafety, VersionText
 
-### 版本实例（Feat-3 方案 A）
+  ModificationsKnown.Infrastructure/ 实现
+    Games/                           Steam locator, GameLauncher
+    BepInEx/                         PE metadata, scanner, enable/disable/delete
+    Installation/                    ArchiveModInstaller, BepInExInstaller
+    Nexus/                           NexusModsClient
+    Network/                         streaming downloader
+    Storage/                         AppPaths, JSON settings, logger
+    Windows/                         NxmProtocolRegistrar
 
-- `GameInstallation.Alias`、`DisplayLabel`
-- `AppSettings.PreferredGamePath`
-- `GameInstanceStore`
-  - `%APPDATA%/ModificationsKnown/game-instances.json`
-- `GameContext`
-  - 合并检测结果和别名；
-  - `SelectByPath` / `Rename`；
-  - `PreferredGamePath` 优先，旧 `PreferredInstallationId` 回退。
-- `GameVersionRow`
-- `SettingsView` 的“版本管理”区。
+  ModificationsKnown.App/            Avalonia UI
+    ViewModels/                      Shell, Home, Discover, Installed, Saves, Settings, Themes
+    Views/                           XAML + 少量 code-behind（拖拽、焦点、滚动、对话框）
+    Services/                        GameContext, dialogs, thumbnails, package updates,
+                                     app updates, NXM flow, activity log
+    Theming/                         ThemePalette, ThemeService
+```
 
-### BepInEx 安装
+### 关键文件
 
-- `BepInExInstaller`
-  - 支持 zip/7z/rar 等 SharpCompress 格式；
-  - 校验 `BepInEx/core`、`winhttp.dll`；
-  - 复制前预检所有目标文件；
-  - 已存在 BepInEx 时拒绝覆盖。
-- `SettingsViewModel.InstallLoaderAsync`
-  - 本地压缩包选择；
-  - 安装后重新检测。
-- 来源入口：
-  - GitHub Releases；
-  - Thunderstore BepInExPack 搜索；
-  - Nexus BepInEx 搜索。
-- `docs/BEPINEX_SOURCES.md`
+- `ShellViewModel`：导航、启动/关闭、NXM 分发、Toast、设置深链、`ModsChanged` 通知。
+- `GameProcessMonitor`：按 exe 路径检测实例进程；启动后 350ms 快速轮询，最多 20 秒。
+- `DiscoverViewModel`：搜索/详情/下载/NXM/更新预检；403 文件页携带 `file_id` + `nmm=1`。
+- `InstalledViewModel`：扫描、启停、更新检查、单项/一键更新、BepInEx 状态。
+- `PackageUpdateService`：同盘暂存、可选跨卷备份、失败恢复。
+- `SettingsViewModel`：实例、BepInEx 安装/卸载、NXM 注册、API Key、启动器更新、深链焦点。
+- `AppUpdateService`：GitHub Releases API、版本比较、asset digest、SHA-256 下载校验。
+- `SaveIsolationService`：NTFS junction 存档隔离（用户已真机确认）。
+- `ThemePalettes` / `ThemeService`：苔原（默认）/ 日光 / 夜航。
 
-### Mod 组
+### 数据位置
 
-- `ModGroup`
-  - `Id`、`Name`、`EnabledPackageIds`、`CreatedAt`、`IsDefault`。
-- `ModGroupStore`
-  - `%APPDATA%/ModificationsKnown/mod-groups.json`
-  - 按游戏目录隔离。
-- `InstalledViewModel`
-  - 默认组自动创建；
-  - 新建组、重命名、保存当前、应用、删除；
-  - 默认组不可重命名/删除；
-  - 空名/重名拒绝。
-- 应用组复用 `SetEnabledAsync`，逐包执行，慢但可控。
+```text
+%APPDATA%\ModificationsKnown\
+  settings.json
+  game-instances.json          schema v2
+  hidden-instances.json
+  installed-sources.json
+  mod-groups.json
+  activity.json
+  themes/
+  save-profiles/
+  backups/
+  logs/
+  cache/
+```
 
-### 发现页 / Nexus
-
-- `DiscoverViewModel`
-  - 选择保持：ListBox `SelectedItem` OneWay，只有显式选择另一个模组才替换；
-  - 分类/搜索/翻页不清空右侧详情；
-  - 版本选择在“下载并安装”Flyout 中；
-  - `nmm=1` 链接；
-  - 旧版 v1 `file_id` 解析。
-- `NexusModsClient`
-  - v3 REST、v2 GraphQL、v1 NXM/validate/files；
-  - `Application-Name` 仍写死旧值 `ModificationsKnown`，版本头写死 `0.1.2`，**待修**。
-- `NxmProtocolRegistrar` / `SingleInstanceService`
-  - NXM 注册、单实例转发。
-
-### 文档
-
-- `docs/ARCHITECTURE.md`
-- `docs/NEXUS_API.md`
-- `docs/AUTO_UPDATE.md`
-- `docs/VERSION_MODEL.md`
-- `docs/BEPINEX_SOURCES.md`
-- `docs/SOURCE_AUDIT.md`
-- `docs/mockups/installed-items.png`
+`save-profiles` 固定在默认 AppData，不跟随自定义数据目录移动。
 
 ---
 
-## 4. 待处理事项
+## 3. 本轮（0.7.0-beta）主要改动
 
-### P0 / 必须先做
+### 模组更新
 
-1. **Windows 真机验证存档隔离**
-   - 这是唯一可能破坏玩家存档的功能；
-   - 先备份，再按第 2 节顺序测试；
-   - 若 junction 行为与预期不符，优先修 `SaveIsolationService`，不要发布新版本。
+- 已安装页“检查更新”：遍历 Nexus 全部文件/全部版本，取最高文件版本，修复“页面版本 vs 文件版本”不一致。
+- 单项更新 / 一键更新；更新前先比较版本。
+- 旧包先移动到同盘暂存目录；可选复制备份到 `backups`；跨卷安全；失败恢复。
+- 更新完成后通知已安装页清除徽标与摘要，无需手动复查。
 
-2. **验证 v0.4.0 别名链路**
-   - 设置改别名 → 顶部下拉栏、首页标题、当前版本标签是否同步；
-   - 重启后是否持久化；
-   - 不要只改 `Profile.DisplayName`，统一使用 `DisplayLabel`。
+### NXM / 免费账号
 
-3. **验证 R4 布局**
-   - “当前”badge 是否仍被拉伸；
-   - 概览右侧是否与 hero 同高；
-   - Nexus 卡片是否还有空白；
-   - 如果仍异常，需要实际截图 + 控件树，不要继续猜样式。
+- 下载/更新前检测“非 Premium + 未注册 NXM”，弹提醒框，带“NXM 是什么？”说明。
+- 点“去注册 NXM”复用设置页注册流程（含覆盖确认/备份）。
+- 403 页始终带 `nmm=1`，尽量解析 legacy `file_id`。
+- NXM 到达时不再强制跳转“模组发现”。
+
+### 实例 / BepInEx
+
+- 卸载 BepInEx：两步确认 + 5 秒倒计时；删除 loader 与所有模组/配置。
+- 首页“安装 BepInEx”跳到设置并高亮当前实例 `⋯`。
+- 首页“注册 NXM”跳到设置 NXM 小节。
+- 非 Steam 实例直接启动自身 exe；找不到 exe 时报错，不回退 `steam://`。
+
+### 界面
+
+- 默认主题恢复苔原；日光/夜航保留。
+- hazard 图标：exe / 窗口 / 标题栏；BETA 徽标。
+- 长标题不遮 Demo 提示；卡片名称行内布局。
+- 关闭游戏按钮深红→亮红 hover；修复启动按钮发黑。
+- 更新摘要成功后隐藏。
+- README 重做，加入 5 张截图（`docs/images/`）。
+
+### 启动器更新
+
+- 设置页“检查更新/下载并安装”。
+- GitHub `/releases/latest` + asset digest。
+- 下载后 SHA-256 必须匹配；无 digest 不自动安装。
+- PowerShell 等待进程退出→替换 exe→重启。
+- Beta 为 pre-release，稳定版通道不会自动推送。
+
+---
+
+## 4. 待处理
+
+### P0
+
+1. **更新安装真机回归**  
+   在 Windows 上实际更新一个 Nexus 包：旧包备份、跨盘、失败恢复、徽标清除、一键更新多项。
+2. **BepInEx 卸载真机回归**  
+   两步确认、5 秒倒计时、运行中拦截、卸载后实例状态与磁盘实际一致。
+3. **存档隔离回归已完成**，不要重新破坏；改动 `SaveIsolationService` 前先备份。
 
 ### P1
 
-4. **Mod 组流程回归**
-   - 默认组是否首次自动出现；
-   - 新建/重命名/保存当前/应用/删除；
-   - 同名/空名/默认组保护；
-   - 切换版本后组列表隔离；
-   - 组应用后未在组内的新模组会被禁用，是否符合预期需和用户确认。
-
-5. **BepInEx 来源与安装**
-   - 三个来源入口是否都能打开；
-   - 本地 zip 是否能安装；
-   - 已存在 loader 的目录是否拒绝；
-   - 安装后 `GameVersions` 状态是否刷新。
-
-6. **更新检测仍未实现**
-   - 手动 Nexus 关联已持久化；
-   - 但没有任何“检查更新/可更新”逻辑；
-   - 不要声称更新检测已完成。
+- 别名链路真机确认（顶部下拉/首页/设置/重启持久化）。
+- Mod 组完整流程（默认组、新建/重命名/保存/应用/删除、切换拦截）。
+- BepInEx 安装：GitHub 最新稳定版适配、本地 zip、已存在拒绝、状态刷新。
+- 灯箱滚轮/拖拽/DPI。
+- 缩略图与菜单、Toast、窄窗口、自绘标题栏多 DPI。
+- 启动等待 20 秒与提权进程检测。
+- 免费账号更新回退页参数与一键更新跳过行为。
+- 启动器自更新替换/重启/失败表现。
 
 ### P2
 
-7. **版本列表不是 Steam 全历史**
-   - 目前仅列检测到的安装目录；
-   - 要列未安装的历史版本，需要 Steam depot/manifest 数据源。
+- 启动器更新：Authenticode、稳定/预览双通道、差分、失败自动回滚。
+- 备份自动清理（最近 N 份）。
+- Steam 全历史版本列表。
+- `NexusModsClient` 的 `Application-Version` 仍写死 `0.1.2`，待改为程序集版本。
+- 存档 profile 孤儿清理（目录移动/在 MK 外删除）。
+- Mod 组“取消本次修改”回滚（按用户要求暂不做）。
+- 更新前用户修改文件检测（当前整体替换）。
+- 依赖图/冲突检测/崩溃归因/游戏内皮肤。
+- 交互式新手导览（动态清单已做，遮罩导览未做）。
+- 数据目录迁移完整回归、设置子路由/搜索。
 
-8. **Nexus 应用头信息**
-   - `NexusModsClient` 里 `Application-Version` 还是 `0.1.2`；
-   - 应改为程序集版本或统一常量，避免 Nexus 侧版本归因错误。
-
-9. **存档 profile 孤儿清理**
-   - 游戏目录移动/删除后，旧 profile 仍保留；
-   - 没有清理/迁移 UI。
-
-10. **组编辑的“取消”语义**
-    - 当前切换组会重置未保存的名称草稿；
-    - 没有独立“取消编辑”按钮；
-    - 如果用户需要更明确的编辑模式，可后续加。
-
-### 架构前置（不要贸然做）
-
-- `docs/SOURCE_AUDIT.md` 已给出 Nexus 强耦合点：
-  - 搜索、详情、文件、下载、认证强依赖；
-  - 安装/扫描/启停是纯逻辑；
-  - 先做来源中立 DTO + `NexusSourceAdapter`，不要直接大改 UI。
+完整列表见 `docs/DEFERRED.md`。
 
 ---
 
 ## 5. 构建 / 发布
 
-### 构建环境
+### 环境
 
-WSL 使用：
+- WSL + `~/.dsh/tmp/dotnet8/dotnet`
+- 必须设置 `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`
+- Windows 发布需 `EnableWindowsTargeting=true`
+
+### 构建
 
 ```bash
-DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
-~/.dsh/tmp/dotnet8/dotnet build ModificationsKnown.sln -nologo
+cd /home/unauth-hope/projects/modifications-known
+DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 ~/.dsh/tmp/dotnet8/dotnet build ModificationsKnown.sln -nologo
 ```
 
-测试：
+### 测试
 
 ```bash
-DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
-~/.dsh/tmp/dotnet8/dotnet test ModificationsKnown.sln -nologo
+DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 ~/.dsh/tmp/dotnet8/dotnet test ModificationsKnown.sln -nologo
 ```
 
-Windows 单文件发布：
+### 发布单文件
 
 ```bash
-DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
-~/.dsh/tmp/dotnet8/dotnet publish \
+DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 ~/.dsh/tmp/dotnet8/dotnet publish \
   src/ModificationsKnown.App/ModificationsKnown.App.csproj \
   -c Release -r win-x64 --self-contained true \
   -p:PublishSingleFile=true \
@@ -298,102 +240,129 @@ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
   -o artifacts/win-x64
 ```
 
-### 发布流程
+### 复制到桌面
 
-1. 更新 `Directory.Build.props` 版本；
-2. 更新 `CHANGELOG.md` / `README.md`；
-3. 构建、测试、发布；
-4. `cp artifacts/win-x64/ModificationsKnown.exe artifacts/ModificationsKnown-vX.Y.Z-win-x64.exe`；
-5. 计算 SHA-256；
-6. commit + tag + push；
-7. `gh release create` + upload；
-8. 停止桌面正在运行的旧 exe；
-9. 复制新 exe 到：
-   `C:\Users\liuchunyan\Desktop\Modifications Known\`
-10. 删除同目录旧 `ModificationsKnown-v*-win-x64.exe`；
-11. 确认桌面目录只剩当前版本。
+```bash
+cp artifacts/win-x64/ModificationsKnown.exe \
+  "artifacts/ModificationsKnown-v0.7.0-beta-win-x64.exe"
+sha256sum "artifacts/ModificationsKnown-v0.7.0-beta-win-x64.exe"
+
+cp "artifacts/ModificationsKnown-v0.7.0-beta-win-x64.exe" \
+  "/mnt/c/Users/liuchunyan/Desktop/Modifications Known/"
+```
+
+### 发布 GitHub
+
+```bash
+git add -A
+git commit -m "..."
+git push origin main
+
+gh release create v0.7.0-beta \
+  "artifacts/ModificationsKnown-v0.7.0-beta-win-x64.exe" \
+  --target main \
+  --title "已知改装 v0.7.0 Beta" \
+  --notes-file /path/to/notes.md \
+  --prerelease
+```
 
 ### 注意
 
-- 不要用 `pkill -f 'ModificationsKnown.dll'` 直接杀，容易误杀当前 bash 包装进程；用保存的 PID。
-- 不要读取/输出用户 API Key、NXM key；日志里出现 `key=...` 必须脱敏。
-- 桌面复制前先 `test -f` 校验源路径，避免相对路径错误。
-- 发布前先确认 v0.4.0 的存档隔离已经过用户验证；否则不要继续发布。
+- **不要主动启动 GUI**；用户明确要求静默构建，由用户自己运行预览。
+- 不要抢焦点；不要自动打开浏览器/窗口。
+- 发布前确认桌面 exe 未被占用；C 盘空间很紧，先清理旧 preview。
+- 不要在日志/回复中输出 API Key、NXM key；日志出现 `key=` 必须脱敏。
+- 破坏性操作（删除配置、存档、实例、BepInEx）先确认/备份；用户明确要求删除时才执行。
 
 ---
 
-## 6. 重要设计约束
+## 6. 每轮输出要求（必须遵守）
 
-- **Apache-2.0**，.NET 8 / Avalonia 11。
-- UI 文本中文。
-- 颜色/背景通过 `ThemePalette` 变量；不要硬编码 Windows 系统色。
-- 系统强调色必须继续覆盖 `SystemAccentColor` 等 Fluent 资源。
-- NXM 只通过注册协议、`--nxm` 或单实例转发进入，不做粘贴框。
-- 免费账号下载仍受 Nexus NXM 授权约束，不能绕过。
-- 不内置个人 API Key；每用户自己的 Key / 未来 SSO。
-- 版本管理使用方案 A：版本即实例、组快照按实例隔离。
-- 修改组/启用状态时优先复用 `SetEnabledAsync`，不要直接改文件名绕过清单。
-- 存档隔离是 P0 风险功能，默认不要在测试前删除备份。
+每轮修改/交付后，最终回复至少包含以下内容：
+
+1. **本轮改动**  
+   按“问题 → 原因 → 修改”说明，不要只列文件名。
+
+2. **涉及文件**  
+   列出主要修改文件；必要时按领域分组。
+
+3. **构建与测试结果**  
+   `0 warning / 0 error`；测试通过数量；若未跑测试要说明原因。
+
+4. **可执行的 Console 启动命令**  
+   必须给出用户可直接复制运行的完整命令，例如：
+
+   ```powershell
+   & "C:\Users\liuchunyan\Desktop\Modifications Known\ModificationsKnown-v0.7.0-beta-win-x64.exe" --console
+   ```
+
+   如果本轮产物文件名不同，替换为实际文件名；不要只写 `dotnet run`。
+
+5. **预览/产物信息**  
+   - 本地 exe 路径；
+   - SHA-256；
+   - git commit；
+   - 是否已 tag / Release；
+   - 是否复制到桌面；
+   - 是否启动过 GUI（默认“未启动”）。
+
+6. **验收步骤**  
+   给用户 3–6 条可操作验证项，覆盖本轮改动和风险点。
+
+7. **风险/限制**  
+   明确哪些只在 Linux 编译/离屏验证，哪些需要 Windows 真机；不要声称未验证的功能“已通过”。
+
+8. **搁置事项**  
+   每次交付末尾列出当前 P0/P1/P2 中仍未完成/被搁置的事项；已完成项从 `docs/DEFERRED.md` 删除。
+
+9. **文档同步**  
+   修改功能后同步 `README.md`、`CHANGELOG.md`、`docs/AUTO_UPDATE.md`、`docs/VERSION_MODEL.md`、`docs/DEFERRED.md` 中受影响的部分；不要留下“未实现更新检测”这类过期描述。
+
+10. **语言与风格**  
+    中文、直接、可执行；先给结论，再给细节；不写营销式空话。
 
 ---
 
 ## 7. 新会话 Prompt（可直接复制）
 
 ```text
-你接手《已知改装 / Modifications Known》项目。请先阅读仓库根目录 HANDOFF.md、AGENTS.md 和 docs/，再开始任何修改。
+你接手《已知改装 / Modifications Known》项目。先阅读仓库根目录 HANDOFF.md、README.md、CHANGELOG.md 和 docs/（尤其 DEFERRED.md、AUTO_UPDATE.md、VERSION_MODEL.md），再开始修改。
 
 项目：/home/unauth-hope/projects/modifications-known
 远程：https://github.com/HOPE-LGNF/modifications-known
-当前版本：0.4.1
-最新 Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.6.1
-最新功能提交：7a4b213 fix: repair overview layout, dialog overlays and mod-group toolbar
+当前版本：0.7.0-beta
+Beta Release：https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.7.0-beta
 桌面交付目录：C:\Users\liuchunyan\Desktop\Modifications Known
+配置备份：C:\Users\liuchunyan\Desktop\MK-config-backup-20261115-1300.zip
 
-先不要改代码，先完成 HANDOFF.md 第 4 节的验证顺序，尤其是：
-1. Windows 真实存档隔离（P0，可能破坏存档，必须先备份并让用户确认）；
-2. 别名修改后顶部启动下拉栏/首页/当前版本是否同步；
-3. R4 的 badge、概览右侧高度、Nexus 卡片空白；
-4. Mod 组默认组与新建/重命名/保存当前/应用/删除流程；
-5. BepInEx 三个来源入口与本地 zip 安装。
+当前重点：
+1. Windows 真机回归更新安装（同盘暂存/跨卷备份/失败恢复/徽标清除/一键更新）；
+2. Windows 真机回归 BepInEx 卸载（两步确认/倒计时/运行中拦截）；
+3. 启动器自更新替换/重启与失败表现；
+4. 多 DPI/多屏标题栏、启动等待与进程检测；
+5. 免费账号更新回退页 file_id/nmm=1 与一键更新跳过行为。
 
-验证时向用户索取截图/日志；不要只凭代码猜测 UI。若仍需改 UI，先说明实际控件树或布局根因。
+请遵守：
+- 不要主动启动 GUI，不要抢焦点；只构建/测试/发布，用户自己运行。
+- 每轮最终输出必须包含：改动、涉及文件、构建/测试结果、可直接执行的完整 --console 命令、预览路径/SHA/commit、验收步骤、风险、搁置事项。
+- 破坏性操作先确认/备份；不要读取或输出 API Key/NXM key；日志中 key 必须脱敏。
+- 中文 UI；颜色走 ThemePalette；更新安装复用 PackageUpdateService 的暂存/备份/恢复语义。
+- 修改功能后同步 README/CHANGELOG/相关 docs，不要留下过期描述。
 
-继续开发时请遵守：
-- .NET 8 + Avalonia，Apache-2.0；
-- UI 中文；
-- 颜色走 ThemePalette，不硬编码 Windows 系统色；
-- 不读取或输出 API Key/NXM key，日志中出现 key 必须脱敏；
-- 免费 Nexus 下载走 NXM，不绕过；
-- 版本管理维持方案 A：版本即实例、Mod 组按实例快照；
-- 修改启用状态复用 SetEnabledAsync，不直接破坏清单；
-- 存档隔离测试前必须备份，junction 行为必须在真实 Windows 上确认；
-- 不要贸然重构 Nexus 搜索/下载层，先按 docs/SOURCE_AUDIT.md 的边界做小步解耦；
-- 更新版本后：测试、构建、发布 Release、复制 exe 到桌面并删除旧版。
-
-WSL 构建使用：
+WSL 构建：
 DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 ~/.dsh/tmp/dotnet8/dotnet build ModificationsKnown.sln -nologo
 DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 ~/.dsh/tmp/dotnet8/dotnet test ModificationsKnown.sln -nologo
-
-当前已知未完成项：
-- 存档隔离尚未真机回归；
-- R4 布局/别名/Mod 组流程待用户确认；
-- 更新检测未实现；
-- 版本列表不是 Steam 全历史；
-- NexusModsClient 的 Application-Version 仍为 0.1.2；
-- 存档 profile 孤儿清理未做。
-
-请用专业、直接的中文汇报：每项给问题定位、修改、风险、验证步骤；涉及数据/存档的操作先确认再执行。
 ```
 
 ---
 
-## 8. 交接结论
+## 8. 结论
 
-当前代码已经具备“发现 → 下载/安装 → 清单管理 → 启用/禁用 → 版本实例 → Mod 组 → 存档隔离”的完整主链路，v0.4.1 已修复概览重叠、badge 顺序、已安装页按钮和弹窗样式，并重构 Mod 组工具栏；**存档隔离仍只完成了 junction 创建/读取的间接确认，跨版本互不可见仍需真机回归**。
+0.7.0-beta 已把“发现 → 安装 → 启停 → 更新 → 备份/回滚 → 卸载 BepInEx → 启动器自更新”串成完整主链路，并且已有公开 Beta Release。
 
-下一会话最重要的不是继续加功能，而是：
+下一阶段最重要的不是继续加功能，而是：
 
-1. 先验证存档不会串档；
-2. 再确认别名和布局；
-3. 再回归 Mod 组；
-4. 最后决定是否开始更新检测和来源抽象。
+1. 在真实 Windows 上完成更新安装与 BepInEx 卸载回归；
+2. 验证自更新替换与失败回滚；
+3. 处理多 DPI/多屏与提权进程检测；
+4. 再决定是否做依赖图、崩溃归因、交互导览和稳定/预览双通道。
