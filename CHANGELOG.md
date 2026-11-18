@@ -1,5 +1,93 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Unmanaged saves can be handed to any registered copy: the dialog lists every
+  installation with its group count, a copy without groups gets 「默认」 and a
+  copy with groups gets 「导入的存档」 (numbered). The active instance follows
+  the receiving copy, and a real folder is kept in `save-backups`.
+- The saves page names the group that owns the global LocalLow link once at
+  the top and shows 选定：<group> per installation; each copy's card shows that
+  chosen group, and 「待应用」 only appears after choosing a different one.
+- A save link whose target was deleted is rebuilt instead of being treated as
+  “owned by another installation”, and an explicit instance switch may take the
+  link over when that copy has no group yet.
+- Switching the active instance moves the save group with it: the live link
+  follows that instance's last chosen group, the first activation creates a
+  「默认」 group, unmanaged saves still ask before anything is touched, and the
+  instance selector is locked while a game runs.
+- Save groups: multiple complete LocalLow profiles per game directory, with
+  create/clone/rename/select/apply/delete, immediate junction switching, ZIP
+  export and validated import. The first group (created, migrated or imported)
+  becomes the live group immediately — unless the live link currently belongs to
+  another installation, in which case the group is created without taking it
+  over; an explicit Apply still switches between installations.
+- Real save-layout reader: QoL `slot_N.sv` + `slot_N.sv.meta` +
+  `qol_slots.json` (`Slots` array, `Names` map), vanilla `save.sv`, and generic
+  cards for unclaimed files. Shows empty declared slots, layer/difficulty/
+  play-time facts and the most recent save per group.
+- Slot cards show the chosen character (0/1/2 → Experiment/Milky/Dune,
+  out-of-range values keep their raw number), and the layer chip now reads
+  “层级”. The group summary includes the character name as well.
+- Typed difficulty matching against the game's real presets (51 keys from
+  `RunSettings.presets`; official labels 艰难/轻松/天堂/荒凉/未植入芯片/无尽).
+  Numbers compare with a tolerance, booleans/dropdowns exactly; a save must carry
+  every key — a missing key (older save format) or an unknown key (newer game or
+  mod) shows “自定义” rather than a guess.
+
+### Changed
+
+- Deleting a save group moves it to the Windows recycle bin; removing an
+  instance no longer copies, moves or deletes save groups.
+- Save-group writes take a shared lock and re-probe the game process first; an
+  unreadable process list is treated as “running” (fail closed).
+- The saves page disables every save-write control while any installation runs
+  the game, and process polls only flip the running state instead of rebuilding
+  the page.
+
+### Fixed
+- The empty-slot chip list is gone (QoL can append slots later), and the
+  “选择存档组” button uses the primary style in a smaller size; the live group
+  reads “当前应用” and stays disabled while nothing is pending.
+- The live group's row becomes a real “选择存档组” button while another group is
+  pending, so a pending choice can be cancelled without applying it; leaving the
+  saves page drops pending selections and expanded blocks.
+- The pending row's “已选择” button is disabled like the live row's “当前应用”,
+  and both keep their tooltip while disabled.
+
+- Expand chevrons are gone: both the installation header and save-group rows
+  expand on a click anywhere in the card, with a hover tint but no button-style
+  press flash or sink.
+
+- Save-group rows no longer select on click: clicking anywhere in the card
+  (except slot cards, the menu and the select button) expands it, and only one
+  group stays open at a time. Selection is the “选择存档组” button's job.
+
+- Slot facts use 12px chips on a darker `Surface` background, and the expand
+  chevrons are 34px buttons drawn with a Path instead of a text glyph, so the
+  whole triangle is a real hit target.
+
+- Save cards follow the app theme again (the 12 procedural layer gradients are
+  gone) and list depth first without repeating the `LocationName` prefix.
+- `mp_save\` (multiplayer session data) is skipped when reading a group, so
+  “最近保存” no longer reports that folder's own `save.sv`.
+- The save-group row no longer repeats “最近：…” under a summary that already
+  contains the most recent save; the expand chevron is back on the left.
+- The `isMercRun` “雇佣兵” badge is no longer shown on slot cards.
+
+
+- Junctions are created with `DeviceIoControl` instead of `cmd.exe /c mklink`,
+  so `%VAR%`, `&`, quotes and Unicode in paths stay literal.
+- A failed rollback no longer claims “已恢复原链接”: the failing stage, the
+  error and the expected target are reported instead.
+- Export refuses a target inside the source group, so a previous archive can
+  never be re-packaged into the next one.
+- ZIP and GZip input is bounded (entry count, per-file and total expansion,
+  compression ratio, decompressed JSON size); over-limit input fails safely and
+  cleans staging.
+
 ## [0.7.0] - 2026-11-14
 
 ### Added
