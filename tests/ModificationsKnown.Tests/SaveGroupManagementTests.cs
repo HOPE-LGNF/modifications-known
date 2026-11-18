@@ -282,6 +282,24 @@ public sealed class SaveGroupManagementTests
     }
 
     [Fact]
+    public async Task CreateEmpty_RejectsWhatTheSuggestionStrips_AndAcceptsTheSuggestion()
+    {
+        using var context = new SaveGroupTestContext();
+        var init = await context.Service.InitializeAsync(context.Installation);
+        Assert.True(init.Success, init.Message);
+
+        var rejected = await context.Service.CreateEmptyAsync(context.Installation, "a/b:c");
+        Assert.False(rejected.Success);
+        Assert.Contains("特殊字符", rejected.Message);
+
+        var suggestion = context.Service.SuggestGroupName(context.Installation, "a/b:c");
+        var created = await context.Service.CreateEmptyAsync(context.Installation, suggestion);
+
+        Assert.True(created.Success, created.Message);
+        Assert.Equal(suggestion, created.Group?.Name);
+    }
+
+    [Fact]
     public async Task MultipleInstallations_KeepGroupsAndSelectionIndependent()
     {
         using var context = new SaveGroupTestContext();

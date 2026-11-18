@@ -37,6 +37,22 @@ public static class SaveGroupFormat
 
     public static string NormalizeName(string? name) => (name ?? string.Empty).Trim();
 
+    /// <summary>
+    /// The single invalid-character policy shared by validation and by the
+    /// automatic cleanup of suggested names. The platform's own invalid set is
+    /// always included, so a name accepted on Linux is still usable as a Windows
+    /// directory name.
+    /// </summary>
+    private static readonly HashSet<char> InvalidNameCharacters = BuildInvalidNameCharacters();
+
+    private static HashSet<char> BuildInvalidNameCharacters() =>
+        Path.GetInvalidFileNameChars()
+            .Concat(['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
+            .ToHashSet();
+
+    public static bool IsInvalidNameCharacter(char character) =>
+        char.IsControl(character) || InvalidNameCharacters.Contains(character);
+
     /// <summary>Returns a user-facing error, or null when the name is usable.</summary>
     public static string? ValidateName(string? name)
     {
@@ -44,14 +60,32 @@ public static class SaveGroupFormat
         if (trimmed.Length == 0) return "存档组名称不能为空。";
         if (trimmed.Length > MaxNameLength) return $"存档组名称不能超过 {MaxNameLength} 个字符。";
         if (trimmed is "." or "..") return "存档组名称无效。";
-
-        var invalid = Path.GetInvalidFileNameChars()
-            .Concat(['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
-            .ToHashSet();
-        if (trimmed.Any(character => char.IsControl(character) || invalid.Contains(character)))
-            return "存档组名称不能包含路径或特殊字符。";
+        if (trimmed.Any(IsInvalidNameCharacter)) return "存档组名称不能包含路径或特殊字符。";
 
         return null;
+    }
+
+    /// <summary>Strips every character <see cref="ValidateName"/> rejects and
+    /// enforces the length limit; returns an empty string when nothing usable is
+    /// left. Both paths must use this so a suggestion can never contain a
+    /// character the service would then refuse.</summary>
+    public static string SanitizeName(string? name)
+    {
+        var trimmed = NormalizeName(name);
+        if (trimmed.Length == 0) return string.Empty;
+
+        var builder = new StringBuilder(trimmed.Length);
+        foreach (var character in trimmed)
+        {
+            if (IsInvalidNameCharacter(character)) continue;
+            builder.Append(character);
+        }
+
+        var result = builder.ToString().Trim();
+        if (result is "." or "..") return string.Empty;
+        if (result.Length > MaxNameLength)
+            result = result[..MaxNameLength].TrimEnd();
+        return result;
     }
 
     public static bool IsManifestFile(string fileName) =>

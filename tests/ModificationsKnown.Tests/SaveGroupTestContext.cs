@@ -30,6 +30,12 @@ internal sealed class FakeSaveLinker : ISaveLinker
         return false;
     }
 
+    /// <summary>Records a link target without creating the directory, so a test
+    /// can put files at the link path: the fake link is a plain directory, so
+    /// those files would belong to the target in a real junction.</summary>
+    public void SetTarget(string linkPath, string targetPath) =>
+        Targets[Normalize(linkPath)] = Normalize(targetPath);
+
     public bool CreateJunction(string linkPath, string targetPath, out string error)
     {
         if (FailNextCreate > 0)
@@ -54,7 +60,14 @@ internal sealed class FakeSaveLinker : ISaveLinker
         }
 
         Targets.Remove(Normalize(linkPath));
-        if (Directory.Exists(linkPath)) Directory.Delete(linkPath, recursive: false);
+        if (Directory.Exists(linkPath))
+        {
+            // Removing a real junction never touches the target's data; the
+            // fake's link is a plain directory, so anything placed at the link
+            // path in a test is link-side content and goes with it.
+            Directory.Delete(linkPath, recursive: true);
+        }
+
         error = string.Empty;
         return true;
     }

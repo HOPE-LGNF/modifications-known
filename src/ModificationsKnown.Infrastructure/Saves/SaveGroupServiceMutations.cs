@@ -159,7 +159,7 @@ public sealed partial class SaveGroupService
         lock (_gate)
         {
             var groups = Reconcile(installation, persist: false).Groups;
-            var baseName = SanitizeName(desiredName);
+            var baseName = SaveGroupFormat.SanitizeName(desiredName);
             if (baseName.Length == 0) baseName = "新存档组";
 
             var candidate = baseName;
@@ -186,6 +186,7 @@ public sealed partial class SaveGroupService
 
         var isFirst = Reconcile(installation, persist: true).Groups.Count == 0;
         var staging = NewStagingDirectory(out var groupId);
+        var live = _options.LiveSaveDirectory;
         SaveGroup? group = null;
         try
         {
@@ -205,12 +206,25 @@ public sealed partial class SaveGroupService
                         group);
                 }
 
-                var applied = SwitchLiveLink(group, _options.LiveSaveDirectory);
+                var applied = SwitchLiveLink(group, live);
                 if (!applied.Success)
                 {
-                    RollbackGroup(installation, group);
-                    _options.Logger?.Warn($"首个存档组创建后切换链接失败：{applied.Message}");
-                    return Fail($"创建存档组失败，已回滚：{applied.Message}");
+                    // One logical operation: discard the empty group only when
+                    // the previous live state is confirmed and nothing points at
+                    // it; otherwise keep it for inspection.
+                    if (applied.PreviousStateIntact && CanDiscardGroup(live, group))
+                    {
+                        RollbackGroup(installation, group);
+                        _options.Logger?.Warn($"首个存档组创建后切换链接失败：{applied.Message}");
+                        return Fail($"创建存档组失败，已回滚：{applied.Message}");
+                    }
+
+                    _options.Logger?.Warn($"首个存档组创建后切换链接失败（新组保留）：{applied.Message}");
+                    return new SaveGroupOperationResult(
+                        false,
+                        $"已创建空存档组「{normalized}」，但未能应用为当前存档：{applied.Message}" +
+                        $"该组保留在 {group.DirectoryPath}；请手动检查当前存档链接后再决定是否删除。",
+                        group);
                 }
 
                 return new SaveGroupOperationResult(
@@ -227,8 +241,16 @@ public sealed partial class SaveGroupService
         catch (Exception exception)
         {
             DeleteDirectoryQuietly(staging);
-            if (group is not null) RollbackGroup(installation, group);
             _options.Logger?.Warn($"创建存档组失败：{exception.Message}");
+            if (group is not null && !CanDiscardGroup(live, group))
+            {
+                // The live link might still point at this empty group, so it may
+                // not be deleted: report the kept group instead.
+                return Fail($"创建存档组失败：{exception.Message}；新组「{group.Name}」保留在 {group.DirectoryPath}，" +
+                            "请手动检查当前存档链接。");
+            }
+
+            if (group is not null) RollbackGroup(installation, group);
             return Fail($"创建存档组失败：{exception.Message}");
         }
     }
@@ -315,9 +337,7 @@ public sealed partial class SaveGroupService
                 SaveGroupManifestStore.Write(group.DirectoryPath, manifest);
 
                 var catalog = _catalog.Load();
-                var entry = catalog.Installations.FirstOrDefault(candidate =>
-                    string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
-                        StringComparison.OrdinalIgnoreCase));
+                var entry = FindCatalogEntry(catalog, installation);
                 var record = entry?.Groups.FirstOrDefault(candidate => candidate.Id == groupId);
                 if (record is null)
                     throw new InvalidOperationException("存档组索引中找不到该组，请刷新后重试。");
@@ -353,9 +373,7 @@ public sealed partial class SaveGroupService
                 return Fail("要选择的存档组不存在，或不属于当前游戏目录。");
 
             var catalog = _catalog.Load();
-            var entry = catalog.Installations.FirstOrDefault(candidate =>
-                string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
-                    StringComparison.OrdinalIgnoreCase));
+            var entry = FindCatalogEntry(catalog, installation);
             if (entry is null)
                 return Fail("存档组索引缺失，请刷新后重试。");
 
@@ -414,29 +432,6 @@ public sealed partial class SaveGroupService
         return groups.Any(group =>
             group.Id != exceptGroupId
             && string.Equals(group.Name.Trim(), trimmed, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string SanitizeName(string? name)
-    {
-        var trimmed = SaveGroupFormat.NormalizeName(name);
-        if (trimmed.Length == 0) return string.Empty;
-
-        var invalid = Path.GetInvalidFileNameChars()
-            .Concat(['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
-            .ToHashSet();
-
-        var builder = new System.Text.StringBuilder(trimmed.Length);
-        foreach (var character in trimmed)
-        {
-            if (char.IsControl(character) || invalid.Contains(character)) continue;
-            builder.Append(character);
-        }
-
-        var result = builder.ToString().Trim();
-        if (result is "." or "..") return string.Empty;
-        if (result.Length > SaveGroupFormat.MaxNameLength)
-            result = result[..SaveGroupFormat.MaxNameLength].TrimEnd();
-        return result;
     }
 
     private void TryRestoreManifestName(string groupDirectory, SaveGroupManifest manifest, string name)

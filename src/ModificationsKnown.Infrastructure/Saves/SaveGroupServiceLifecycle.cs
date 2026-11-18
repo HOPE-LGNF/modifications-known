@@ -242,15 +242,12 @@ public sealed partial class SaveGroupService
     {
         lock (_writeGate)
         {
-            var running = ProbeRunningState(installation);
-            if (running != GameRunningState.NotRunning)
-            {
-                return new SaveGroupActivationResult(
-                    SaveGroupActivationState.RunningLocked,
-                    running == GameRunningState.Running
-                        ? "游戏正在运行；请先关闭游戏再切换存档组。"
-                        : "无法确认游戏是否正在运行（进程信息不可读）；为避免损坏存档，未切换存档组。");
-            }
+            var blocked = RunningBlock(
+                installation,
+                () => "游戏正在运行；请先关闭游戏再切换存档组。",
+                () => "无法确认游戏是否正在运行（进程信息不可读）；为避免损坏存档，未切换存档组。");
+            if (blocked is not null)
+                return new SaveGroupActivationResult(SaveGroupActivationState.RunningLocked, blocked);
 
             var live = _options.LiveSaveDirectory;
             try
@@ -325,9 +322,7 @@ public sealed partial class SaveGroupService
                     try
                     {
                         var catalog = _catalog.Load();
-                        var catalogEntry = catalog.Installations.FirstOrDefault(candidate =>
-                            string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
-                                StringComparison.OrdinalIgnoreCase));
+                        var catalogEntry = FindCatalogEntry(catalog, installation);
                         if (catalogEntry is null)
                             throw new InvalidOperationException("存档组索引缺失，请刷新后重试。");
 
@@ -415,9 +410,7 @@ public sealed partial class SaveGroupService
         try
         {
             var catalog = _catalog.Load();
-            var entry = catalog.Installations.FirstOrDefault(candidate =>
-                string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
-                    StringComparison.OrdinalIgnoreCase));
+            var entry = FindCatalogEntry(catalog, installation);
             if (entry is null)
                 throw new InvalidOperationException("存档组索引缺失，请刷新后重试。");
 

@@ -141,9 +141,7 @@ public sealed partial class SaveGroupService
         try
         {
             var catalog = _catalog.Load();
-            var entry = catalog.Installations.FirstOrDefault(candidate =>
-                string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
-                    StringComparison.OrdinalIgnoreCase));
+            var entry = FindCatalogEntry(catalog, installation);
             if (entry is null) return;
 
             entry.Groups.RemoveAll(record => record.Id == group.Id);
@@ -155,6 +153,17 @@ public sealed partial class SaveGroupService
         {
             _options.Logger?.Warn($"回滚存档组索引失败：{exception.Message}");
         }
+    }
+
+    /// <summary>The catalog entry for an installation, or null when the index has
+    /// no record for it (a scan rebuilds it from the manifests).</summary>
+    private SaveGroupInstallationEntry? FindCatalogEntry(
+        SaveGroupCatalog catalog,
+        GameInstallation installation)
+    {
+        var key = GetInstallationKey(installation);
+        return catalog.Installations.FirstOrDefault(candidate =>
+            string.Equals(candidate.InstallationKey, key, StringComparison.OrdinalIgnoreCase));
     }
 
     private IReadOnlyList<SaveGroup> GroupListAfterCommit(GameInstallation installation)
@@ -171,8 +180,7 @@ public sealed partial class SaveGroupService
         var scanned = _scanner.Scan(key);
 
         var catalog = _catalog.Load();
-        var entry = catalog.Installations.FirstOrDefault(candidate =>
-            string.Equals(candidate.InstallationKey, key, StringComparison.OrdinalIgnoreCase));
+        var entry = FindCatalogEntry(catalog, installation);
 
         var changed = false;
         if (entry is null)
@@ -451,22 +459,30 @@ public sealed partial class SaveGroupService
     {
         lock (_writeGate)
         {
-            var blocked = RunningBlockMessage(installation, action);
+            var blocked = RunningBlock(
+                installation,
+                () => $"游戏正在运行；请先关闭游戏再{action}。",
+                () => $"无法确认游戏是否正在运行（进程信息不可读）；为避免损坏存档，已停止{action}。请关闭游戏后重试。");
             return blocked is null ? body() : fail(blocked);
         }
     }
 
-    private string? RunningBlockMessage(GameInstallation installation, string action)
-    {
-        var state = ProbeRunningState(installation);
-        return state switch
+    /// <summary>
+    /// The single fail-closed running-state gate for writes: only a confirmed
+    /// <see cref="GameRunningState.NotRunning"/> may proceed, and
+    /// <see cref="GameRunningState.Unknown"/> is treated exactly like Running.
+    /// Callers keep their own wording so the message still names the action.
+    /// </summary>
+    private string? RunningBlock(
+        GameInstallation installation,
+        Func<string> whenRunning,
+        Func<string> whenUnknown) =>
+        ProbeRunningState(installation) switch
         {
-            GameRunningState.Running => $"游戏正在运行；请先关闭游戏再{action}。",
-            GameRunningState.Unknown =>
-                $"无法确认游戏是否正在运行（进程信息不可读）；为避免损坏存档，已停止{action}。请关闭游戏后重试。",
+            GameRunningState.Running => whenRunning(),
+            GameRunningState.Unknown => whenUnknown(),
             _ => null
         };
-    }
 
     private GameRunningState ProbeRunningState(GameInstallation installation)
     {
