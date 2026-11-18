@@ -201,13 +201,12 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
                 catch (Exception exception)
                 {
                     _logger.Warn($"读取存档组失败：{exception.Message}");
-                    // Keep the old card visible when a refresh fails, and mark
-                    // it so stale data is not presented as current.
-                    if (item is not null)
-                    {
-                        item.NoticeMessage = $"读取存档组失败：{exception.Message}";
-                        desired.Add(item);
-                    }
+                    var message = $"读取存档组失败：{exception.Message}";
+                    // Keep a card visible even when this installation is new and
+                    // its first snapshot could not be built.
+                    item ??= CreateUnavailableItem(installation, activePath, message);
+                    item.NoticeMessage = message;
+                    desired.Add(item);
                 }
             }
 
@@ -247,6 +246,46 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         {
             IsBusy = false;
         }
+    }
+
+    private SaveInstallationItem CreateUnavailableItem(
+        GameInstallation installation,
+        string? activePath,
+        string message)
+    {
+        var isActive = false;
+        try
+        {
+            isActive = activePath is not null && SameDirectory(installation.GameDirectory, activePath);
+        }
+        catch
+        {
+            // An invalid path is exactly what made the snapshot fail; keep the
+            // card collapsed and let the notice explain the failure.
+        }
+
+        var snapshot = new SaveInstallationSnapshot(
+            installation,
+            isActive,
+            AnyRunning,
+            isActive,
+            false,
+            0,
+            message,
+            null,
+            null,
+            [],
+            null,
+            "未选择",
+            string.Empty);
+
+        return new SaveInstallationItem(
+            snapshot,
+            CreateEmptyAsync,
+            CloneAsync,
+            ImportAsync,
+            RememberExpansion,
+            SaveSelectionImmediately);
     }
 
     /// <summary>Resolves the global live link into the owning instance and group
