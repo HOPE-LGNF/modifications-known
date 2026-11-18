@@ -112,8 +112,9 @@
                             Classes.danger="{Binding IsCloseAction}"
                             Content="{Binding LaunchButtonText}"
                             Command="{Binding LaunchGameCommand}" />
-                    <TextBlock Text="启动前会自动切换到该版本的独立存档。"
+                    <TextBlock Text="启动前会切换到所选的存档组；从 MK 外启动使用上次设置的存档。"
                                Classes="caption"
+                               TextWrapping="Wrap"
                                HorizontalAlignment="Center" />
                 </StackPanel>
             </Grid>
@@ -255,7 +256,13 @@
                         <StackPanel Spacing="10">
                             <TextBlock Text="存档与数据" Classes="h2" />
                             <StackPanel Spacing="2">
-                                <TextBlock Text="存档 profile" Classes="caption" />
+                                <TextBlock Text="下次 MK 启动存档组" Classes="caption" />
+                                <TextBlock Text="{Binding SaveGroupLabel}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold" />
+                            </StackPanel>
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="存档组目录" Classes="caption" />
                                 <TextBlock Text="{Binding SaveProfilePath}"
                                            Classes="mono"
                                            FontSize="10"

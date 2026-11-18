@@ -39,6 +39,12 @@ public sealed class GameProcessMonitor : IDisposable
     public bool IsRunning(GameInstallation installation) =>
         Count(installation) > 0;
 
+    /// <summary>True while any registered installation has a live process.
+    /// Save-group writes are locked for every installation in that case: the
+    /// game always writes the one global LocalLow directory, whichever
+    /// installation owns the running process.</summary>
+    public bool AnyRunning => _counts.Values.Any(count => count > 0);
+
     public int Count(GameInstallation installation) =>
         _counts.TryGetValue(Normalize(installation.GameDirectory), out var count) ? count : 0;
 

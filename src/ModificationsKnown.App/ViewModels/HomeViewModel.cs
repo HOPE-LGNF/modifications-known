@@ -7,7 +7,9 @@ using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Nexus;
+using ModificationsKnown.Core.Saves;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Saves;
 using ModificationsKnown.Infrastructure.Storage;
 using ModificationsKnown.Infrastructure.Windows;
 
@@ -36,6 +38,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private readonly INexusModsClient _nexus;
     private readonly ActivityLogService _activity;
     private readonly SaveIsolationService _saveIsolation;
+    private readonly SaveGroupService _saveGroups;
     private readonly GameProcessMonitor _processMonitor;
     private readonly NxmProtocolRegistrar _nxmRegistrar;
     private readonly IUserDialogService _dialogs;
@@ -89,6 +92,9 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private string _saveProfilePath = "—";
 
     [ObservableProperty]
+    private string _saveGroupLabel = "未创建";
+
+    [ObservableProperty]
     private string _dataRoot = "—";
 
     [ObservableProperty]
@@ -114,7 +120,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private Task LaunchGame() => _shell.LaunchGameAsync();
 
     [RelayCommand]
-    private async Task ChecklistActionAsync(HomeChecklistItem? item)
+    private void ChecklistAction(HomeChecklistItem? item)
     {
         if (item is null) return;
 
@@ -148,7 +154,8 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         SaveIsolationService saveIsolation,
         GameProcessMonitor processMonitor,
         NxmProtocolRegistrar nxmRegistrar,
-        IUserDialogService dialogs)
+        IUserDialogService dialogs,
+        SaveGroupService saveGroups)
     {
         _shell = shell;
         _locator = locator;
@@ -158,6 +165,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
         _nexus = nexus;
         _activity = activity;
         _saveIsolation = saveIsolation;
+        _saveGroups = saveGroups;
         _processMonitor = processMonitor;
         _nxmRegistrar = nxmRegistrar;
         _dialogs = dialogs;
@@ -202,6 +210,7 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
                 LastLaunchLabel = "尚未通过 MK 启动";
                 SaveIsolationLabel = "未选择版本";
                 SaveProfilePath = "—";
+                SaveGroupLabel = "未创建";
                 CurrentGroupLabel = "—";
                 IsRunning = false;
                 RunningLabel = "未运行";
@@ -216,7 +225,10 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
             BepInExReady = installation.HasBepInEx;
             NexusConfigured = !string.IsNullOrWhiteSpace(_settings.Current.NexusApiKey);
             LastLaunchLabel = FormatLastLaunch(_settings.Current.LastLaunchAt);
-            SaveProfilePath = _saveIsolation.GetProfileDirectory(installation);
+            var nextSaveGroup = ResolveNextSaveGroup(installation);
+            SaveGroupLabel = nextSaveGroup?.Name ?? "未创建";
+            SaveProfilePath = nextSaveGroup?.DirectoryPath
+                              ?? _saveIsolation.GetProfileDirectory(installation);
             SaveIsolationLabel = DescribeIsolation(installation);
             CurrentGroupLabel = DescribeCurrentGroup(installation.GameDirectory);
             UpdateRunningState();
@@ -308,26 +320,36 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     {
         if (!OperatingSystem.IsWindows()) return "非 Windows：跳过存档隔离";
 
-        var live = _saveIsolation.GetLiveSaveDirectory();
-        var profile = _saveIsolation.GetProfileDirectory(installation);
         try
         {
-            if (!Directory.Exists(live)) return "首次启动时创建存档隔离";
-            var info = new DirectoryInfo(live);
-            if (!info.Attributes.HasFlag(FileAttributes.ReparsePoint)) return "当前存档目录未隔离";
-
-            var target = info.LinkTarget;
-            if (string.IsNullOrWhiteSpace(target)) return "存档链接不可读";
-            return string.Equals(
-                Path.GetFullPath(target).TrimEnd(Path.DirectorySeparatorChar),
-                Path.GetFullPath(profile).TrimEnd(Path.DirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase)
-                ? "已隔离到当前版本"
-                : "存档链接指向其他版本";
+            var preview = _saveGroups.GetLaunchPreview(installation);
+            if (preview.NeedsInitialization || preview.Group is null)
+                return "尚未创建存档组";
+            if (!preview.NeedsSwitch)
+                return $"已指向「{preview.Group.Name}」";
+            return "启动前切换到所选存档组";
         }
         catch
         {
-            return "存档链接状态未知";
+            return "存档组状态未知";
+        }
+    }
+
+    /// <summary>The group MK will use on the next launch (falling back to the
+    /// first group when the preference is not set yet).</summary>
+    private SaveGroup? ResolveNextSaveGroup(GameInstallation installation)
+    {
+        try
+        {
+            var groups = _saveGroups.GetGroups(installation);
+            var nextLaunchId = _saveGroups.GetNextLaunchGroupId(installation);
+            return groups.FirstOrDefault(group => group.Id == nextLaunchId)
+                   ?? groups.FirstOrDefault();
+        }
+        catch
+        {
+            // The saves page reports details; the home card stays readable.
+            return null;
         }
     }
 

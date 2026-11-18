@@ -1,11 +1,42 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ModificationsKnown.App.Views.SavesView">
+
+    <UserControl.Styles>
+        <Style Selector="Border.group-row">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="12,10" />
+        </Style>
+        <Style Selector="ListBoxItem:selected Border.group-row">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="Border.tag">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="7,2" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.tag TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        </Style>
+        <Style Selector="Border.tag.accent">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+        </Style>
+        <Style Selector="Border.tag.accent TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        </Style>
+    </UserControl.Styles>
+
     <Grid RowDefinitions="Auto,*" RowSpacing="12">
-        <Grid ColumnDefinitions="*,Auto">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
             <StackPanel Spacing="3">
                 <TextBlock Text="存档管理" Classes="h2" />
-                <TextBlock Text="每个版本都有独立的托管存档目录；正式版与试玩版不会串档。备份会把文件复制到你选择的目录。"
+                <TextBlock Text="每个游戏目录可有多个独立存档组，和 Mod 组分开管理。选择的组会在下次由 MK 启动游戏前切换；从 MK 外启动会使用最近一次由 MK 设置的存档。"
                            Classes="muted"
                            FontSize="12"
                            TextWrapping="Wrap" />
@@ -13,6 +44,7 @@
             <Button Grid.Column="1"
                     Classes="Primary"
                     Content="刷新"
+                    VerticalAlignment="Top"
                     Command="{Binding RefreshCommand}" />
         </Grid>
 
@@ -27,73 +59,211 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Classes="card" Margin="0,0,0,10" Padding="16">
-                                <StackPanel Spacing="10">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Name}"
-                                                       FontSize="15"
-                                                       FontWeight="SemiBold"
-                                                       VerticalAlignment="Center" />
-                                            <Border Background="{DynamicResource AccentSoftBrush}"
-                                                    CornerRadius="5"
-                                                    Padding="7,2"
-                                                    VerticalAlignment="Center"
-                                                    IsVisible="{Binding IsLive}">
-                                                <TextBlock Text="当前存档"
+                                <StackPanel Spacing="12">
+
+                                    <!-- Collapsed header: alias, group count, running state, next launch group -->
+                                    <Button Classes="Ghost"
+                                            Padding="0"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Stretch"
+                                            Command="{Binding ToggleExpandedCommand}">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                            <TextBlock Text="{Binding Chevron}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}" />
+                                            <StackPanel Grid.Column="1" Spacing="2">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding Name}"
+                                                               FontSize="15"
+                                                               FontWeight="SemiBold"
+                                                               VerticalAlignment="Center" />
+                                                    <Border Background="{DynamicResource WarningBrush}"
+                                                            CornerRadius="5"
+                                                            Padding="7,2"
+                                                            VerticalAlignment="Center"
+                                                            IsVisible="{Binding IsRunning}">
+                                                        <TextBlock Text="游戏运行中"
+                                                                   FontSize="10"
+                                                                   Foreground="{DynamicResource AccentContrastBrush}" />
+                                                    </Border>
+                                                    <Border Classes="tag" IsVisible="{Binding IsActive}">
+                                                        <TextBlock Text="当前版本" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding GamePath}"
+                                                           Classes="mono"
                                                            FontSize="10"
-                                                           VerticalAlignment="Center"
-                                                           Foreground="{DynamicResource AccentBrush}" />
-                                            </Border>
-                                            <Border Background="{DynamicResource WarningBrush}"
-                                                    CornerRadius="5"
-                                                    Padding="7,2"
-                                                    VerticalAlignment="Center"
-                                                    IsVisible="{Binding IsRunning}">
-                                                <TextBlock Text="游戏运行中"
-                                                           FontSize="10"
-                                                           VerticalAlignment="Center"
-                                                           Foreground="{DynamicResource AccentContrastBrush}" />
-                                            </Border>
+                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip.Tip="{Binding GamePath}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2"
+                                                        Spacing="2"
+                                                        VerticalAlignment="Center"
+                                                        HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding GroupCountLabel}"
+                                                           Classes="caption"
+                                                           HorizontalAlignment="Right" />
+                                                <TextBlock Text="{Binding NextLaunchLabel, StringFormat='下次启动：{0}'}"
+                                                           Classes="caption"
+                                                           HorizontalAlignment="Right" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Button>
+
+                                    <StackPanel Spacing="12" IsVisible="{Binding IsExpanded}">
+
+                                        <Border IsVisible="{Binding HasNotice}"
+                                                Background="{DynamicResource SurfaceAltBrush}"
+                                                BorderBrush="{DynamicResource WarningBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="9"
+                                                Padding="12,9">
+                                            <TextBlock Text="{Binding NoticeMessage}"
+                                                       FontSize="11"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource WarningBrush}" />
+                                        </Border>
+
+                                        <Border IsVisible="{Binding IsRunning}"
+                                                Background="{DynamicResource SurfaceAltBrush}"
+                                                BorderBrush="{DynamicResource WarningBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="9"
+                                                Padding="12,9">
+                                            <TextBlock Text="游戏正在运行；存档组选择、复制、导入和导出已锁定，请关闭游戏后操作。"
+                                                       FontSize="11"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource WarningBrush}" />
+                                        </Border>
+
+                                        <!-- Next launch group selector -->
+                                        <StackPanel Spacing="8">
+                                            <Grid ColumnDefinitions="Auto,240,Auto" ColumnSpacing="8">
+                                                <TextBlock Text="下次 MK 启动使用"
+                                                           Classes="caption"
+                                                           VerticalAlignment="Center" />
+                                                <ComboBox Grid.Column="1"
+                                                          ItemsSource="{Binding Groups}"
+                                                          SelectedItem="{Binding SelectedNextGroup}"
+                                                          IsEnabled="{Binding !IsRunning}"
+                                                          HorizontalAlignment="Stretch"
+                                                          PlaceholderText="未选择">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding Name}" />
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                                <Button Grid.Column="2"
+                                                        Content="设为下次启动"
+                                                        Command="{Binding CommitSelectionCommand}"
+                                                        IsEnabled="{Binding CanCommitSelection}"
+                                                        ToolTip.Tip="只记录偏好；存档链接会在下次由 MK 启动前切换" />
+                                            </Grid>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Button Content="新建空组"
+                                                        Command="{Binding CreateEmptyCommand}"
+                                                        IsEnabled="{Binding CanEdit}"
+                                                        ToolTip.Tip="创建空的存档目录；不复制当前组，也不改 Mod 组" />
+                                                <Button Classes="Ghost"
+                                                        Content="克隆当前组"
+                                                        Command="{Binding CloneCommand}"
+                                                        IsEnabled="{Binding CanEdit}"
+                                                        ToolTip.Tip="复制所选组的完整存档目录；新组使用新的 ID，源组不变" />
+                                            </StackPanel>
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                            <Button Classes="Ghost" Content="打开目录" Command="{Binding OpenCommand}" />
-                                            <Button Classes="Ghost" Content="备份…" Command="{Binding BackupCommand}" />
-                                            <Button Classes="Danger"
-                                                    Content="删除存档"
-                                                    IsEnabled="{Binding CanDelete}"
-                                                    Command="{Binding DeleteCommand}" />
-                                        </StackPanel>
-                                    </Grid>
 
-                                    <TextBlock Text="{Binding ProfilePath}"
-                                               Classes="mono"
-                                               FontSize="10"
-                                               Foreground="{DynamicResource TextSecondaryBrush}"
-                                               TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="还没有存档组；点“新建空组”开始。"
+                                                   Classes="caption"
+                                                   IsVisible="{Binding HasNoGroups}" />
 
-                                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                                        <TextBlock Text="{Binding FileCountLabel}" Classes="caption" />
-                                        <TextBlock Grid.Column="2"
-                                                   Text="{Binding UpdatedLabel, StringFormat='最后更新 {0}'}"
-                                                   Classes="caption" />
-                                    </Grid>
+                                        <!-- Group rows: compact until selected -->
+                                        <ListBox Classes="mod-list"
+                                                 ItemsSource="{Binding Groups}"
+                                                 SelectedItem="{Binding SelectedGroup}">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Classes="group-row">
+                                                        <StackPanel Spacing="8">
+                                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                    <TextBlock Text="{Binding Name}"
+                                                                               FontSize="13"
+                                                                               FontWeight="SemiBold"
+                                                                               VerticalAlignment="Center"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                    <Border Classes="tag accent" IsVisible="{Binding IsNextLaunch}">
+                                                                        <TextBlock Text="下次启动" />
+                                                                    </Border>
+                                                                    <Border Classes="tag" IsVisible="{Binding IsDefault}">
+                                                                        <TextBlock Text="默认" />
+                                                                    </Border>
+                                                                </StackPanel>
+                                                                <TextBlock Grid.Column="1"
+                                                                           Text="{Binding SummaryLabel}"
+                                                                           Classes="caption"
+                                                                           VerticalAlignment="Center"
+                                                                           IsVisible="{Binding !IsEmpty}" />
+                                                            </Grid>
 
-                                    <ItemsControl ItemsSource="{Binding Files}" IsVisible="{Binding !IsEmpty}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                                                    <TextBlock Text="{Binding RelativePath}" Classes="mono" FontSize="10" />
-                                                    <TextBlock Grid.Column="1"
-                                                               Text="{Binding SizeLabel}"
-                                                               Classes="caption"
-                                                               Margin="10,0,0,0" />
-                                                </Grid>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                    <TextBlock Text="还没有存档文件。首次从 MK 启动游戏后会出现。"
-                                               Classes="caption"
-                                               IsVisible="{Binding IsEmpty}" />
+                                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                                                <TextBlock Text="{Binding DirectoryPath}"
+                                                                           Classes="mono"
+                                                                           FontSize="10"
+                                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                           VerticalAlignment="Center"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           ToolTip.Tip="{Binding DirectoryPath}" />
+                                                                <StackPanel Grid.Column="1"
+                                                                            Orientation="Horizontal"
+                                                                            Spacing="4">
+                                                                    <Button Classes="Ghost"
+                                                                            Content="设为下次启动"
+                                                                            Command="{Binding SelectNextLaunchCommand}"
+                                                                            IsEnabled="{Binding CanSelectNextLaunch}" />
+                                                                    <Button Classes="Ghost"
+                                                                            Content="打开目录"
+                                                                            Command="{Binding OpenCommand}" />
+                                                                    <Button Classes="Ghost"
+                                                                            Content="重命名…"
+                                                                            Command="{Binding RenameCommand}"
+                                                                            IsEnabled="{Binding CanEdit}" />
+                                                                </StackPanel>
+                                                            </Grid>
+
+                                                            <TextBlock Text="尚无存档文件；首次用该组启动游戏后会生成文件"
+                                                                       Classes="caption"
+                                                                       TextWrapping="Wrap"
+                                                                       IsVisible="{Binding IsEmpty}" />
+
+                                                            <StackPanel Spacing="2" IsVisible="{Binding $parent[ListBoxItem].IsSelected}">
+                                                                <TextBlock Text="文件清单"
+                                                                           Classes="caption"
+                                                                           Margin="0,2,0,2" />
+                                                                <ItemsControl ItemsSource="{Binding Files}">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <Grid ColumnDefinitions="*,Auto" Margin="0,1">
+                                                                                <TextBlock Text="{Binding RelativePath}"
+                                                                                           Classes="mono"
+                                                                                           FontSize="10" />
+                                                                                <TextBlock Grid.Column="1"
+                                                                                           Text="{Binding SizeLabel}"
+                                                                                           Classes="caption"
+                                                                                           Margin="10,0,0,0" />
+                                                                            </Grid>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>

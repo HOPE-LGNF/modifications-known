@@ -67,6 +67,11 @@ public sealed record SaveLaunchPreview(
     bool NeedsSwitch,
     string LiveDirectory);
 
+public sealed record SaveGroupOperationResult(
+    bool Success,
+    string Message,
+    SaveGroup? Group = null);
+
 /// <summary>
 /// Owns save-group data: the catalog, per-group manifests, legacy profile
 /// migration, first-run handling of unmanaged saves, and the launch-time
@@ -122,6 +127,327 @@ public sealed class SaveGroupService
             return Reconcile(installation, persist: true).Entry?.NextLaunchGroupId;
         }
     }
+
+    /// <summary>
+    /// Creates a new, empty group. The first group of an installation becomes
+    /// the next-launch group automatically; later groups leave the preference
+    /// alone (the caller asks the user whether to switch).
+    /// </summary>
+    public Task<SaveGroupOperationResult> CreateEmptyAsync(
+        GameInstallation installation,
+        string name,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => CreateEmptyCore(installation, name), cancellationToken);
+
+    /// <summary>
+    /// Copies a complete group directory (minus the group manifest and legacy
+    /// marker) into a new group with a fresh id, verifying every file hash. The
+    /// source group is never modified.
+    /// </summary>
+    public Task<SaveGroupOperationResult> CloneAsync(
+        GameInstallation installation,
+        Guid sourceGroupId,
+        string name,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => CloneCore(installation, sourceGroupId, name), cancellationToken);
+
+    /// <summary>Renames a group in its manifest and in the index. The directory
+    /// name (the group id) never changes.</summary>
+    public Task<SaveGroupOperationResult> RenameAsync(
+        GameInstallation installation,
+        Guid groupId,
+        string name,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => RenameCore(installation, groupId, name), cancellationToken);
+
+    /// <summary>
+    /// Stores which group the next MK launch uses. This changes only the
+    /// preference; the live junction keeps its current target until launch.
+    /// </summary>
+    public Task<SaveGroupOperationResult> SelectNextLaunchAsync(
+        GameInstallation installation,
+        Guid groupId,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => SelectNextLaunchCore(installation, groupId), cancellationToken);
+
+    /// <summary>Returns a valid, unused name for this installation (used as the
+    /// editable default when creating or cloning).</summary>
+    public string SuggestGroupName(GameInstallation installation, string desiredName)
+    {
+        lock (_gate)
+        {
+            var groups = Reconcile(installation, persist: false).Groups;
+            var baseName = SanitizeName(desiredName);
+            if (baseName.Length == 0) baseName = "新存档组";
+
+            var candidate = baseName;
+            var index = 2;
+            while (NameExists(groups, candidate, null))
+            {
+                var suffix = $" {index++}";
+                var room = SaveGroupFormat.MaxNameLength - suffix.Length;
+                var stem = baseName.Length > room ? baseName[..room].TrimEnd() : baseName;
+                candidate = stem + suffix;
+            }
+
+            return candidate;
+        }
+    }
+
+    private SaveGroupOperationResult CreateEmptyCore(GameInstallation installation, string name)
+    {
+        if (IsGameRunning(installation))
+            return Fail("游戏正在运行；请先关闭游戏再创建存档组。");
+
+        var validated = ValidateNewName(installation, name, null, out var normalized);
+        if (validated is not null) return validated;
+
+        var staging = NewStagingDirectory(out var groupId);
+        SaveGroup? group = null;
+        try
+        {
+            group = CommitGroup(installation, staging, groupId, normalized, isDefault: false, _options.UtcNow());
+            _options.Logger?.Info($"已创建空存档组「{normalized}」：{group.DirectoryPath}");
+            return new SaveGroupOperationResult(
+                true,
+                $"已创建空存档组「{normalized}」；首次用该组启动游戏后会生成存档文件。",
+                group);
+        }
+        catch (Exception exception)
+        {
+            DeleteDirectoryQuietly(staging);
+            if (group is not null) RollbackGroup(installation, group);
+            _options.Logger?.Warn($"创建存档组失败：{exception.Message}");
+            return Fail($"创建存档组失败：{exception.Message}");
+        }
+    }
+
+    private SaveGroupOperationResult CloneCore(
+        GameInstallation installation,
+        Guid sourceGroupId,
+        string name)
+    {
+        if (IsGameRunning(installation))
+            return Fail("游戏正在运行；请先关闭游戏再克隆存档组。");
+
+        var validated = ValidateNewName(installation, name, null, out var normalized);
+        if (validated is not null) return validated;
+
+        SaveGroup? source;
+        lock (_gate)
+        {
+            source = Reconcile(installation, persist: true).Groups
+                .FirstOrDefault(group => group.Id == sourceGroupId);
+        }
+
+        if (source is null)
+            return Fail("要克隆的存档组不存在，或不属于当前游戏目录。");
+        if (!Directory.Exists(source.DirectoryPath))
+            return Fail($"要克隆的存档组目录不存在：{source.DirectoryPath}");
+
+        var staging = NewStagingDirectory(out var groupId);
+        SaveGroup? clone = null;
+        try
+        {
+            var files = CollectDataFiles(source.DirectoryPath);
+            CopyDirectoryTree(source.DirectoryPath, staging);
+            CopyFiles(source.DirectoryPath, staging, files);
+            VerifyCopy(source.DirectoryPath, staging, files);
+
+            clone = CommitGroup(installation, staging, groupId, normalized, isDefault: false, _options.UtcNow());
+            _options.Logger?.Info($"已克隆存档组「{source.Name}」为「{normalized}」：{clone.DirectoryPath}");
+            return new SaveGroupOperationResult(
+                true,
+                $"已克隆「{source.Name}」为「{normalized}」，共 {files.Count} 个文件并逐文件校验。",
+                clone);
+        }
+        catch (Exception exception)
+        {
+            DeleteDirectoryQuietly(staging);
+            if (clone is not null) RollbackGroup(installation, clone);
+            _options.Logger?.Warn($"克隆存档组失败：{exception.Message}");
+            return Fail($"克隆存档组失败，源组未改动：{exception.Message}");
+        }
+    }
+
+    private SaveGroupOperationResult RenameCore(
+        GameInstallation installation,
+        Guid groupId,
+        string name)
+    {
+        if (IsGameRunning(installation))
+            return Fail("游戏正在运行；请先关闭游戏再重命名存档组。");
+
+        var validated = ValidateNewName(installation, name, groupId, out var normalized);
+        if (validated is not null) return validated;
+
+        lock (_gate)
+        {
+            var group = Reconcile(installation, persist: true).Groups
+                .FirstOrDefault(candidate => candidate.Id == groupId);
+            if (group is null)
+                return Fail("要重命名的存档组不存在，或不属于当前游戏目录。");
+
+            if (!SaveGroupManifestStore.TryRead(group.DirectoryPath, out var manifest))
+                return Fail($"存档组清单缺失或损坏：{group.DirectoryPath}");
+
+            var previousName = manifest.Name;
+            try
+            {
+                manifest.Name = normalized;
+                SaveGroupManifestStore.Write(group.DirectoryPath, manifest);
+
+                var catalog = _catalog.Load();
+                var entry = catalog.Installations.FirstOrDefault(candidate =>
+                    string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
+                        StringComparison.OrdinalIgnoreCase));
+                var record = entry?.Groups.FirstOrDefault(candidate => candidate.Id == groupId);
+                if (record is null)
+                    throw new InvalidOperationException("存档组索引中找不到该组，请刷新后重试。");
+
+                record.Name = normalized;
+                _catalog.Save(catalog);
+            }
+            catch (Exception exception)
+            {
+                TryRestoreManifestName(group.DirectoryPath, manifest, previousName);
+                _options.Logger?.Warn($"重命名存档组失败：{exception.Message}");
+                return Fail($"重命名存档组失败：{exception.Message}");
+            }
+
+            _options.Logger?.Info($"存档组已重命名：{group.Name} -> {normalized}");
+            return new SaveGroupOperationResult(
+                true,
+                $"已将存档组「{previousName}」重命名为「{normalized}」。",
+                group with { Name = normalized });
+        }
+    }
+
+    private SaveGroupOperationResult SelectNextLaunchCore(GameInstallation installation, Guid groupId)
+    {
+        if (IsGameRunning(installation))
+            return Fail("游戏正在运行；请先关闭游戏再选择下次启动的存档组。");
+
+        lock (_gate)
+        {
+            var group = Reconcile(installation, persist: true).Groups
+                .FirstOrDefault(candidate => candidate.Id == groupId);
+            if (group is null)
+                return Fail("要选择的存档组不存在，或不属于当前游戏目录。");
+
+            var catalog = _catalog.Load();
+            var entry = catalog.Installations.FirstOrDefault(candidate =>
+                string.Equals(candidate.InstallationKey, GetInstallationKey(installation),
+                    StringComparison.OrdinalIgnoreCase));
+            if (entry is null)
+                return Fail("存档组索引缺失，请刷新后重试。");
+
+            if (entry.NextLaunchGroupId == groupId)
+            {
+                return new SaveGroupOperationResult(
+                    true,
+                    $"「{group.Name}」已经是下次 MK 启动使用的存档组。",
+                    group);
+            }
+
+            entry.NextLaunchGroupId = groupId;
+            try
+            {
+                _catalog.Save(catalog);
+            }
+            catch (Exception exception)
+            {
+                _options.Logger?.Warn($"保存下次启动存档组失败：{exception.Message}");
+                return Fail($"保存下次启动存档组失败：{exception.Message}");
+            }
+
+            _options.Logger?.Info($"下次 MK 启动将使用存档组「{group.Name}」（链接不变，启动前才切换）");
+            return new SaveGroupOperationResult(
+                true,
+                $"下次由 MK 启动时使用「{group.Name}」；存档链接会在启动前切换。",
+                group);
+        }
+    }
+
+    /// <summary>Shared validation for create/clone/rename: usable name and no
+    /// other group in this installation using it (case-insensitive).</summary>
+    private SaveGroupOperationResult? ValidateNewName(
+        GameInstallation installation,
+        string name,
+        Guid? exceptGroupId,
+        out string normalized)
+    {
+        normalized = SaveGroupFormat.NormalizeName(name);
+        var invalid = SaveGroupFormat.ValidateName(name);
+        if (invalid is not null) return Fail(invalid);
+
+        lock (_gate)
+        {
+            var groups = Reconcile(installation, persist: true).Groups;
+            if (NameExists(groups, normalized, exceptGroupId))
+                return Fail($"已存在同名存档组「{normalized}」；请换一个名称。");
+        }
+
+        return null;
+    }
+
+    private static bool NameExists(IReadOnlyList<SaveGroup> groups, string name, Guid? exceptGroupId)
+    {
+        var trimmed = SaveGroupFormat.NormalizeName(name);
+        return groups.Any(group =>
+            group.Id != exceptGroupId
+            && string.Equals(group.Name.Trim(), trimmed, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string SanitizeName(string? name)
+    {
+        var trimmed = SaveGroupFormat.NormalizeName(name);
+        if (trimmed.Length == 0) return string.Empty;
+
+        var invalid = Path.GetInvalidFileNameChars()
+            .Concat(['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
+            .ToHashSet();
+
+        var builder = new System.Text.StringBuilder(trimmed.Length);
+        foreach (var character in trimmed)
+        {
+            if (char.IsControl(character) || invalid.Contains(character)) continue;
+            builder.Append(character);
+        }
+
+        var result = builder.ToString().Trim();
+        if (result is "." or "..") return string.Empty;
+        if (result.Length > SaveGroupFormat.MaxNameLength)
+            result = result[..SaveGroupFormat.MaxNameLength].TrimEnd();
+        return result;
+    }
+
+    private void TryRestoreManifestName(string groupDirectory, SaveGroupManifest manifest, string name)
+    {
+        try
+        {
+            manifest.Name = name;
+            SaveGroupManifestStore.Write(groupDirectory, manifest);
+        }
+        catch (Exception exception)
+        {
+            _options.Logger?.Warn($"恢复存档组清单名称失败：{exception.Message}");
+        }
+    }
+
+    /// <summary>Creates the source directory tree in the destination so clones
+    /// keep empty folders, which the file-only copy would drop.</summary>
+    private static void CopyDirectoryTree(string sourceDirectory, string destinationDirectory)
+    {
+        Directory.CreateDirectory(destinationDirectory);
+        foreach (var directory in Directory.EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(sourceDirectory, directory);
+            Directory.CreateDirectory(Path.Combine(destinationDirectory, relative));
+        }
+    }
+
+    private static SaveGroupOperationResult Fail(string message) => new(false, message);
 
     /// <summary>
     /// Prepares the data model before a launch or before the saves page shows

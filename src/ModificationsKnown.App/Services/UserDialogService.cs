@@ -3,6 +3,7 @@ using Avalonia.Platform.Storage;
 using ModificationsKnown.App.Views;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Nexus;
+using ModificationsKnown.Infrastructure.Saves;
 
 namespace ModificationsKnown.App.Services;
 
@@ -35,6 +36,12 @@ public interface IUserDialogService
         IReadOnlyList<InstanceSaveFile> saves,
         string profileDirectory,
         string suggestedTarget);
+
+    /// <summary>
+    /// Asks how to handle real saves that MK has not taken over yet. Returning
+    /// null (cancel/close) means the caller must not touch any file.
+    /// </summary>
+    Task<UnmanagedSaveAction?> PickUnmanagedSaveActionAsync(string liveDirectory, int fileCount);
 }
 
 public sealed class UserDialogService : IUserDialogService
@@ -146,6 +153,17 @@ public sealed class UserDialogService : IUserDialogService
 
         var dialog = new LinkNexusDialog(_nexus, gameDomain, suggestedName);
         return await dialog.ShowDialog<NexusMatch?>(owner);
+    }
+
+    public async Task<UnmanagedSaveAction?> PickUnmanagedSaveActionAsync(
+        string liveDirectory,
+        int fileCount)
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var dialog = new UnmanagedSaveDialog(liveDirectory, fileCount);
+        return await dialog.ShowDialog<UnmanagedSaveAction?>(owner);
     }
 }
 

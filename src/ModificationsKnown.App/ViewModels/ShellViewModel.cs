@@ -11,7 +11,9 @@ using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
+using ModificationsKnown.Core.Saves;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Saves;
 using ModificationsKnown.Infrastructure.Storage;
 using ModificationsKnown.Infrastructure.Windows;
 
@@ -24,6 +26,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private readonly IGameLauncher _launcher;
     private readonly IUserDialogService _dialogs;
     private readonly SaveIsolationService _saveIsolation;
+    private readonly SaveGroupService _saveGroups;
     private readonly ActivityLogService _activity;
     private readonly GameProcessMonitor _processMonitor;
     private readonly Dictionary<string, object> _pages;
@@ -122,6 +125,13 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _saveIsolation = new SaveIsolationService(logger);
         _activity = new ActivityLogService();
         _processMonitor = new GameProcessMonitor(Game, logger);
+        _saveGroups = new SaveGroupService(new SaveGroupOptions
+        {
+            // The game always writes the one global LocalLow directory, so any
+            // running installation locks every save-group write.
+            IsGameRunning = installation =>
+                _processMonitor.IsRunning(installation) || _processMonitor.AnyRunning
+        });
         _processMonitor.Start();
         _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
         {
@@ -162,10 +172,10 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             logger);
         _pages = new Dictionary<string, object>
         {
-            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor, nxmRegistrar, dialogs),
+            ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor, nxmRegistrar, dialogs, _saveGroups),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs, updates, logger),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor, downloader, updates, nxmRegistrar, logger),
-            ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger, _processMonitor),
+            ["saves"] = new SavesViewModel(this, _saveGroups, dialogs, logger, _processMonitor),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion, _processMonitor)
@@ -428,6 +438,78 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         }
     }
 
+    /// <summary>
+    /// Save groups must be ready before any launch: unmanaged saves need an
+    /// explicit choice, a switch is confirmed, and a failed switch blocks the
+    /// launch instead of letting the game write into the wrong profile.
+    /// </summary>
+    private async Task<bool> PrepareSaveGroupForLaunchAsync(GameInstallation installation)
+    {
+        // A second copy of the game may only start when the live link already
+        // points at the selected group; any group write is locked meanwhile.
+        if (_processMonitor.AnyRunning)
+        {
+            var current = _saveGroups.GetLaunchPreview(installation);
+            if (!current.NeedsInitialization && current.Group is not null && !current.NeedsSwitch)
+                return true;
+
+            SetStatus("游戏正在运行；请先关闭游戏再切换或创建存档组。", StatusKind.Warning);
+            return false;
+        }
+
+        var init = await _saveGroups.InitializeAsync(installation);
+        if (init.State == SaveGroupInitializationState.NeedsUnmanagedChoice)
+        {
+            var action = await _dialogs.PickUnmanagedSaveActionAsync(
+                init.LiveDirectory,
+                init.UnmanagedFileCount);
+            if (action is null)
+            {
+                SetStatus("已取消启动；未改动任何存档。", StatusKind.Info);
+                return false;
+            }
+
+            init = await _saveGroups.InitializeAsync(installation, action);
+        }
+
+        if (!init.Success)
+        {
+            SetStatus(init.Message, StatusKind.Error);
+            return false;
+        }
+
+        var preview = _saveGroups.GetLaunchPreview(installation);
+        if (preview.NeedsInitialization || preview.Group is null)
+        {
+            SetStatus("还没有可用的存档组；请先在存档管理中创建或导入。", StatusKind.Error);
+            return false;
+        }
+
+        if (preview.NeedsSwitch)
+        {
+            var confirmed = await _dialogs.ConfirmAsync(
+                "切换存档组",
+                $"本次将使用「{preview.Group.Name}」的存档。\n\n" +
+                "从 MK 外启动游戏会使用最近一次由 MK 设置的存档。",
+                "继续启动",
+                "取消");
+            if (!confirmed)
+            {
+                SetStatus("已取消启动；存档组未切换。", StatusKind.Info);
+                return false;
+            }
+        }
+
+        var prepared = await _saveGroups.PrepareLaunchAsync(installation);
+        if (!prepared.Success)
+        {
+            SetStatus(prepared.Message, StatusKind.Error);
+            return false;
+        }
+
+        return true;
+    }
+
     public async Task LaunchGameAsync()
     {
         if (IsLaunching || IsClosing) return;
@@ -447,12 +529,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         IsLaunching = true;
         try
         {
-            var saveIsolation = await _saveIsolation.PrepareAsync(installation);
-            if (!saveIsolation.Success)
-            {
-                SetStatus(saveIsolation.Message, StatusKind.Error);
-                return;
-            }
+            if (!await PrepareSaveGroupForLaunchAsync(installation)) return;
 
             SetStatus($"正在启动 {installation.DisplayLabel}…");
             _logger.Info($"Launch requested for {installation.Profile.EditionLabel} at {installation.GameDirectory}");
