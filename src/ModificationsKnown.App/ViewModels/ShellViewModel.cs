@@ -133,6 +133,8 @@ public partial class ShellViewModel : ObservableObject, IAppShell
                 _processMonitor.IsRunning(installation) || _processMonitor.AnyRunning
         });
         _processMonitor.Start();
+        var saveArchive = new SaveGroupArchiveService(
+            isGameRunning: () => _processMonitor.AnyRunning);
         _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(() =>
         {
             OnPropertyChanged(nameof(IsSelectedInstanceRunning));
@@ -175,7 +177,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor, nxmRegistrar, dialogs, _saveGroups),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs, updates, logger),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor, downloader, updates, nxmRegistrar, logger),
-            ["saves"] = new SavesViewModel(this, _saveGroups, dialogs, logger, _processMonitor),
+            ["saves"] = new SavesViewModel(this, _saveGroups, saveArchive, filePicker, dialogs, logger, _processMonitor),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion, _processMonitor)

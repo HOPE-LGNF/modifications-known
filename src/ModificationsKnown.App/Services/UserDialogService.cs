@@ -180,6 +180,10 @@ public interface IFilePickerService
     Task<string?> PickDataFolderAsync();
 
     Task<string?> PickBackupFolderAsync();
+
+    Task<string?> PickSaveArchiveTargetAsync(string suggestedFileName);
+
+    Task<string?> PickSaveArchiveAsync();
 }
 
 public sealed class FilePickerService : IFilePickerService
@@ -269,6 +273,44 @@ public sealed class FilePickerService : IFilePickerService
         });
 
         return folders.Count == 0 ? null : folders[0].Path.LocalPath;
+    }
+
+    public async Task<string?> PickSaveArchiveTargetAsync(string suggestedFileName)
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "导出存档组",
+            SuggestedFileName = suggestedFileName,
+            DefaultExtension = "zip",
+            ShowOverwritePrompt = true,
+            FileTypeChoices =
+            [
+                new FilePickerFileType("存档组 ZIP") { Patterns = ["*.zip"] }
+            ]
+        });
+
+        return file?.Path.LocalPath;
+    }
+
+    public async Task<string?> PickSaveArchiveAsync()
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "选择存档组 ZIP",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("存档组 ZIP") { Patterns = ["*.zip"] }
+            ]
+        });
+
+        return files.Count == 0 ? null : files[0].Path.LocalPath;
     }
 
     public async Task<string?> PickThemeFileAsync()

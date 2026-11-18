@@ -98,6 +98,9 @@ public sealed class SaveGroupService
 
     public string BackupsRoot => _options.BackupsRoot;
 
+    public string StagingRoot => _options.StagingRoot
+                                 ?? Path.Combine(Path.GetDirectoryName(ProfilesRoot) ?? ProfilesRoot, "save-groups-staging");
+
     public string GetInstallationKey(GameInstallation installation) =>
         SaveGroupFormat.GetInstallationKey(installation.GameDirectory);
 
@@ -169,6 +172,79 @@ public sealed class SaveGroupService
         Guid groupId,
         CancellationToken cancellationToken = default) =>
         Task.Run(() => SelectNextLaunchCore(installation, groupId), cancellationToken);
+
+    /// <summary>
+    /// Registers a fully extracted staging directory as a new group (used by ZIP
+    /// import/restore). The staging directory must live under
+    /// <see cref="StagingRoot"/>; a new group id and manifest are always written,
+    /// so an imported group never reuses the archive's identity or overwrites an
+    /// existing group. The caller cleans staging when this fails.
+    /// </summary>
+    public Task<SaveGroupOperationResult> AdoptGroupAsync(
+        GameInstallation installation,
+        string stagingDirectory,
+        string name,
+        CancellationToken cancellationToken = default) =>
+        Task.Run(() => AdoptGroup(installation, stagingDirectory, name), cancellationToken);
+
+    /// <summary>Synchronous core of <see cref="AdoptGroupAsync"/> for callers
+    /// that already run on a worker thread (ZIP import).</summary>
+    public SaveGroupOperationResult AdoptGroup(
+        GameInstallation installation,
+        string stagingDirectory,
+        string name) =>
+        AdoptGroupCore(installation, stagingDirectory, name);
+
+    private SaveGroupOperationResult AdoptGroupCore(
+        GameInstallation installation,
+        string stagingDirectory,
+        string name)
+    {
+        if (IsGameRunning(installation))
+            return Fail("游戏正在运行；请先关闭游戏再导入存档组。");
+
+        var validated = ValidateNewName(installation, name, null, out var normalized);
+        if (validated is not null) return validated;
+
+        try
+        {
+            var staging = Path.GetFullPath(stagingDirectory);
+            var stagingRoot = Path.GetFullPath(StagingRoot);
+            if (!IsUnder(staging, stagingRoot) || PathEquals(staging, stagingRoot))
+                return Fail("导入暂存目录不在允许的位置；未登记存档组。");
+
+            var installationDirectory = Path.GetFullPath(GetInstallationDirectory(installation));
+            if (IsUnder(staging, installationDirectory) || IsUnder(installationDirectory, staging))
+                return Fail("导入暂存目录与安装存档目录重叠；未登记存档组。");
+
+            if (!Directory.Exists(staging))
+                return Fail($"导入暂存目录不存在：{staging}");
+
+            if (File.Exists(SaveGroupManifestStore.GetManifestPath(staging)))
+                return Fail("导入暂存目录已带有存档组清单；拒绝重复登记。");
+
+            bool isFirst;
+            lock (_gate)
+            {
+                isFirst = Reconcile(installation, persist: true).Groups.Count == 0;
+            }
+
+            var group = CommitGroup(
+                installation,
+                staging,
+                Guid.NewGuid(),
+                normalized,
+                isFirst,
+                _options.UtcNow());
+            _options.Logger?.Info($"已导入存档组「{normalized}」：{group.DirectoryPath}");
+            return new SaveGroupOperationResult(true, $"已导入存档组「{normalized}」。", group);
+        }
+        catch (Exception exception)
+        {
+            _options.Logger?.Warn($"登记导入存档组失败：{exception.Message}");
+            return Fail($"登记导入存档组失败：{exception.Message}");
+        }
+    }
 
     /// <summary>Returns a valid, unused name for this installation (used as the
     /// editable default when creating or cloning).</summary>

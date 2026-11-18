@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ModificationsKnown.App.Services;
+using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Saves;
@@ -27,6 +28,7 @@ public sealed class SaveGroupRow
         string sizeLabel,
         string updatedLabel,
         Func<SaveGroupRow, Task> open,
+        Func<SaveGroupRow, Task> export,
         Func<SaveGroupRow, Task> rename,
         Func<SaveGroupRow, Task> selectNextLaunch)
     {
@@ -39,6 +41,7 @@ public sealed class SaveGroupRow
         UpdatedLabel = updatedLabel;
 
         OpenCommand = new AsyncRelayCommand(() => open(this));
+        ExportCommand = new AsyncRelayCommand(() => export(this));
         RenameCommand = new AsyncRelayCommand(() => rename(this));
         SelectNextLaunchCommand = new AsyncRelayCommand(() => selectNextLaunch(this));
     }
@@ -59,6 +62,8 @@ public sealed class SaveGroupRow
 
     public bool CanEdit => !IsRunning;
 
+    public bool CanExport => !IsRunning;
+
     public bool CanSelectNextLaunch => !IsRunning && !IsNextLaunch;
 
     public string DirectoryPath => Group.DirectoryPath;
@@ -74,6 +79,8 @@ public sealed class SaveGroupRow
     public string UpdatedLabel { get; }
 
     public IAsyncRelayCommand OpenCommand { get; }
+
+    public IAsyncRelayCommand ExportCommand { get; }
 
     public IAsyncRelayCommand RenameCommand { get; }
 
@@ -98,6 +105,7 @@ public partial class SaveInstallationItem : ObservableObject
         Guid? nextLaunchGroupId,
         Func<SaveInstallationItem, Task> createEmpty,
         Func<SaveInstallationItem, Task> clone,
+        Func<SaveInstallationItem, Task> import,
         Func<SaveInstallationItem, Task> commitSelection,
         Action<SaveInstallationItem> expandedChanged)
     {
@@ -115,6 +123,7 @@ public partial class SaveInstallationItem : ObservableObject
         ToggleExpandedCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
         CreateEmptyCommand = new AsyncRelayCommand(() => createEmpty(this));
         CloneCommand = new AsyncRelayCommand(() => clone(this));
+        ImportCommand = new AsyncRelayCommand(() => import(this));
         CommitSelectionCommand = new AsyncRelayCommand(
             () => commitSelection(this),
             () => CanCommitSelection);
@@ -171,6 +180,8 @@ public partial class SaveInstallationItem : ObservableObject
 
     public bool CanEdit => !IsRunning && !NeedsUnmanagedChoice;
 
+    public bool CanImport => !IsRunning && !NeedsUnmanagedChoice;
+
     public bool CanCommitSelection =>
         CanEdit
         && SelectedNextGroup is not null
@@ -182,6 +193,8 @@ public partial class SaveInstallationItem : ObservableObject
 
     public IAsyncRelayCommand CloneCommand { get; }
 
+    public IAsyncRelayCommand ImportCommand { get; }
+
     public IAsyncRelayCommand CommitSelectionCommand { get; }
 
     partial void OnIsExpandedChanged(bool value) => _expandedChanged(this);
@@ -189,6 +202,7 @@ public partial class SaveInstallationItem : ObservableObject
     partial void OnIsRunningChanged(bool value)
     {
         OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(CanImport));
         OnPropertyChanged(nameof(CanCommitSelection));
         CommitSelectionCommand.NotifyCanExecuteChanged();
     }
@@ -204,6 +218,8 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
 {
     private readonly IAppShell _shell;
     private readonly SaveGroupService _saveGroups;
+    private readonly SaveGroupArchiveService _archive;
+    private readonly IFilePickerService _filePicker;
     private readonly IUserDialogService _dialogs;
     private readonly IAppLogger _logger;
     private readonly GameProcessMonitor _processMonitor;
@@ -221,12 +237,16 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
     public SavesViewModel(
         IAppShell shell,
         SaveGroupService saveGroups,
+        SaveGroupArchiveService archive,
+        IFilePickerService filePicker,
         IUserDialogService dialogs,
         IAppLogger logger,
         GameProcessMonitor processMonitor)
     {
         _shell = shell;
         _saveGroups = saveGroups;
+        _archive = archive;
+        _filePicker = filePicker;
         _dialogs = dialogs;
         _logger = logger;
         _processMonitor = processMonitor;
@@ -340,6 +360,7 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             nextLaunchId,
             CreateEmptyAsync,
             CloneAsync,
+            ImportAsync,
             CommitSelectionAsync,
             RememberExpansion);
     }
@@ -386,6 +407,7 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             FormatSize(total),
             updated?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "—",
             OpenGroupAsync,
+            ExportGroupAsync,
             RenameGroupAsync,
             SelectNextLaunchAsync);
     }
@@ -411,6 +433,36 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         }
 
         return Task.CompletedTask;
+    }
+
+    private async Task ExportGroupAsync(SaveGroupRow row)
+    {
+        if (row.IsRunning)
+        {
+            _shell.SetStatus("游戏正在运行，先关闭游戏再备份或导出存档组。", StatusKind.Warning);
+            return;
+        }
+
+        var suggested = PathSafety.GetSafeFileName($"{row.Installation.DisplayLabel}-{row.Name}");
+        var target = await _filePicker.PickSaveArchiveTargetAsync(
+            $"{suggested}-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
+        if (string.IsNullOrWhiteSpace(target)) return;
+
+        IsBusy = true;
+        try
+        {
+            var result = await _archive.ExportAsync(
+                row.Group,
+                SaveGameInfo.FromInstallation(row.Installation, DetectGameVersion(row.Installation)),
+                target);
+            _shell.SetStatus(
+                result.Success ? $"{result.Message} 已保存到 {result.ArchivePath}" : result.Message,
+                result.Success ? StatusKind.Success : StatusKind.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private async Task RenameGroupAsync(SaveGroupRow row)
@@ -525,6 +577,98 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
             await OfferAsNextLaunchAsync(item.Installation, result.Group, "存档组已克隆");
     }
 
+    private async Task ImportAsync(SaveInstallationItem item)
+    {
+        if (item.IsRunning)
+        {
+            _shell.SetStatus("游戏正在运行，先关闭游戏再导入存档组。", StatusKind.Warning);
+            return;
+        }
+
+        if (item.NeedsUnmanagedChoice)
+        {
+            _shell.SetStatus(
+                "检测到未托管的存档；请先由 MK 启动一次游戏，选择导入现存存档或新建空组。未改动任何文件。",
+                StatusKind.Warning);
+            return;
+        }
+
+        var zip = await _filePicker.PickSaveArchiveAsync();
+        if (string.IsNullOrWhiteSpace(zip)) return;
+
+        var inspection = await _archive.InspectAsync(zip);
+        if (!inspection.Success || inspection.Manifest is null)
+        {
+            _shell.SetStatus($"无法导入：{inspection.Message}", StatusKind.Error);
+            return;
+        }
+
+        var manifest = inspection.Manifest;
+        var targetVersion = DetectGameVersion(item.Installation);
+        var name = await _dialogs.PromptAsync(
+            "导入存档组",
+            $"来源：{manifest.GroupName}（{manifest.SourceEdition} · {manifest.SourceVersion}）\n" +
+            "导入会新建一个独立存档组，不覆盖或合并现有组，也不会修改源 ZIP。",
+            _saveGroups.SuggestGroupName(item.Installation, manifest.GroupName),
+            "新存档组名称");
+        if (name is null) return;
+
+        var allowMismatch = false;
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var result = await _archive.ImportAsync(
+                zip,
+                item.Installation,
+                _saveGroups,
+                name,
+                allowMismatch,
+                targetVersion);
+
+            if (result.State == SaveGroupImportState.NeedsEditionConfirmation)
+            {
+                var confirmed = await _dialogs.ConfirmAsync(
+                    "来源版本不一致",
+                    result.Message + "\n\n仍要导入到一个新存档组吗？",
+                    "仍然导入",
+                    "取消");
+                if (!confirmed)
+                {
+                    _shell.SetStatus("已取消导入；没有创建或修改任何存档组。", StatusKind.Info);
+                    return;
+                }
+
+                allowMismatch = true;
+                continue;
+            }
+
+            if (!result.Success && result.SuggestedName is not null)
+            {
+                var retry = await _dialogs.PromptAsync(
+                    "存档组名称已存在",
+                    result.Message,
+                    result.SuggestedName,
+                    "新存档组名称");
+                if (retry is null) return;
+                name = retry;
+                continue;
+            }
+
+            if (!result.Success)
+            {
+                _shell.SetStatus(result.Message, StatusKind.Error);
+                return;
+            }
+
+            _shell.SetStatus(result.Message, StatusKind.Success);
+            await RefreshAsync();
+            if (result.Group is not null)
+                await OfferAsNextLaunchAsync(item.Installation, result.Group, "存档组已导入");
+            return;
+        }
+
+        _shell.SetStatus("导入未完成：名称多次冲突或确认未完成；未创建新组。", StatusKind.Warning);
+    }
+
     private async Task CommitSelectionAsync(SaveInstallationItem item)
     {
         if (item.SelectedNextGroup is not { } group)
@@ -577,6 +721,20 @@ public partial class SavesViewModel : ObservableObject, IAsyncPage
         var result = await _saveGroups.SelectNextLaunchAsync(installation, group.Id);
         _shell.SetStatus(result.Message, result.Success ? StatusKind.Success : StatusKind.Error);
         if (result.Success) await RefreshAsync();
+    }
+
+    private static string? DetectGameVersion(GameInstallation installation)
+    {
+        try
+        {
+            var path = installation.ExecutablePath;
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+            return FileVersionInfo.GetVersionInfo(path).FileVersion;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string FormatSize(long bytes) => bytes switch

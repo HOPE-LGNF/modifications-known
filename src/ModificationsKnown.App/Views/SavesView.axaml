@@ -172,6 +172,11 @@
                                                         Command="{Binding CloneCommand}"
                                                         IsEnabled="{Binding CanEdit}"
                                                         ToolTip.Tip="复制所选组的完整存档目录；新组使用新的 ID，源组不变" />
+                                                <Button Classes="Ghost"
+                                                        Content="从 ZIP 导入…"
+                                                        Command="{Binding ImportCommand}"
+                                                        IsEnabled="{Binding CanImport}"
+                                                        ToolTip.Tip="校验后新建一个存档组；不覆盖或合并现有组" />
                                             </StackPanel>
                                         </StackPanel>
 
@@ -226,6 +231,11 @@
                                                                     <Button Classes="Ghost"
                                                                             Content="打开目录"
                                                                             Command="{Binding OpenCommand}" />
+                                                                    <Button Classes="Ghost"
+                                                                            Content="备份/导出…"
+                                                                            Command="{Binding ExportCommand}"
+                                                                            IsEnabled="{Binding CanExport}"
+                                                                            ToolTip.Tip="导出完整存档组为带版本清单和 SHA-256 的 ZIP" />
                                                                     <Button Classes="Ghost"
                                                                             Content="重命名…"
                                                                             Command="{Binding RenameCommand}"
