@@ -83,6 +83,10 @@ public sealed class SaveSlotMetadata
     /// <summary>False when the file is binary garbage or a broken gzip/JSON payload.</summary>
     public bool IsReadable { get; set; } = true;
 
+    /// <summary>True for a 0-byte file: shown as an empty placeholder, not as an
+    /// unreadable save.</summary>
+    public bool IsEmptyFile { get; set; }
+
     public string? Error { get; set; }
 
     public bool IsMostRecent { get; set; }

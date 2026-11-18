@@ -372,8 +372,10 @@ public sealed class SaveSlotReader
 
         if (fileSize == 0)
         {
-            entry.IsReadable = false;
-            entry.Error ??= "存档文件为空。";
+            // A 0-byte <c>.sv</c> is a placeholder the game (or a mod) created,
+            // not a corrupt save: report it as an empty file, keep it listed and
+            // do not mark it unreadable.
+            entry.IsEmptyFile = true;
             return;
         }
 
@@ -490,9 +492,7 @@ public sealed class SaveSlotReader
         if (settings.ValueKind == JsonValueKind.Object)
         {
             foreach (var property in settings.EnumerateObject())
-            {
-                if (ReadSettingValue(property.Value) is { } typed) result[property.Name] = typed;
-            }
+                result[property.Name] = ReadSettingValue(property.Value);
 
             return result;
         }
@@ -520,16 +520,22 @@ public sealed class SaveSlotReader
             }
 
             if (string.IsNullOrEmpty(key)) continue;
-            if (ReadSettingValue(raw) is { } parsed) result[key] = parsed;
+            result[key] = ReadSettingValue(raw);
         }
 
         return result;
     }
 
-    /// <summary>Preserves the JSON type: a string "1" stays text, not a number.</summary>
-    private static SaveSettingValue? ReadSettingValue(JsonElement? element)
+    /// <summary>
+    /// Preserves the JSON type: a string "1" stays text, not a number. A value
+    /// that cannot be interpreted (object, array, null, a missing Item2) becomes
+    /// <see cref="SaveSettingValue.Unsupported"/> instead of being dropped —
+    /// dropping it made a save with 51 known keys plus one unknown key look like
+    /// an exact official preset.
+    /// </summary>
+    private static SaveSettingValue ReadSettingValue(JsonElement? element)
     {
-        if (element is not { } value) return null;
+        if (element is not { } value) return SaveSettingValue.Unsupported;
 
         return value.ValueKind switch
         {
@@ -537,7 +543,7 @@ public sealed class SaveSlotReader
             JsonValueKind.True => SaveSettingValue.FromBoolean(true),
             JsonValueKind.False => SaveSettingValue.FromBoolean(false),
             JsonValueKind.String => SaveSettingValue.FromText(value.GetString() ?? string.Empty),
-            _ => null
+            _ => SaveSettingValue.Unsupported
         };
     }
 
@@ -605,6 +611,7 @@ public sealed class SaveSlotReader
             primary.IsModded |= other.IsModded;
             primary.HasMetadata |= other.HasMetadata;
             primary.IsReadable |= other.IsReadable;
+            primary.IsEmptyFile |= other.IsEmptyFile;
             if (string.IsNullOrEmpty(primary.ContentHash)) primary.ContentHash = other.ContentHash;
             if (string.IsNullOrWhiteSpace(primary.Error)) primary.Error = other.Error;
             if (other.SavedAt is { } savedAt && (primary.SavedAt is null || savedAt > primary.SavedAt))
@@ -662,7 +669,9 @@ public sealed class SaveSlotReader
         return mostRecent is null ? baseLabel : $"{baseLabel} · 最近保存：{DescribeRecent(mostRecent)}";
     }
 
-    /// <summary>e.g. "槽 5 · 2148m Deep · 覆冰断崖 · 轻松 · 08:47:18".</summary>
+    /// <summary>e.g. "槽 5 · 2148m Deep · 覆冰断崖 · 轻松 · 1 小时 2 分". The
+    /// clock time of the file is a save-detail fact, not a run fact, so the
+    /// summary shows the played time instead.</summary>
     private static string DescribeRecent(SaveSlotMetadata save)
     {
         var parts = new List<string> { string.IsNullOrWhiteSpace(save.Label) ? save.FileName : save.Label };
@@ -670,7 +679,8 @@ public sealed class SaveSlotReader
         if (!string.IsNullOrWhiteSpace(save.LayerName)) parts.Add(save.LayerName);
         if (!string.IsNullOrWhiteSpace(save.DifficultyLabel)) parts.Add(save.DifficultyLabel);
         if (!string.IsNullOrWhiteSpace(save.CharacterLabel)) parts.Add(save.CharacterLabel);
-        if (save.SavedAt is { } savedAt) parts.Add(savedAt.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture));
+        if (!string.IsNullOrWhiteSpace(save.RunTimeLabel)) parts.Add(save.RunTimeLabel);
+        if (save.IsEmptyFile) parts.Add("空文件");
         return string.Join(" · ", parts);
     }
 

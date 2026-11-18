@@ -771,6 +771,125 @@ public sealed class SaveSlotReaderTests
         Assert.StartsWith("槽 1", details.MostRecentLabel);
     }
 
+    [Theory]
+    [InlineData("object")]
+    [InlineData("array")]
+    [InlineData("null")]
+    public void ReadGroup_UnknownRunSettingWithUnsupportedType_DoesNotMatchAPreset(string kind)
+    {
+        using var temp = new TempDirectory();
+        var group = temp.CreateDirectory("group");
+        object? value = kind switch
+        {
+            "object" => new Dictionary<string, object?> { ["nested"] = 1 },
+            "array" => new[] { 1, 2 },
+            _ => null
+        };
+        WriteSave(group, "save.sv", PayloadWithSetting("newSettingFromFutureVersion", value));
+
+        var save = Assert.Single(Reader.ReadGroup(group).Saves);
+
+        Assert.Equal(SaveDifficultyPresets.CustomKey, save.DifficultyKey);
+        Assert.Equal("自定义", save.DifficultyLabel);
+    }
+
+    [Fact]
+    public void ReadGroup_KnownRunSettingWithUnsupportedType_DoesNotMatchAPreset()
+    {
+        using var temp = new TempDirectory();
+        var group = temp.CreateDirectory("group");
+        WriteSave(group, "save.sv", PayloadWithSetting("timelimit", new Dictionary<string, object?> { ["value"] = 60 }));
+
+        var save = Assert.Single(Reader.ReadGroup(group).Saves);
+
+        Assert.Equal(SaveDifficultyPresets.CustomKey, save.DifficultyKey);
+    }
+
+    [Fact]
+    public void ReadGroup_SummaryShowsPlayTime_AndDetailKeepsTheSaveTime()
+    {
+        using var temp = new TempDirectory();
+        var group = temp.CreateDirectory("group");
+        WriteSave(group, "slot_1.sv", VanillaPayload(1, 3725.5, SaveDifficultyPresets.Normal.EffectiveSettings));
+        WriteText(group, "slot_1.sv.meta", Meta(new Dictionary<string, object?>
+        {
+            ["Timestamp"] = "2026/11/14 23:00"
+        }));
+
+        var details = Reader.ReadGroup(group);
+
+        var save = Assert.Single(details.Saves);
+        Assert.Equal("1 小时 2 分", save.RunTimeLabel);
+        Assert.Contains("1 小时 2 分", details.SummaryLabel);
+        Assert.DoesNotContain("23:00", details.SummaryLabel);
+        Assert.Equal("2026-11-14 23:00", save.SavedAtLabel);
+    }
+
+    [Fact]
+    public void ReadGroup_SummaryOmitsPlayTime_WhenTheSaveHasNone()
+    {
+        using var temp = new TempDirectory();
+        var group = temp.CreateDirectory("group");
+        var payload = (Dictionary<string, object?>)VanillaPayload(
+            0, 10, SaveDifficultyPresets.Normal.EffectiveSettings);
+        payload.Remove("runTime");
+        WriteSave(group, "save.sv", payload);
+
+        var details = Reader.ReadGroup(group);
+
+        var save = Assert.Single(details.Saves);
+        Assert.Equal(string.Empty, save.RunTimeLabel);
+        Assert.DoesNotContain("小时", details.SummaryLabel);
+        Assert.DoesNotContain(" 分", details.SummaryLabel);
+    }
+
+    [Fact]
+    public void ReadGroup_ZeroByteSave_IsListedAsAnEmptyFileWithoutAnError()
+    {
+        using var temp = new TempDirectory();
+        var group = temp.CreateDirectory("group");
+        File.WriteAllBytes(Path.Combine(group, "slot_1.sv"), []);
+        WriteSave(group, "slot_2.sv", VanillaPayload(0, 10, SaveDifficultyPresets.Normal.EffectiveSettings));
+
+        var details = Reader.ReadGroup(group);
+
+        Assert.Equal(2, details.Saves.Count);
+        var empty = Assert.Single(details.Saves, save => save.SlotNumber == 1);
+        Assert.True(empty.IsReadable);
+        Assert.True(empty.IsEmptyFile);
+        Assert.Null(empty.Error);
+        Assert.Equal(0, empty.FileSize);
+        Assert.Equal("槽 1", empty.Label);
+
+        var readable = Assert.Single(details.Saves, save => save.SlotNumber == 2);
+        Assert.False(readable.IsEmptyFile);
+    }
+
+    private static object PayloadWithSetting(string key, object? value)
+    {
+        var settings = SaveDifficultyPresets.NormalValues
+            .Select(pair => new Dictionary<string, object?>
+            {
+                ["Item1"] = pair.Key,
+                ["Item2"] = pair.Value.Kind switch
+                {
+                    SaveSettingKind.Boolean => pair.Value.Boolean,
+                    SaveSettingKind.Text => pair.Value.Text,
+                    _ => pair.Value.Number
+                }
+            })
+            .ToList();
+        settings.Add(new Dictionary<string, object?> { ["Item1"] = key, ["Item2"] = value });
+
+        return new Dictionary<string, object?>
+        {
+            ["biome"] = 0,
+            ["runTime"] = 10,
+            ["runSettings"] = settings,
+            ["cId"] = 1
+        };
+    }
+
     private static object TypedPayload(
         IReadOnlyDictionary<string, SaveSettingValue> settings,
         params (string Key, SaveSettingValue Value)[] overrides)

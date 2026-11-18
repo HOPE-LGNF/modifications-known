@@ -46,6 +46,7 @@ public sealed class SaveSlotCard
     private static IReadOnlyList<string> BuildBadges(SaveSlotMetadata save)
     {
         var badges = new List<string> { KindLabel(save.Kind) };
+        if (save.IsEmptyFile) badges.Add("空文件");
         if (save.IsMostRecent) badges.Add("最近");
         if (save.IsMultiplayer) badges.Add("多人");
         if (save.Cheated) badges.Add("已修改");
