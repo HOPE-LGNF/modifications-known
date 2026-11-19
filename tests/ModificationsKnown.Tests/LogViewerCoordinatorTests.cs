@@ -14,7 +14,7 @@ public sealed class LogViewerCoordinatorTests
     private static LogEntry Entry(LogLevel level, string message) =>
         new(level, level.ToString(), "BepInEx", message, message, 0);
 
-    private static LogReadResult Ok(params LogEntry[] entries) => LogReadResult.Ok(entries, false);
+    private static LogReadResult Ok(params LogEntry[] entries) => LogReadResult.Ok(entries);
 
     [Fact]
     public async Task LoadStoresASnapshotWithTheSourceIdentity()
@@ -164,7 +164,7 @@ public sealed class LogViewerCoordinatorTests
 
     private sealed class StubReader : ILogReader
     {
-        public LogReadResult Result { get; set; } = LogReadResult.Ok(Array.Empty<LogEntry>(), false);
+        public LogReadResult Result { get; set; } = LogReadResult.Ok(Array.Empty<LogEntry>());
 
         public TaskCompletionSource<LogReadResult>? Pending { get; set; }
 

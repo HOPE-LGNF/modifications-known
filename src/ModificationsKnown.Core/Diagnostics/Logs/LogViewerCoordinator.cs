@@ -109,7 +109,9 @@ public sealed class LogViewerCoordinator
                 source,
                 result.Entries,
                 result.Outcome,
-                result.Truncated,
+                result.Truncation,
+                result.HadDecodeFallback,
+                result.BytesRead,
                 _clock(),
                 result.Error);
 

@@ -45,6 +45,23 @@ public enum LogSearchScope
     Message
 }
 
+/// <summary>Why a snapshot is incomplete. The UI must describe the actual
+/// reason instead of always claiming the 2 MiB tail window.</summary>
+[Flags]
+public enum LogTruncation
+{
+    None = 0,
+
+    /// <summary>The tail window cut older content.</summary>
+    Head = 1,
+
+    /// <summary>Older entries were dropped by the entry-count budget.</summary>
+    EntryCount = 2,
+
+    /// <summary>One or more entries were shortened to the per-entry budget.</summary>
+    EntryLength = 4
+}
+
 /// <summary>Identity of what is being read. <see cref="Identity"/> is the value
 /// a snapshot is validated against; it must change whenever the underlying file
 /// could be a different one (kind, instance or path).</summary>
@@ -65,32 +82,49 @@ public sealed record LogEntry(
 public sealed record LogReadResult(
     LogReadOutcome Outcome,
     IReadOnlyList<LogEntry> Entries,
-    bool Truncated,
+    LogTruncation Truncation,
+    bool HadDecodeFallback,
+    long BytesRead,
     string? Error)
 {
+    public bool Truncated => Truncation != LogTruncation.None;
+
+    public static LogReadResult Ok(
+        IReadOnlyList<LogEntry> entries,
+        LogTruncation truncation = LogTruncation.None,
+        bool hadDecodeFallback = false,
+        long bytesRead = 0) =>
+        new(LogReadOutcome.Ok, entries, truncation, hadDecodeFallback, bytesRead, null);
+
+    // Temporary compatibility overload; removed in the follow-up page-state commit.
     public static LogReadResult Ok(IReadOnlyList<LogEntry> entries, bool truncated) =>
-        new(LogReadOutcome.Ok, entries, truncated, null);
+        Ok(entries, truncated ? LogTruncation.Head : LogTruncation.None);
 
-    public static LogReadResult Missing() =>
-        new(LogReadOutcome.Missing, Array.Empty<LogEntry>(), false, null);
+    public static LogReadResult Missing(long bytesRead = 0) =>
+        new(LogReadOutcome.Missing, Array.Empty<LogEntry>(), LogTruncation.None, false, bytesRead, null);
 
-    public static LogReadResult Empty() =>
-        new(LogReadOutcome.Empty, Array.Empty<LogEntry>(), false, null);
+    public static LogReadResult Empty(long bytesRead = 0) =>
+        new(LogReadOutcome.Empty, Array.Empty<LogEntry>(), LogTruncation.None, false, bytesRead, null);
 
-    public static LogReadResult Failed(string error) =>
-        new(LogReadOutcome.Failed, Array.Empty<LogEntry>(), false, error);
+    public static LogReadResult Failed(string error, long bytesRead = 0) =>
+        new(LogReadOutcome.Failed, Array.Empty<LogEntry>(), LogTruncation.None, false, bytesRead, error);
 
-    public static LogReadResult Cancelled() =>
-        new(LogReadOutcome.Cancelled, Array.Empty<LogEntry>(), false, null);
+    public static LogReadResult Cancelled(long bytesRead = 0) =>
+        new(LogReadOutcome.Cancelled, Array.Empty<LogEntry>(), LogTruncation.None, false, bytesRead, null);
 }
 
 public sealed record LogSnapshot(
     LogSource Source,
     IReadOnlyList<LogEntry> Entries,
     LogReadOutcome Outcome,
-    bool Truncated,
+    LogTruncation Truncation,
+    bool HadDecodeFallback,
+    long BytesRead,
     DateTimeOffset ReadAt,
-    string? Error);
+    string? Error)
+{
+    public bool Truncated => Truncation != LogTruncation.None;
+}
 
 public sealed record LogLoadResult(
     bool Adopted,
@@ -151,6 +185,41 @@ public static class LogFilter
     };
 }
 
+/// <summary>Splits text into lines while keeping each line's offset in the
+/// original string. Parsers must report offsets in the same coordinate system
+/// the reader maps to file bytes, so CRLF must not be normalized away before
+/// offsets are computed.</summary>
+internal static class LogLines
+{
+    public static IEnumerable<(string Text, long Offset)> Enumerate(string text)
+    {
+        var start = 0;
+        for (var index = 0; index < text.Length; index++)
+        {
+            var current = text[index];
+            if (current is not ('\r' or '\n'))
+            {
+                continue;
+            }
+
+            yield return (text[start..index], start);
+
+            if (current == '\r' && index + 1 < text.Length && text[index + 1] == '\n')
+            {
+                index++;
+            }
+
+            start = index + 1;
+        }
+
+        var endedWithBreak = text.Length > 0 && (text[^1] == '\n' || text[^1] == '\r');
+        if (start < text.Length || (start == text.Length && endedWithBreak))
+        {
+            yield return (text[start..], start);
+        }
+    }
+}
+
 /// <summary>BepInEx 5 LogOutput.log: "[Level: Source] message", with indented
 /// continuation lines (stack frames) belonging to the previous entry.</summary>
 internal sealed partial class BepInExLogParser : ILogTextParser
@@ -160,10 +229,8 @@ internal sealed partial class BepInExLogParser : ILogTextParser
 
     public IReadOnlyList<LogEntry> Parse(string text, bool headTruncated)
     {
-        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         var entries = new List<LogEntry>();
         var buffer = new List<string>();
-        var offset = 0L;
         long entryOffset = 0;
         LogLevel level = LogLevel.Unknown;
         var levelText = "Unknown";
@@ -190,9 +257,8 @@ internal sealed partial class BepInExLogParser : ILogTextParser
             buffer.Clear();
         }
 
-        for (var index = 0; index < lines.Length; index++)
+        foreach (var (line, offset) in LogLines.Enumerate(text))
         {
-            var line = lines[index];
             var match = PrefixPattern().Match(line);
 
             if (match.Success)
@@ -222,8 +288,6 @@ internal sealed partial class BepInExLogParser : ILogTextParser
                 source = string.Empty;
                 buffer.Add(line);
             }
-
-            offset += line.Length + 1;
         }
 
         Flush();
@@ -248,10 +312,8 @@ internal sealed class UnityLogParser : ILogTextParser
 {
     public IReadOnlyList<LogEntry> Parse(string text, bool headTruncated)
     {
-        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         var entries = new List<LogEntry>();
         var buffer = new List<string>();
-        var offset = 0L;
         long entryOffset = 0;
 
         void Flush()
@@ -263,7 +325,7 @@ internal sealed class UnityLogParser : ILogTextParser
             buffer.Clear();
         }
 
-        foreach (var line in lines)
+        foreach (var (line, offset) in LogLines.Enumerate(text))
         {
             if (line.Length == 0)
             {
@@ -280,8 +342,6 @@ internal sealed class UnityLogParser : ILogTextParser
                 entryOffset = offset;
                 buffer.Add(line);
             }
-
-            offset += line.Length + 1;
         }
 
         Flush();

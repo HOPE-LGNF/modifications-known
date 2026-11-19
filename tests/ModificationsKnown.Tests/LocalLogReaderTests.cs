@@ -171,6 +171,189 @@ public sealed class LocalLogReaderTests : IDisposable
         Assert.Equal(LogReadOutcome.Failed, result.Outcome);
         Assert.False(string.IsNullOrWhiteSpace(result.Error));
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Utf16TailWindowIsDetectedWithoutTheBomInTheWindow(bool bigEndian)
+    {
+        var encoding = new UnicodeEncoding(bigEndian, byteOrderMark: true);
+        var text = string.Join('\n',
+            Enumerable.Range(0, 400).Select(i => $"[Info   : BepInEx] 条目 {i} 填充填充填充填充填充填充"));
+        var path = Write("utf16-tail.log", text, encoding);
+
+        var reader = new LocalLogReader(new LocalLogReaderOptions(MaxBytes: 2048));
+        var result = await reader.ReadAsync(Source(path));
+
+        Assert.Equal(LogReadOutcome.Ok, result.Outcome);
+        Assert.NotEmpty(result.Entries);
+        Assert.Contains("条目 399", result.Entries[^1].Message);
+        Assert.All(result.Entries, entry => Assert.DoesNotContain('\uFFFD', entry.Message));
+        Assert.True(result.BytesRead <= 2048 + LocalLogReader.ReadOverheadBytes, $"read {result.BytesRead} bytes");
+    }
+
+    [Fact]
+    public async Task AnOversizedEntryKeepsItsTail()
+    {
+        var path = Write("long-tail.log", $"[Info   : BepInEx] {new string('x', 500)}TAILMARK");
+        var reader = new LocalLogReader(new LocalLogReaderOptions(MaxEntryChars: 50));
+
+        var result = await reader.ReadAsync(Source(path));
+
+        Assert.True(result.Truncation.HasFlag(LogTruncation.EntryLength));
+        Assert.EndsWith("TAILMARK", result.Entries[0].Message);
+        Assert.True(result.Entries[0].Message.Length <= 50);
+    }
+
+    [Fact]
+    public async Task DecodeFallbackIsReportedOnlyWhenBytesWereReplaced()
+    {
+        var broken = Path.Combine(_directory, "broken-flag.log");
+        File.WriteAllBytes(broken, Encoding.ASCII.GetBytes("[Error  : Unity Log] bad ")
+            .Concat(new byte[] { 0xC3, 0x28 })
+            .Concat(Encoding.ASCII.GetBytes(" bytes"))
+            .ToArray());
+
+        var valid = Write("valid-replacement.log", "[Info   : BepInEx] literal \uFFFD stays");
+
+        var brokenResult = await new LocalLogReader().ReadAsync(Source(broken));
+        var validResult = await new LocalLogReader().ReadAsync(Source(valid));
+
+        Assert.True(brokenResult.HadDecodeFallback);
+        Assert.False(validResult.HadDecodeFallback);
+        Assert.Contains('\uFFFD', validResult.Entries[0].Message);
+    }
+
+    [Fact]
+    public async Task StartOffsetsStayStableWhenTheTailWindowMoves()
+    {
+        var fillerLine = "[Info   : BepInEx] " + new string('a', 80) + "\n";
+        var builder = new System.Text.StringBuilder();
+        for (var i = 0; i < 25000; i++) builder.Append(fillerLine);
+        builder.Append("[Info   : BepInEx] MARKER-UNIQUE\n");
+        for (var i = 0; i < 1000; i++) builder.Append(fillerLine);
+
+        var path = Write("growing.log", builder.ToString());
+        var reader = new LocalLogReader(new LocalLogReaderOptions(
+            MaxBytes: 2 * 1024 * 1024,
+            MaxEntries: 50000));
+
+        var first = await reader.ReadAsync(Source(path));
+        var firstMarker = Assert.Single(first.Entries, entry => entry.Message.Contains("MARKER-UNIQUE"));
+
+        await using (var append = new FileStream(path, FileMode.Append, FileAccess.Write))
+        {
+            var block = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(fillerLine, 10000)));
+            await append.WriteAsync(block);
+        }
+
+        var second = await reader.ReadAsync(Source(path));
+        var secondMarker = Assert.Single(second.Entries, entry => entry.Message.Contains("MARKER-UNIQUE"));
+
+        Assert.Equal(firstMarker.StartOffset, secondMarker.StartOffset);
+        Assert.True(firstMarker.StartOffset > 0);
+    }
+
+    [Fact]
+    public async Task StartOffsetsStayStableForCrlfFilesWhenTheWindowMoves()
+    {
+        var fillerLine = "[Info   : BepInEx] " + new string('a', 80) + "\r\n";
+        var builder = new System.Text.StringBuilder();
+        for (var i = 0; i < 25000; i++) builder.Append(fillerLine);
+        builder.Append("[Info   : BepInEx] CRLF-MARKER\r\n");
+        for (var i = 0; i < 1000; i++) builder.Append(fillerLine);
+
+        var path = Write("growing-crlf.log", builder.ToString());
+        var reader = new LocalLogReader(new LocalLogReaderOptions(
+            MaxBytes: 2 * 1024 * 1024,
+            MaxEntries: 50000));
+
+        var first = await reader.ReadAsync(Source(path));
+        var firstMarker = Assert.Single(first.Entries, entry => entry.Message.Contains("CRLF-MARKER"));
+
+        await using (var append = new FileStream(path, FileMode.Append, FileAccess.Write))
+        {
+            var block = Encoding.UTF8.GetBytes(string.Concat(Enumerable.Repeat(fillerLine, 10000)));
+            await append.WriteAsync(block);
+        }
+
+        var second = await reader.ReadAsync(Source(path));
+        var secondMarker = Assert.Single(second.Entries, entry => entry.Message.Contains("CRLF-MARKER"));
+
+        Assert.Equal(firstMarker.StartOffset, secondMarker.StartOffset);
+        Assert.Equal("CRLF-MARKER", secondMarker.Message.TrimEnd('\r'));
+    }
+
+    [Fact]
+    public async Task StartOffsetUsesRawBytesWhenTheDroppedHeadHasInvalidBytes()
+    {
+        var prefix = new System.Text.StringBuilder();
+        for (var i = 0; i < 40; i++) prefix.Append("[Info   : BepInEx] filler ").Append(i).Append('\n');
+
+        var prefixBytes = Encoding.UTF8.GetBytes(prefix.ToString());
+        var broken = new byte[] { 0xFF };
+        var brokenTail = Encoding.ASCII.GetBytes(" broken tail\n");
+        var markerBytes = Encoding.UTF8.GetBytes("[Info   : BepInEx] BAD-MARKER\n");
+        var after = Encoding.UTF8.GetBytes(string.Concat(
+            Enumerable.Repeat("[Info   : BepInEx] after filler\n", 40)));
+
+        var bytes = prefixBytes.Concat(broken).Concat(brokenTail).Concat(markerBytes).Concat(after).ToArray();
+        var brokenStart = prefixBytes.Length;
+        var markerStart = brokenStart + broken.Length + brokenTail.Length;
+
+        var path = Path.Combine(_directory, "broken-head.log");
+        File.WriteAllBytes(path, bytes);
+
+        var reader = new LocalLogReader(new LocalLogReaderOptions(
+            MaxBytes: bytes.Length - (brokenStart - 1),
+            MaxEntries: 5000));
+
+        var result = await reader.ReadAsync(Source(path));
+
+        var marker = Assert.Single(result.Entries, entry => entry.Message.Contains("BAD-MARKER"));
+        Assert.Equal(markerStart, marker.StartOffset);
+        Assert.True(result.HadDecodeFallback);
+    }
+
+    [Fact]
+    public async Task BytesReadStaysWithinTheWindowBudget()
+    {
+        var path = Write("budget.log", string.Concat(Enumerable.Repeat(BepInExLines(1) + "\n", 500)));
+        var reader = new LocalLogReader(new LocalLogReaderOptions(MaxBytes: 2048, MaxEntries: 5000));
+
+        var result = await reader.ReadAsync(Source(path));
+
+        Assert.True(result.BytesRead > 0);
+        Assert.True(
+            result.BytesRead <= 2048 + LocalLogReader.ReadOverheadBytes,
+            $"read {result.BytesRead} bytes");
+    }
+
+    [Fact]
+    public async Task TruncationReportsTheActualReason()
+    {
+        var headPath = Write("reason-head.log", string.Concat(Enumerable.Repeat(BepInExLines(1) + "\n", 500)));
+        var head = await new LocalLogReader(new LocalLogReaderOptions(MaxBytes: 2048))
+            .ReadAsync(Source(headPath));
+
+        var countPath = Write("reason-count.log", BepInExLines(10));
+        var count = await new LocalLogReader(new LocalLogReaderOptions(MaxEntries: 3))
+            .ReadAsync(Source(countPath));
+
+        var lengthPath = Write("reason-length.log", $"[Info   : BepInEx] {new string('y', 300)}");
+        var length = await new LocalLogReader(new LocalLogReaderOptions(MaxEntryChars: 50))
+            .ReadAsync(Source(lengthPath));
+
+        Assert.True(head.Truncation.HasFlag(LogTruncation.Head));
+        Assert.False(head.Truncation.HasFlag(LogTruncation.EntryCount));
+        Assert.False(head.Truncation.HasFlag(LogTruncation.EntryLength));
+
+        Assert.True(count.Truncation.HasFlag(LogTruncation.EntryCount));
+        Assert.False(count.Truncation.HasFlag(LogTruncation.Head));
+
+        Assert.True(length.Truncation.HasFlag(LogTruncation.EntryLength));
+        Assert.False(length.Truncation.HasFlag(LogTruncation.Head));
+    }
 }
 
 public sealed class LogSourceLocationsTests
