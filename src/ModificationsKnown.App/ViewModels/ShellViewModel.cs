@@ -110,6 +110,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         IGameLauncher launcher,
         IUserDialogService dialogs,
         IFilePickerService filePicker,
+        IClipboardService clipboard,
         ThumbnailService thumbnails)
     {
         Settings = settings;
@@ -171,6 +172,9 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             ["logs"] = new LogViewerViewModel(
                 this,
                 new GameLogSourceProvider(Game),
+                filePicker,
+                clipboard,
+                new ShellExternalLauncher(),
                 new LocalLogReader()),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),

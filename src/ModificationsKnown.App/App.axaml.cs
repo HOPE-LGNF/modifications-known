@@ -62,6 +62,7 @@ public class App : Application
         var launcher = new GameLauncher(logger);
         var dialogs = new UserDialogService(() => desktop.MainWindow, _nexusClient);
         var filePicker = new FilePickerService(() => desktop.MainWindow);
+        var clipboard = new ClipboardService(() => desktop.MainWindow);
 
         var shell = new ShellViewModel(
             settings,
@@ -74,6 +75,7 @@ public class App : Application
             launcher,
             dialogs,
             filePicker,
+            clipboard,
             _thumbnails);
 
         SingleInstance?.SetHandler(url =>

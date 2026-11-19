@@ -20,51 +20,87 @@
                            FontSize="12"
                            TextWrapping="Wrap" />
             </StackPanel>
-            <Button Grid.Column="1"
-                    Classes="Primary"
-                    Content="刷新"
-                    VerticalAlignment="Top"
-                    Command="{Binding RefreshCommand}" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+                <Button Content="更多 ▾">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuItem Header="用默认程序打开当前日志"
+                                      Command="{Binding OpenCurrentExternallyCommand}" />
+                            <MenuItem Header="打开所在文件夹"
+                                      Command="{Binding OpenCurrentFolderCommand}" />
+                            <Separator />
+                            <MenuItem Header="选择其他日志文件…"
+                                      Command="{Binding SelectLogFileCommand}" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+                <Button Classes="Primary"
+                        Content="刷新"
+                        Command="{Binding RefreshCommand}" />
+            </StackPanel>
         </Grid>
 
         <Border Grid.Row="1" Classes="card" Padding="12">
-            <Grid ColumnDefinitions="Auto,280,Auto,140,*" ColumnSpacing="8">
-                <TextBlock Text="来源"
-                           Classes="muted"
-                           FontSize="12"
-                           VerticalAlignment="Center" />
-                <ComboBox Grid.Column="1"
-                          ItemsSource="{Binding Sources}"
-                          SelectedItem="{Binding SelectedSource}"
-                          PlaceholderText="选择日志来源">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding DisplayName}"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTip.Tip="{Binding ToolTipText}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
-                <TextBlock Grid.Column="2"
-                           Text="级别"
-                           Classes="muted"
-                           FontSize="12"
-                           VerticalAlignment="Center" />
-                <ComboBox Grid.Column="3"
-                          ItemsSource="{Binding LevelOptions}"
-                          SelectedItem="{Binding SelectedLevel}">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding DisplayName}"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTip.Tip="{Binding DisplayName}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
+            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
+                <Grid ColumnDefinitions="Auto,280,Auto,140,*" ColumnSpacing="8">
+                    <TextBlock Text="来源"
+                               Classes="muted"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding Sources}"
+                              SelectedItem="{Binding SelectedSource}"
+                              PlaceholderText="选择日志来源">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayName}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip.Tip="{Binding ToolTipText}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Grid.Column="2"
+                               Text="级别"
+                               Classes="muted"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="3"
+                              ItemsSource="{Binding LevelOptions}"
+                              SelectedItem="{Binding SelectedLevel}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayName}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip.Tip="{Binding DisplayName}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,140,*" ColumnSpacing="8">
+                    <TextBlock Text="范围"
+                               Classes="muted"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               ToolTip.Tip="「日志来源」是日志行方括号里的来源字段（例如 BepInEx、Together），不等于已安装插件名。" />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding ScopeOptions}"
+                              SelectedItem="{Binding SelectedScope}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayName}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip.Tip="{Binding DisplayName}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBox Grid.Column="2"
+                             Text="{Binding SearchText}"
+                             Watermark="{Binding SearchWatermark}" />
+                </Grid>
             </Grid>
         </Border>
 
-        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
             <TextBlock Text="{Binding SourcePathText}"
                        Classes="muted"
                        FontSize="11"
@@ -77,6 +113,12 @@
                        VerticalAlignment="Center"
                        ToolTip.Tip="快照读取时间，不是日志发生时间。"
                        IsVisible="{Binding ReadAsOfText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Grid.Column="2"
+                       Text="{Binding TruncatedText}"
+                       FontSize="11"
+                       Foreground="{DynamicResource WarningBrush}"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding TruncatedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
         </Grid>
 
         <Grid Grid.Row="3" ColumnDefinitions="45*,Auto,55*" ColumnSpacing="0">
@@ -93,8 +135,11 @@
                                    FontSize="11"
                                    VerticalAlignment="Center" />
                     </Grid>
+
+
                     <Grid Grid.Row="1">
-                        <ListBox ItemsSource="{Binding Entries}"
+                        <ListBox x:Name="EntriesList"
+                                 ItemsSource="{Binding Entries}"
                                  SelectedItem="{Binding SelectedEntry}"
                                  Background="Transparent"
                                  BorderThickness="0"
@@ -153,6 +198,11 @@
                                       IsChecked="{Binding WrapDetail}"
                                       VerticalAlignment="Center" />
                         </StackPanel>
+                        <Button Grid.Column="1"
+                                Content="复制此条日志"
+                                ToolTip.Tip="复制右侧选中的那一条完整日志（含堆栈）"
+                                IsEnabled="{Binding HasSelection}"
+                                Command="{Binding CopyEntryCommand}" />
                     </Grid>
 
                     <ScrollViewer Grid.Row="1"
@@ -175,11 +225,16 @@
             </Border>
         </Grid>
 
-        <TextBlock Grid.Row="4"
-                   Text="{Binding TruncatedText}"
-                   FontSize="11"
-                   Foreground="{DynamicResource WarningBrush}"
-                   TextWrapping="Wrap"
-                   IsVisible="{Binding TruncatedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        <Grid Grid.Row="4" ColumnDefinitions="Auto,*" ColumnSpacing="10">
+            <Button Content="{Binding CopyFilteredText}"
+                    ToolTip.Tip="复制左侧当前显示的全部条目，包括未滚动到的行"
+                    Command="{Binding CopyFilteredCommand}" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding CopyHint}"
+                       Classes="muted"
+                       FontSize="11"
+                       VerticalAlignment="Center"
+                       TextWrapping="Wrap" />
+        </Grid>
     </Grid>
 </UserControl>
