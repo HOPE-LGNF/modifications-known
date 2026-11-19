@@ -27,6 +27,10 @@ public sealed class LocalLogReader : ILogReader
 
     private readonly LocalLogReaderOptions _options;
 
+    /// <summary>Test seam: runs after the encoding probe and before the tail
+    /// read, so tests can cancel or rotate the file at a deterministic point.</summary>
+    internal Action? AfterProbeHook { get; set; }
+
     public LocalLogReader(LocalLogReaderOptions? options = null) =>
         _options = options ?? new LocalLogReaderOptions();
 
@@ -100,6 +104,8 @@ public sealed class LocalLogReader : ILogReader
             var head = await ReadAtAsync(stream, 0, (int)Math.Min(ProbeBytes, length), cancellationToken);
             bytesRead += head.Length;
             var (codePage, bomLength) = DetectEncoding(head);
+
+            AfterProbeHook?.Invoke();
 
             var windowStart = Math.Max(bomLength, length - _options.MaxBytes);
             var windowLength = (int)Math.Min(length - windowStart, _options.MaxBytes);
@@ -424,6 +430,14 @@ public static class LogSourceLocations
         var full = Path.GetFullPath(path);
         return new LogSource(SourceKind.ManualFile, "manual:" + full, full);
     }
+
+    /// <summary>The page only accepts plain-text log files. The picker filter
+    /// is not a guarantee: a path can arrive from elsewhere, so the same rule
+    /// is enforced before a source is created.</summary>
+    public static bool IsSupportedManualPath(string? path) =>
+        !string.IsNullOrWhiteSpace(path)
+        && (path.EndsWith(".log", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase));
 
     private static LogSource Unity(SourceKind kind, string identityPrefix, string fileName, string? root)
     {

@@ -149,6 +149,104 @@ public sealed class LocalLogReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task CancellingAfterTheProbeReturnsCancelledAndReleasesTheHandle()
+    {
+        var path = Write("cancel-mid.log", BepInExLines(50));
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var reader = new LocalLogReader
+        {
+            AfterProbeHook = () =>
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(10));
+            }
+        };
+        using var cts = new CancellationTokenSource();
+
+        var task = Task.Run(() => reader.ReadAsync(Source(path), cts.Token));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "reader never reached the probe seam");
+
+        cts.Cancel();
+        release.Set();
+
+        var result = await task;
+
+        Assert.Equal(LogReadOutcome.Cancelled, result.Outcome);
+        // FileShare.None only succeeds when the reader closed its handle.
+        using var exclusive = new FileStream(
+            path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+    }
+
+    [Fact]
+    public async Task AReplacedFileDoesNotLeakIntoTheSameRead()
+    {
+        var path = Write("rotate.log", BepInExLines(3, "old"));
+        var rotated = path + ".rotated";
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var reader = new LocalLogReader
+        {
+            AfterProbeHook = () =>
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(10));
+            }
+        };
+
+        var task = Task.Run(() => reader.ReadAsync(Source(path)));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "reader never reached the probe seam");
+
+        File.Move(path, rotated);
+        File.WriteAllText(path, BepInExLines(2, "new"), new UTF8Encoding(false));
+        release.Set();
+
+        var first = await task;
+        Assert.All(first.Entries, entry => Assert.Contains("old", entry.Raw));
+        Assert.DoesNotContain(first.Entries, entry => entry.Raw.Contains("new", StringComparison.Ordinal));
+
+        var second = await new LocalLogReader().ReadAsync(Source(path));
+        Assert.Equal(2, second.Entries.Count);
+        Assert.All(second.Entries, entry => Assert.Contains("new", entry.Raw));
+    }
+
+    [Fact]
+    public async Task ATruncatedFileDoesNotLeakNewContentIntoTheSameRead()
+    {
+        var path = Write("truncate.log", BepInExLines(3, "old"));
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var reader = new LocalLogReader
+        {
+            AfterProbeHook = () =>
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(10));
+            }
+        };
+
+        var task = Task.Run(() => reader.ReadAsync(Source(path)));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)), "reader never reached the probe seam");
+
+        using (var writer = new FileStream(
+                   path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite))
+        {
+            writer.SetLength(0);
+            var replacement = Encoding.UTF8.GetBytes(BepInExLines(2, "new"));
+            writer.Write(replacement);
+        }
+
+        release.Set();
+
+        var first = await task;
+        Assert.DoesNotContain(first.Entries, entry => entry.Raw.Contains("new", StringComparison.Ordinal));
+
+        var second = await new LocalLogReader().ReadAsync(Source(path));
+        Assert.Equal(2, second.Entries.Count);
+        Assert.All(second.Entries, entry => Assert.Contains("new", entry.Raw));
+    }
+
+    [Fact]
     public async Task ReadsWhileAnotherHandleKeepsTheFileOpen()
     {
         var path = Write("locked.log", BepInExLines(3));
