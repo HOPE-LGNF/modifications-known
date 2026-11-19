@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using ModificationsKnown.Core.Updates;
+
 namespace ModificationsKnown.Core.Settings;
 
 /// <summary>
@@ -33,4 +36,9 @@ public sealed class AppSettings
     public int PageSize { get; set; } = 24;
 
     public DateTimeOffset? LastLaunchAt { get; set; }
+
+    /// <summary>Which release feed the launcher's own update check follows.
+    /// Stable by default; unknown or missing values fall back to Stable.</summary>
+    [JsonConverter(typeof(AppUpdateChannelJsonConverter))]
+    public AppUpdateChannel UpdateChannel { get; set; } = AppUpdateChannel.Stable;
 }
