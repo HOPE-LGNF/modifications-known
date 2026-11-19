@@ -144,7 +144,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             new("discover", "模组发现", "从 Nexus Mods 浏览与安装", "⌕"),
             new("installed", "已安装模组", "启用、停用与清理本地模组", "▣"),
             new("saves", "存档管理", "各版本的存档与备份", "▤"),
-            new("logs", "游戏日志", "BepInEx 与 Unity 日志", "☰"),
+            new("logs", "日志", "BepInEx 与 Unity 日志", "☰"),
             new("appearance", "启动器外观", "主题变量与基础皮肤", "◈"),
             new("settings", "设置", "游戏、版本与 Nexus", "⚙")
         ];

@@ -96,10 +96,6 @@ public sealed record LogReadResult(
         long bytesRead = 0) =>
         new(LogReadOutcome.Ok, entries, truncation, hadDecodeFallback, bytesRead, null);
 
-    // Temporary compatibility overload; removed in the follow-up page-state commit.
-    public static LogReadResult Ok(IReadOnlyList<LogEntry> entries, bool truncated) =>
-        Ok(entries, truncated ? LogTruncation.Head : LogTruncation.None);
-
     public static LogReadResult Missing(long bytesRead = 0) =>
         new(LogReadOutcome.Missing, Array.Empty<LogEntry>(), LogTruncation.None, false, bytesRead, null);
 

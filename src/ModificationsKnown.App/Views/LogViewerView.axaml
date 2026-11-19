@@ -9,6 +9,15 @@
         <Style Selector="SelectableTextBlock">
             <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
         </Style>
+        <Style Selector="TextBlock.infolevel">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="TextBlock.warnlevel">
+            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+        </Style>
+        <Style Selector="TextBlock.errorlevel">
+            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+        </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10">
@@ -100,26 +109,42 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
-            <TextBlock Text="{Binding SourcePathText}"
+        <StackPanel Grid.Row="2" Spacing="3">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                <TextBlock Text="{Binding SourcePathText}"
+                           Classes="muted"
+                           FontSize="11"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding ReadAsOfText}"
+                           Classes="muted"
+                           FontSize="11"
+                           VerticalAlignment="Center"
+                           ToolTip.Tip="快照读取时间，不是日志发生时间。"
+                           IsVisible="{Binding ReadAsOfText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <TextBlock Grid.Column="2"
+                           Text="{Binding TruncatedText}"
+                           FontSize="11"
+                           Foreground="{DynamicResource WarningBrush}"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding TruncatedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </Grid>
+            <TextBlock Text="{Binding StatusText}"
                        Classes="muted"
                        FontSize="11"
-                       TextTrimming="CharacterEllipsis"
-                       VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1"
-                       Text="{Binding ReadAsOfText}"
+                       TextWrapping="Wrap" />
+            <TextBlock Text="{Binding AttributionText}"
                        Classes="muted"
                        FontSize="11"
-                       VerticalAlignment="Center"
-                       ToolTip.Tip="快照读取时间，不是日志发生时间。"
-                       IsVisible="{Binding ReadAsOfText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-            <TextBlock Grid.Column="2"
-                       Text="{Binding TruncatedText}"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding AttributionText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Text="{Binding DecodeNote}"
                        FontSize="11"
                        Foreground="{DynamicResource WarningBrush}"
-                       VerticalAlignment="Center"
-                       IsVisible="{Binding TruncatedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-        </Grid>
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding DecodeNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
 
         <Grid Grid.Row="3" ColumnDefinitions="45*,Auto,55*" ColumnSpacing="0">
             <Border Classes="card" Padding="0" MinWidth="280">
@@ -179,7 +204,10 @@
                                                    MinWidth="56"
                                                    FontSize="11"
                                                    FontWeight="SemiBold"
-                                                   Foreground="{Binding LevelBrush}"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                   Classes.infolevel="{Binding IsInfoLevel}"
+                                                   Classes.warnlevel="{Binding IsWarningLevel}"
+                                                   Classes.errorlevel="{Binding IsErrorLevel}"
                                                    VerticalAlignment="Center" />
                                         <TextBlock Grid.Column="1"
                                                    Text="{Binding Source}"

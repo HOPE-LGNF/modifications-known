@@ -50,8 +50,9 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
     private const string NoMatchText = "没有匹配的日志。";
     private const string NoInstanceText = "请选择一个游戏实例，或切换到 Unity 日志 / 选择其他日志文件。";
     private const string UnityAttribution = "显示该目录中已有的日志，不能确认生成时使用的实例。";
-    private const string TruncatedNote = "只读取了最近 2 MiB，更早的内容没有载入。";
-    private const string TruncationNotice = "（本条目来自截断后的日志尾部快照，不是完整日志。）";
+    private const string TruncatedNote = "只读取了文件尾部，更早的内容没有载入。";
+    private const string DecodeNoteText = "有无法解码的字节，已用替换字符显示。";
+    private const string TruncationNotice = "（本条目来自不完整的日志快照，不是完整日志。）";
 
     private readonly IAppShell _shell;
     private readonly ILogSourceProvider _sourceProvider;
@@ -64,6 +65,12 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
     private CancellationTokenSource? _searchCts;
     private LogSource? _manualSource;
     private bool _suppressReload;
+    private Task? _loadTask;
+    private bool _refreshing;
+
+    /// <summary>Completes when the latest load triggered by a source change or
+    /// activation has settled. Tests use it instead of polling.</summary>
+    public Task WaitForLoadAsync() => _loadTask ?? Task.CompletedTask;
 
     [ObservableProperty]
     private LogSourceOption? _selectedSource;
@@ -96,6 +103,9 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
     private string _truncatedText = string.Empty;
 
     [ObservableProperty]
+    private string _decodeNote = string.Empty;
+
+    [ObservableProperty]
     private string _emptyMessage = NoSnapshotText;
 
     [ObservableProperty]
@@ -103,7 +113,7 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
 
     [ObservableProperty]
     private string _copyHint =
-        "「复制列表日志」复制左侧当前显示的全部条目（含未滚动到的）；「复制此条日志」只复制右侧选中的那一条。";
+        "「复制列表日志」复制左侧当前显示的全部条目（含未滚动到的）；「复制此条日志」只复制右侧选中的那一条。分享前检查日志中的敏感信息。";
 
     [ObservableProperty]
     private string _copyFilteredText = "复制列表日志（0 条）";
@@ -184,20 +194,50 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
 
     public async Task OnActivatedAsync()
     {
+        var previous = SelectedSource?.Identity;
         RefreshSources();
-        await ReloadAsync();
+
+        var identity = SelectedSource?.Identity;
+        var snapshot = _coordinator.Snapshot;
+
+        // An adopted snapshot (including Missing/Empty) is not re-read just
+        // because the user navigated back to the page.
+        if (previous == identity
+            && snapshot is not null
+            && string.Equals(snapshot.Source.Identity, identity, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _loadTask = ReloadAsync();
+        await _loadTask;
     }
 
-    /// <summary>Re-reads on demand. Used by the refresh button and, for a
-    /// BepInEx source only, when the selected instance changes.</summary>
+    /// <summary>Re-reads on demand, e.g. from the refresh button or an explicit
+    /// caller. The refresh button ignores repeat clicks while one is running;
+    /// a source switch still starts its own read.</summary>
     public async Task RefreshCurrentSourceAsync()
     {
         RefreshSources();
-        await ReloadAsync();
+        _loadTask = ReloadAsync();
+        await _loadTask;
     }
 
-    [RelayCommand]
-    private Task RefreshAsync() => RefreshCurrentSourceAsync();
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task RefreshAsync()
+    {
+        if (_refreshing) return;
+
+        _refreshing = true;
+        try
+        {
+            await RefreshCurrentSourceAsync();
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+    }
 
     [RelayCommand]
     private async Task SelectLogFileAsync()
@@ -272,7 +312,7 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
         SourcePathText = value?.PathText ?? string.Empty;
 
         if (_suppressReload) return;
-        _ = ReloadAsync();
+        _loadTask = ReloadAsync();
     }
 
     partial void OnSelectedScopeChanged(LogSearchScopeOption? value)
@@ -327,26 +367,18 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
 
         if (SelectedSource?.Source.Kind != SourceKind.BepInEx)
         {
-            ClearRows(NoInstanceText);
+            _cts?.Cancel();
+            ClearSnapshotView(NoInstanceText);
             StatusText = NoInstanceText;
             return;
         }
 
         // A different instance means the old snapshot belongs to another game.
-        ClearRows("正在读取日志…");
-        StatusText = "实例已切换，正在读取新的日志…";
-        await ReloadAsync();
-    }
-
-    private void ClearRows(string emptyMessage)
-    {
         _cts?.Cancel();
-        Entries.Clear();
-        SelectedEntry = null;
-        HasEntries = false;
-        FilterSummary = string.Empty;
-        CopyFilteredText = "复制列表日志（0 条）";
-        EmptyMessage = emptyMessage;
+        ClearSnapshotView("正在读取日志…");
+        StatusText = "实例已切换，正在读取新的日志…";
+        _loadTask = ReloadAsync();
+        await _loadTask;
     }
 
     private async Task DebounceSearchAsync()
@@ -405,30 +437,48 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
     {
         if (SelectedSource is not { } option) return;
 
+        // Cancel any in-flight read first: even when the new source has no path,
+        // a late result from the previous source must not overwrite this state.
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+
         // The BepInEx entry exists even without an instance, but it has no path:
         // show guidance instead of reading anything or falling back to Unity.
         if (string.IsNullOrWhiteSpace(option.Source.Path))
         {
             _coordinator.SetSource(option.Source);
-            ClearRows(NoInstanceText);
+            ClearSnapshotView(NoInstanceText);
             StatusText = NoInstanceText;
-            ReadAsOfText = string.Empty;
-            TruncatedText = string.Empty;
             IsBusy = false;
             return;
         }
 
-        _cts?.Cancel();
-        _cts?.Dispose();
         var cts = new CancellationTokenSource();
         _cts = cts;
 
+        var changed = _coordinator.SetSource(option.Source);
+        if (changed)
+        {
+            // A different source: the old rows, timestamp and notes must be
+            // gone before the new read starts, so nothing can be copied from
+            // the previous file.
+            ClearSnapshotView("正在读取日志…");
+            StatusText = "正在读取日志…";
+        }
+        else if (_coordinator.Snapshot is not null)
+        {
+            StatusText = "正在刷新，显示上次结果…";
+        }
+        else
+        {
+            StatusText = "正在读取日志…";
+        }
+
         IsBusy = true;
-        StatusText = "正在读取日志…";
 
         try
         {
-            _coordinator.SetSource(option.Source);
             var result = await _coordinator.LoadAsync(cts.Token);
             if (cts.IsCancellationRequested) return;
 
@@ -443,6 +493,19 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
         }
     }
 
+    private void ClearSnapshotView(string emptyMessage)
+    {
+        Entries.Clear();
+        SelectedEntry = null;
+        HasEntries = false;
+        FilterSummary = string.Empty;
+        CopyFilteredText = "复制列表日志（0 条）";
+        ReadAsOfText = string.Empty;
+        TruncatedText = string.Empty;
+        DecodeNote = string.Empty;
+        EmptyMessage = emptyMessage;
+    }
+
     private void ApplyResult(LogLoadResult result)
     {
         var snapshot = _coordinator.Snapshot;
@@ -450,7 +513,8 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
         if (result.Adopted && snapshot is not null)
         {
             ReadAsOfText = $"读取于 {snapshot.ReadAt.ToLocalTime():yyyy-MM-dd HH:mm:ss zzz}";
-            TruncatedText = snapshot.Truncated ? TruncatedNote : string.Empty;
+            TruncatedText = DescribeTruncation(snapshot.Truncation);
+            DecodeNote = snapshot.HadDecodeFallback ? DecodeNoteText : string.Empty;
             StatusText = snapshot.Outcome switch
             {
                 LogReadOutcome.Ok => $"已读取 {snapshot.Entries.Count} 条日志。",
@@ -477,13 +541,30 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
         }
 
         StatusText = $"读取失败：{result.Error ?? "未知原因"}。";
-        TruncatedText = string.Empty;
-        FilterSummary = string.Empty;
-        CopyFilteredText = "复制列表日志（0 条）";
-        SelectedEntry = null;
-        Entries.Clear();
-        HasEntries = false;
-        EmptyMessage = StatusText;
+        ClearSnapshotView(StatusText);
+    }
+
+    private static string DescribeTruncation(LogTruncation truncation)
+    {
+        if (truncation == LogTruncation.None) return string.Empty;
+
+        var parts = new List<string>();
+        if (truncation.HasFlag(LogTruncation.Head))
+        {
+            parts.Add(TruncatedNote.TrimEnd('。'));
+        }
+
+        if (truncation.HasFlag(LogTruncation.EntryCount))
+        {
+            parts.Add("只保留最近的一部分条目，更早的条目没有载入");
+        }
+
+        if (truncation.HasFlag(LogTruncation.EntryLength))
+        {
+            parts.Add("有单条日志过长，只保留了尾部内容");
+        }
+
+        return string.Join("；", parts) + "。";
     }
 
     private void ApplyFilter()

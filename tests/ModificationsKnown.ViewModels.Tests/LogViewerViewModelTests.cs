@@ -23,7 +23,7 @@ public sealed class LogViewerViewModelTests
         new(level, level.ToString(), source, message, message, offset);
 
     private static LogReadResult Ok(params LogEntry[] entries) =>
-        LogReadResult.Ok(entries, false);
+        LogReadResult.Ok(entries);
 
     private static (LogViewerViewModel Vm, StubReader Reader, StubClipboard Clipboard, StubLauncher Launcher, StubShell Shell, StubSourceProvider Provider)
         Build(LogReadResult bepInExResult, params LogSource[] sources)
@@ -478,10 +478,10 @@ public sealed class LogViewerViewModelTests
     [Fact]
     public async Task TruncationIsSurfacedAndDeclaredOnCopy()
     {
-        var (vm, _, clipboard, _, _, _) = Build(LogReadResult.Ok([Entry(LogLevel.Info, "tail")], true));
+        var (vm, _, clipboard, _, _, _) = Build(LogReadResult.Ok([Entry(LogLevel.Info, "tail")], LogTruncation.Head));
 
         await vm.OnActivatedAsync();
-        Assert.Contains("2 MiB", vm.TruncatedText);
+        Assert.Contains("文件尾部", vm.TruncatedText);
 
         await vm.CopyFilteredCommand.ExecuteAsync(null);
         Assert.Contains("不是完整日志", clipboard.Text);
@@ -628,7 +628,7 @@ public sealed class LogViewerViewModelTests
             return Task.FromResult(
                 ByKind.TryGetValue(source.Kind, out var result)
                     ? result
-                    : LogReadResult.Ok(Array.Empty<LogEntry>(), false));
+                    : LogReadResult.Ok(Array.Empty<LogEntry>()));
         }
     }
 
