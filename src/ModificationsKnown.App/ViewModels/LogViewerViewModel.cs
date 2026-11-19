@@ -48,6 +48,7 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
     private const string EmptyText = "日志为空。";
     private const string NoSnapshotText = "尚未读取任何日志。";
     private const string NoMatchText = "没有匹配的日志。";
+    private const string NoInstanceText = "请选择一个游戏实例，或切换到 Unity 日志 / 选择其他日志文件。";
     private const string UnityAttribution = "显示该目录中已有的日志，不能确认生成时使用的实例。";
     private const string TruncatedNote = "只读取了最近 2 MiB，更早的内容没有载入。";
     private const string TruncationNotice = "（本条目来自截断后的日志尾部快照，不是完整日志。）";
@@ -140,6 +141,7 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
         SelectedLevel = LevelOptions[0];
         SelectedScope = ScopeOptions[0];
         RefreshSources();
+        _sourceProvider.SourcesChanged += OnSourcesChanged;
     }
 
     public ObservableCollection<LogSourceOption> Sources { get; } = [];
@@ -309,6 +311,44 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
         OnPropertyChanged(nameof(DetailHorizontalScroll));
     }
 
+    private void OnSourcesChanged(object? sender, EventArgs e) => _ = OnInstanceChangedAsync();
+
+    /// <summary>Reacts to an instance change: a BepInEx source is re-read at
+    /// once and its old rows are dropped; Unity and manual sources keep their
+    /// identity and content.</summary>
+    public async Task OnInstanceChangedAsync()
+    {
+        var wasBepInEx = SelectedSource?.Source.Kind == SourceKind.BepInEx;
+        RefreshSources();
+
+        // Unity and manual sources do not follow the instance: their identity
+        // stays the same, so RefreshSources keeps the selection untouched.
+        if (!wasBepInEx) return;
+
+        if (SelectedSource?.Source.Kind != SourceKind.BepInEx)
+        {
+            ClearRows(NoInstanceText);
+            StatusText = NoInstanceText;
+            return;
+        }
+
+        // A different instance means the old snapshot belongs to another game.
+        ClearRows("正在读取日志…");
+        StatusText = "实例已切换，正在读取新的日志…";
+        await ReloadAsync();
+    }
+
+    private void ClearRows(string emptyMessage)
+    {
+        _cts?.Cancel();
+        Entries.Clear();
+        SelectedEntry = null;
+        HasEntries = false;
+        FilterSummary = string.Empty;
+        CopyFilteredText = "复制列表日志（0 条）";
+        EmptyMessage = emptyMessage;
+    }
+
     private async Task DebounceSearchAsync()
     {
         _searchCts?.Cancel();
@@ -341,7 +381,11 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
         Sources.Clear();
         foreach (var option in options) Sources.Add(option);
 
+        // First visit defaults to the instance's BepInEx log; later visits keep
+        // whatever the user picked in this session (the view model survives
+        // navigation, nothing is persisted across restarts).
         SelectedSource = Sources.FirstOrDefault(option => option.Identity == previous)
+                         ?? Sources.FirstOrDefault(option => option.Source.Kind == SourceKind.BepInEx)
                          ?? Sources.FirstOrDefault();
         _suppressReload = false;
     }
@@ -360,6 +404,19 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
     private async Task ReloadAsync()
     {
         if (SelectedSource is not { } option) return;
+
+        // The BepInEx entry exists even without an instance, but it has no path:
+        // show guidance instead of reading anything or falling back to Unity.
+        if (string.IsNullOrWhiteSpace(option.Source.Path))
+        {
+            _coordinator.SetSource(option.Source);
+            ClearRows(NoInstanceText);
+            StatusText = NoInstanceText;
+            ReadAsOfText = string.Empty;
+            TruncatedText = string.Empty;
+            IsBusy = false;
+            return;
+        }
 
         _cts?.Cancel();
         _cts?.Dispose();

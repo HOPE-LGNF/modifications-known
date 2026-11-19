@@ -43,14 +43,14 @@
         <Border Grid.Row="1" Classes="card" Padding="12">
             <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
                 <Grid ColumnDefinitions="Auto,280,Auto,140,*" ColumnSpacing="8">
-                    <TextBlock Text="来源"
+                    <TextBlock Text="日志文件"
                                Classes="muted"
                                FontSize="12"
                                VerticalAlignment="Center" />
                     <ComboBox Grid.Column="1"
                               ItemsSource="{Binding Sources}"
                               SelectedItem="{Binding SelectedSource}"
-                              PlaceholderText="选择日志来源">
+                              PlaceholderText="选择日志文件">
                         <ComboBox.ItemTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding DisplayName}"
@@ -123,7 +123,7 @@
 
         <Grid Grid.Row="3" ColumnDefinitions="45*,Auto,55*" ColumnSpacing="0">
             <Border Classes="card" Padding="0" MinWidth="280">
-                <Grid RowDefinitions="Auto,*">
+                <Grid RowDefinitions="Auto,Auto,*">
                     <Grid ColumnDefinitions="*,Auto" Margin="12,8,12,4">
                         <TextBlock Text="日志条目"
                                    FontSize="12"
@@ -136,8 +136,36 @@
                                    VerticalAlignment="Center" />
                     </Grid>
 
+                    <!-- Sticky header: same columns, spacing and padding as the
+                         rows; its right margin follows the list scrollbar so
+                         the columns stay aligned (see code-behind). -->
+                    <Border x:Name="ListHeader"
+                            Grid.Row="1"
+                            Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="8,4">
+                        <Grid ColumnDefinitions="Auto,110,*"
+                              ColumnSpacing="8">
+                            <TextBlock Text="级别"
+                                       Classes="muted"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       MinWidth="56" />
+                            <TextBlock Grid.Column="1"
+                                       Text="日志来源"
+                                       Classes="muted"
+                                       FontSize="11"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="2"
+                                       Text="日志内容"
+                                       Classes="muted"
+                                       FontSize="11"
+                                       FontWeight="SemiBold" />
+                        </Grid>
+                    </Border>
 
-                    <Grid Grid.Row="1">
+                    <Grid Grid.Row="2">
                         <ListBox x:Name="EntriesList"
                                  ItemsSource="{Binding Entries}"
                                  SelectedItem="{Binding SelectedEntry}"

@@ -182,9 +182,71 @@ public sealed class LogViewerViewModelTests
         Assert.Contains("日志内容", vm.SearchWatermark);
     }
 
+    [Fact]
+    public void FirstVisitSelectsBepInExEvenWhenUnityIsListedFirst()
+    {
+        var reader = new StubReader();
+        var provider = new StubSourceProvider([UnitySource(), BepInExSource(@"C:\game-a")]);
 
+        var (vm, _, _, _, _, _) = BuildWith(provider, reader);
 
+        Assert.Equal(SourceKind.BepInEx, vm.SelectedSource?.Source.Kind);
+    }
 
+    [Fact]
+    public async Task ReturningToThePageKeepsTheSessionChoice()
+    {
+        var reader = new StubReader();
+        reader.ByKind[SourceKind.BepInEx] = Ok(Entry(LogLevel.Info, "bep"));
+        reader.ByKind[SourceKind.UnityCurrent] = Ok(Entry(LogLevel.Info, "unity", "Unity Log"));
+        var provider = new StubSourceProvider([BepInExSource(@"C:\game-a"), UnitySource()]);
+
+        var (vm, _, _, _, _, _) = BuildWith(provider, reader);
+        await vm.OnActivatedAsync();
+
+        vm.SelectedSource = vm.Sources.Single(option => option.Source.Kind == SourceKind.UnityCurrent);
+        await vm.RefreshCurrentSourceAsync();
+
+        await vm.OnActivatedAsync();
+
+        Assert.Equal(SourceKind.UnityCurrent, vm.SelectedSource?.Source.Kind);
+    }
+
+    [Fact]
+    public async Task MissingBepInExFileDoesNotFallBackToUnity()
+    {
+        var reader = new StubReader();
+        reader.ByKind[SourceKind.BepInEx] = LogReadResult.Missing();
+        reader.ByKind[SourceKind.UnityCurrent] = Ok(Entry(LogLevel.Info, "unity", "Unity Log"));
+        var provider = new StubSourceProvider([BepInExSource(@"C:\game-a"), UnitySource()]);
+
+        var (vm, _, _, _, _, _) = BuildWith(provider, reader);
+        await vm.OnActivatedAsync();
+
+        Assert.Equal(SourceKind.BepInEx, vm.SelectedSource?.Source.Kind);
+        Assert.False(vm.HasEntries);
+        Assert.Equal("尚未找到日志。游戏运行后可能生成日志，也可以手动打开其他日志文件。", vm.StatusText);
+        Assert.Equal(1, reader.Calls);
+    }
+
+    [Fact]
+    public async Task NoInstanceKeepsBepInExSelectedAndReadsNothing()
+    {
+        var reader = new StubReader();
+        var provider = new StubSourceProvider(
+        [
+            new LogSource(SourceKind.BepInEx, "bepinex:none"),
+            UnitySource()
+        ]);
+
+        var (vm, _, _, _, _, _) = BuildWith(provider, reader);
+        await vm.OnActivatedAsync();
+
+        Assert.Equal(SourceKind.BepInEx, vm.SelectedSource?.Source.Kind);
+        Assert.Equal(0, reader.Calls);
+        Assert.False(vm.HasEntries);
+        Assert.Equal("请选择一个游戏实例，或切换到 Unity 日志 / 选择其他日志文件。", vm.StatusText);
+    }
 
     [Fact]
     public void WrapDetailSwitchesWrappingAndDisablesHorizontalScroll()
@@ -483,8 +545,63 @@ public sealed class LogViewerViewModelTests
         Assert.Equal(@"C:\game-a\BepInEx", launcher.FolderPath);
     }
 
+    [Fact]
+    public async Task InstanceChangeReloadsTheBepInExSourceAndDropsOldRows()
+    {
+        var reader = new StubReader();
+        reader.ByKind[SourceKind.BepInEx] = Ok(Entry(LogLevel.Info, "old"));
+        var provider = new StubSourceProvider([BepInExSource(@"C:\game-a")]);
+        var (vm, _, _, _, _, _) = BuildWith(provider, reader);
 
+        await vm.OnActivatedAsync();
+        Assert.Single(vm.Entries);
 
+        reader.ByKind[SourceKind.BepInEx] = Ok(Entry(LogLevel.Info, "new"));
+        provider.Items.Clear();
+        provider.Items.Add(BepInExSource(@"C:\game-b"));
+
+        await vm.OnInstanceChangedAsync();
+
+        Assert.Equal("bepinex:C:\\game-b", vm.SelectedSource?.Source.Identity);
+        Assert.Single(vm.Entries);
+        Assert.Equal("new", vm.Entries[0].Raw);
+        Assert.Equal(2, reader.Calls);
+    }
+
+    [Fact]
+    public async Task InstanceChangeLeavesTheUnitySourceAlone()
+    {
+        var reader = new StubReader();
+        reader.ByKind[SourceKind.UnityCurrent] = Ok(Entry(LogLevel.Info, "unity", "Unity Log"));
+        var provider = new StubSourceProvider([UnitySource()]);
+        var (vm, _, _, _, _, _) = BuildWith(provider, reader);
+
+        await vm.OnActivatedAsync();
+        var calls = reader.Calls;
+        var identity = vm.SelectedSource?.Source.Identity;
+
+        provider.Items.Insert(0, BepInExSource(@"C:\game-b"));
+        await vm.OnInstanceChangedAsync();
+
+        Assert.Equal(identity, vm.SelectedSource?.Source.Identity);
+        Assert.Equal(calls, reader.Calls);
+        Assert.Single(vm.Entries);
+    }
+
+    [Fact]
+    public async Task RemovingTheInstanceShowsTheNoInstanceText()
+    {
+        var (vm, _, _, _, _, provider) = Build(Ok(Entry(LogLevel.Info, "x")));
+
+        await vm.OnActivatedAsync();
+        provider.Items.Clear();
+
+        await vm.OnInstanceChangedAsync();
+
+        Assert.Null(vm.SelectedSource);
+        Assert.False(vm.HasEntries);
+        Assert.Equal("请选择一个游戏实例，或切换到 Unity 日志 / 选择其他日志文件。", vm.StatusText);
+    }
 
     private sealed class StubSourceProvider : ILogSourceProvider
     {

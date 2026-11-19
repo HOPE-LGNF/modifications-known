@@ -87,27 +87,45 @@ public sealed class ShellExternalLauncher : IExternalLauncher
 /// interface so view-model tests never touch the real game folders.</summary>
 public interface ILogSourceProvider
 {
+    /// <summary>Raised when the selected game instance changed, so the page can
+    /// re-read a BepInEx source without polling.</summary>
+    event EventHandler? SourcesChanged;
+
     IReadOnlyList<LogSource> Describe();
 }
 
-public sealed class GameLogSourceProvider : ILogSourceProvider
+public sealed class GameLogSourceProvider : ILogSourceProvider, IDisposable
 {
     private readonly GameContext _game;
 
-    public GameLogSourceProvider(GameContext game) => _game = game;
+    public GameLogSourceProvider(GameContext game)
+    {
+        _game = game;
+        _game.Changed += OnGameChanged;
+    }
+
+    public event EventHandler? SourcesChanged;
 
     public IReadOnlyList<LogSource> Describe()
     {
+        // BepInEx is always offered: without an instance it stays selected but
+        // has no path, so the page can show "no instance" instead of silently
+        // jumping to a Unity log.
         var sources = new List<LogSource>();
+        var installation = _game.Selected;
 
-        if (_game.Selected is { } installation)
-        {
-            sources.Add(LogSourceLocations.BepInEx(installation.GameDirectory, installation.GameDirectory));
-        }
+        sources.Add(installation is null
+            ? new LogSource(SourceKind.BepInEx, "bepinex:none")
+            : LogSourceLocations.BepInEx(installation.GameDirectory, installation.GameDirectory));
 
         sources.Add(LogSourceLocations.UnityCurrent());
         sources.Add(LogSourceLocations.UnityPrevious());
 
         return sources;
     }
+
+    public void Dispose() => _game.Changed -= OnGameChanged;
+
+    private void OnGameChanged(object? sender, EventArgs e) =>
+        SourcesChanged?.Invoke(this, EventArgs.Empty);
 }
