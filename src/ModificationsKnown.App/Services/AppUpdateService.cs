@@ -1,7 +1,7 @@
 using System.Net.Http;
 using System.Reflection;
-using System.Text.Json;
-using ModificationsKnown.Core.Common;
+using ModificationsKnown.Core.Updates;
+using ModificationsKnown.Infrastructure.Updates;
 
 namespace ModificationsKnown.App.Services;
 
@@ -12,106 +12,153 @@ public sealed record AppUpdateCheck(
     string ReleaseUrl,
     string? AssetUrl,
     string? AssetSha256,
-    string Message);
+    string Message,
+    UpdateOutcome Outcome = UpdateOutcome.Failed,
+    AppUpdateChannel Channel = AppUpdateChannel.Stable);
 
-/// <summary>Checks the public GitHub release feed. Network failures and rate
-/// limits are reported as a message, never as an update.</summary>
+/// <summary>
+/// Application-level orchestration of the launcher's own update check: read the
+/// installed version, ask the fixed GitHub feed for the selected channel, run
+/// the shared channel policy and decide whether a one-click install is allowed.
+/// Network and JSON parsing live in <see cref="GitHubAppReleaseFeed"/>.
+/// </summary>
 public sealed class AppUpdateService
 {
-    private const string LatestReleaseUrl =
-        "https://api.github.com/repos/HOPE-LGNF/modifications-known/releases/latest";
-
-    private static readonly HttpClient Http = new()
+    private static readonly HttpClient SharedHttp = new()
     {
         Timeout = TimeSpan.FromSeconds(20)
     };
 
-    public string CurrentVersion
+    private readonly IAppReleaseFeed _feed;
+    private readonly Func<string> _currentVersion;
+
+    public AppUpdateService()
+        : this(new GitHubAppReleaseFeed(SharedHttp), ReadInstalledVersion)
     {
-        get
+    }
+
+    public AppUpdateService(IAppReleaseFeed feed, Func<string> currentVersion)
+    {
+        _feed = feed ?? throw new ArgumentNullException(nameof(feed));
+        _currentVersion = currentVersion ?? throw new ArgumentNullException(nameof(currentVersion));
+    }
+
+    public string CurrentVersion => _currentVersion();
+
+    public async Task<AppUpdateCheck> CheckAsync(
+        AppUpdateChannel channel,
+        CancellationToken cancellationToken = default)
+    {
+        var currentText = CurrentVersion;
+
+        if (!LauncherVersion.TryParse(currentText, out var current))
         {
-            var version = Assembly.GetEntryAssembly()?.GetName().Version;
-            return version is null
-                ? "0.0.0"
-                : $"{version.Major}.{version.Minor}.{version.Build}";
+            return Failed(
+                channel,
+                currentText,
+                "无法识别当前程序版本，请手动打开 Release 页查看。");
+        }
+
+        var feed = await _feed.GetAsync(channel, cancellationToken);
+
+        if (!feed.IsComplete || feed.Error is not null)
+        {
+            return Failed(channel, currentText, feed.Error ?? "检查更新失败。");
+        }
+
+        var selection = ReleaseSelector.Select(channel, current, feed.Releases);
+
+        switch (selection.Outcome)
+        {
+            case UpdateOutcome.UpdateAvailable when selection.Candidate is { } candidate:
+            {
+                var release = selection.CandidateRelease!;
+                string? assetUrl = null;
+                string? assetSha256 = null;
+                var note = string.Empty;
+
+                if (ReleaseAssetPolicy.TrySelectInstallable(release.Assets, out var asset, out var reason)
+                    && asset is not null
+                    && ReleaseAssetPolicy.TryGetSha256(asset.Digest, out var sha256))
+                {
+                    assetUrl = asset.DownloadUrl;
+                    assetSha256 = sha256;
+                }
+                else
+                {
+                    note = " " + reason;
+                }
+
+                var releaseUrl = ReleaseAssetPolicy.IsTrustedReleaseUrl(release.HtmlUrl)
+                    ? release.HtmlUrl
+                    : string.Empty;
+
+                return new AppUpdateCheck(
+                    true,
+                    currentText,
+                    candidate.ToString(),
+                    releaseUrl,
+                    assetUrl,
+                    assetSha256,
+                    $"{ChannelLabel(channel)}发现新版本 v{candidate}（当前 v{currentText}）。{note}".Trim(),
+                    UpdateOutcome.UpdateAvailable,
+                    channel);
+            }
+
+            case UpdateOutcome.NoEligibleRelease:
+                return new AppUpdateCheck(
+                    false,
+                    currentText,
+                    currentText,
+                    string.Empty,
+                    null,
+                    null,
+                    $"{ChannelLabel(channel)}没有可用的发行版本。",
+                    UpdateOutcome.NoEligibleRelease,
+                    channel);
+
+            default:
+                return new AppUpdateCheck(
+                    false,
+                    currentText,
+                    currentText,
+                    string.Empty,
+                    null,
+                    null,
+                    $"{ChannelLabel(channel)}已是最新版本（v{currentText}）。",
+                    UpdateOutcome.UpToDate,
+                    channel);
         }
     }
 
-    public async Task<AppUpdateCheck> CheckAsync(CancellationToken cancellationToken = default)
+    private static AppUpdateCheck Failed(AppUpdateChannel channel, string currentVersion, string message) =>
+        new(
+            false,
+            currentVersion,
+            currentVersion,
+            string.Empty,
+            null,
+            null,
+            message,
+            UpdateOutcome.Failed,
+            channel);
+
+    private static string ChannelLabel(AppUpdateChannel channel) =>
+        channel == AppUpdateChannel.Preview ? "预览通道" : "稳定通道";
+
+    /// <summary>Informational version of this application's assembly, which
+    /// keeps the prerelease suffix a release build passes via /p:Version.</summary>
+    private static string ReadInstalledVersion()
     {
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, LatestReleaseUrl);
-            request.Headers.UserAgent.ParseAdd("ModificationsKnown/" + CurrentVersion);
-            request.Headers.Accept.ParseAdd("application/vnd.github+json");
+        var assembly = typeof(AppUpdateService).Assembly;
+        var informational = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
 
-            using var response = await Http.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                return new AppUpdateCheck(
-                    false, CurrentVersion, CurrentVersion, string.Empty, null, null,
-                    response.StatusCode == System.Net.HttpStatusCode.Forbidden
-                        ? "GitHub API 限流，暂时无法检查更新；请稍后再试。"
-                        : $"GitHub 返回 {(int)response.StatusCode}，暂时无法检查更新。");
-            }
+        if (!string.IsNullOrWhiteSpace(informational)) return informational;
 
-            using var document = JsonDocument.Parse(body);
-            var root = document.RootElement;
-            var tag = root.TryGetProperty("tag_name", out var tagElement)
-                ? tagElement.GetString() ?? string.Empty
-                : string.Empty;
-            var latest = VersionText.Label(tag).TrimStart('v', 'V');
-            var releaseUrl = root.TryGetProperty("html_url", out var html)
-                ? html.GetString() ?? string.Empty
-                : string.Empty;
-
-            string? assetUrl = null;
-            string? assetSha256 = null;
-            if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
-            {
-                var candidates = assets.EnumerateArray()
-                    .Select(asset => new
-                    {
-                        Url = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null,
-                        Name = asset.TryGetProperty("name", out var n) ? n.GetString() ?? string.Empty : string.Empty,
-                        Digest = asset.TryGetProperty("digest", out var d) ? d.GetString() : null
-                    })
-                    .Where(asset => !string.IsNullOrWhiteSpace(asset.Url)
-                                    && asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-
-                var selected = candidates
-                    .FirstOrDefault(asset => asset.Name.Contains("win-x64", StringComparison.OrdinalIgnoreCase))
-                    ?? candidates.FirstOrDefault();
-                assetUrl = selected?.Url;
-                assetSha256 = selected?.Digest?.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) == true
-                    ? selected.Digest["sha256:".Length..]
-                    : null;
-            }
-
-            if (!VersionText.IsNewer(latest, CurrentVersion))
-            {
-                return new AppUpdateCheck(
-                    false, CurrentVersion, CurrentVersion, releaseUrl, null, null,
-                    $"已是最新版本（v{CurrentVersion}）。");
-            }
-
-            return new AppUpdateCheck(
-                true, CurrentVersion, latest, releaseUrl, assetUrl, assetSha256,
-                $"发现新版本 v{latest}（当前 v{CurrentVersion}）。" +
-                (assetUrl is null
-                    ? " 这个 Release 没有可自动安装的 exe，请打开 Release 页。"
-                    : assetSha256 is null
-                        ? " Release 未提供 SHA-256，自动安装已禁用，请手动下载。"
-                        : string.Empty));
-        }
-        catch (Exception exception)
-        {
-            return new AppUpdateCheck(
-                false, CurrentVersion, CurrentVersion, string.Empty, null, null,
-                $"检查更新失败：{exception.Message}");
-        }
+        var version = assembly.GetName().Version;
+        return version is null ? "0.0.0" : $"{version.Major}.{version.Minor}.{version.Build}";
     }
 
     public async Task<bool> DownloadAsync(
@@ -123,7 +170,8 @@ public sealed class AppUpdateService
     {
         try
         {
-            using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await SharedHttp.GetAsync(
+                url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             if (!response.IsSuccessStatusCode) return false;
 
             var total = response.Content.Headers.ContentLength;

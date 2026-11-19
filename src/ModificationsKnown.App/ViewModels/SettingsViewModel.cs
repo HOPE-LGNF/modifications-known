@@ -690,7 +690,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         AppUpdateStatus = "正在检查更新…";
         try
         {
-            var check = await _appUpdates.CheckAsync();
+            var check = await _appUpdates.CheckAsync(_settings.Current.UpdateChannel);
             _pendingUpdateAssetUrl = check.AssetUrl;
             _pendingUpdateSha256 = check.AssetSha256;
             _pendingReleaseUrl = check.ReleaseUrl;

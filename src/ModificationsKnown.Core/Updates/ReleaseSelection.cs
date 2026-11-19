@@ -15,7 +15,8 @@ public sealed record ReleaseInfo(
     bool Draft,
     bool Prerelease,
     string HtmlUrl,
-    IReadOnlyList<ReleaseAsset> Assets);
+    IReadOnlyList<ReleaseAsset> Assets,
+    long Id = 0);
 
 public sealed record UpdateSelection(
     UpdateOutcome Outcome,
