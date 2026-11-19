@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ModificationsKnown.App.Views;
 
@@ -32,7 +31,7 @@ public sealed class HomeViewSmokeTests
     public void HomeViewBuildsItsControlsAndContent()
     {
         var view = new HomeView();
-        var window = ShowWindow(view);
+        var window = HeadlessWindowHost.Show(view);
 
         Assert.NotNull(view.FindControl<Grid>("DashboardGrid"));
         Assert.NotNull(view.FindControl<Border>("ChecklistCard"));
@@ -48,14 +47,14 @@ public sealed class HomeViewSmokeTests
         Assert.True(view.Bounds.Width > 0);
         Assert.True(view.Bounds.Height > 0);
 
-        CloseWindow(window);
+        HeadlessWindowHost.Close(window);
     }
 
     [AvaloniaFact]
     public void HomeViewPicksUpApplicationLevelStyles()
     {
         var view = new HomeView();
-        var window = ShowWindow(view);
+        var window = HeadlessWindowHost.Show(view);
 
         var cards = view.GetVisualDescendants().OfType<Border>()
             .Where(border => border.Classes.Contains("card"))
@@ -65,21 +64,6 @@ public sealed class HomeViewSmokeTests
         Assert.NotEmpty(cards);
         Assert.All(cards, card => Assert.Equal(new CornerRadius(14), card.CornerRadius));
 
-        CloseWindow(window);
-    }
-
-    private static Window ShowWindow(Control content)
-    {
-        var window = new Window { Width = 1300, Height = 800, Content = content };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
-        return window;
-    }
-
-    private static void CloseWindow(Window window)
-    {
-        window.Close();
-        Dispatcher.UIThread.RunJobs();
-        Assert.False(window.IsVisible);
+        HeadlessWindowHost.Close(window);
     }
 }

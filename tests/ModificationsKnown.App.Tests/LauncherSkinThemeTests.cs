@@ -14,6 +14,9 @@ namespace ModificationsKnown.App.Tests;
 /// H2 coverage: a real production view drives a real command and the result is
 /// observable on the view model, the injected boundaries and the application
 /// resources. Nothing here touches settings files, the process list or pickers.
+///
+/// Not covered: hover, keyboard focus, the physical hit area and colours/pixels.
+/// Avalonia.Headless does not promise them; they stay part of manual UI review.
 /// </summary>
 public sealed class LauncherSkinThemeTests
 {
@@ -22,21 +25,19 @@ public sealed class LauncherSkinThemeTests
     {
         var settings = new FakeAppSettingsService();
         var shell = new FakeAppShell(settings);
-        var pages = new LauncherSkinViewModel(shell, settings, new FakeFilePickerService(), new FakeAppLogger());
+        var viewModel = new LauncherSkinViewModel(shell, settings, new FakeFilePickerService(), new FakeAppLogger());
 
-        var view = new LauncherSkinView { DataContext = pages };
-        var window = new Window { Width = 1400, Height = 1000, Content = view };
-        window.Show();
-        Dispatcher.UIThread.RunJobs();
+        var view = new LauncherSkinView { DataContext = viewModel };
+        var window = HeadlessWindowHost.Show(view, width: 1400, height: 1000);
 
         var applyButtons = view.GetVisualDescendants().OfType<Button>()
             .Where(button => Equals(button.Content, "应用此主题"))
             .ToList();
-        Assert.Equal(pages.Themes.Count, applyButtons.Count);
+        Assert.Equal(viewModel.Themes.Count, applyButtons.Count);
 
-        var targetIndex = Enumerable.Range(0, pages.Themes.Count)
-            .First(index => pages.Themes[index].Id != settings.Current.ThemePreset);
-        var target = pages.Themes[targetIndex];
+        var targetIndex = Enumerable.Range(0, viewModel.Themes.Count)
+            .First(index => viewModel.Themes[index].Id != settings.Current.ThemePreset);
+        var target = viewModel.Themes[targetIndex];
         Assert.Same(target.ApplyCommand, applyButtons[targetIndex].Command);
 
         // Nothing has been saved or themed yet.
@@ -58,13 +59,12 @@ public sealed class LauncherSkinThemeTests
         Assert.Equal(1, settings.SaveCount);
         Assert.Contains(target.Name, shell.LastStatus);
         Assert.Equal(ModificationsKnown.App.Services.StatusKind.Success, shell.LastStatusKind);
-        Assert.Equal(target.Name, pages.CurrentThemeName);
+        Assert.Equal(target.Name, viewModel.CurrentThemeName);
         Assert.True(target.IsSelected);
 
         // ThemeService.Apply writes the palette into the live application resources.
         Assert.True(Application.Current!.TryFindResource("CardShadow", out _));
 
-        window.Close();
-        Dispatcher.UIThread.RunJobs();
+        HeadlessWindowHost.Close(window);
     }
 }
