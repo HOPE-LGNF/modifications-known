@@ -78,7 +78,12 @@ public sealed class LogViewerCoordinator
         {
             if (_source is null)
             {
-                return new LogLoadResult(false, LogReadOutcome.Failed, "尚未选择日志来源。", false);
+                return new LogLoadResult(
+                    false,
+                    LogReadOutcome.Failed,
+                    null,
+                    false,
+                    LogLoadError.SourceNotSelected);
             }
 
             source = _source;

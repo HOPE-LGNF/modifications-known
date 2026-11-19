@@ -14,6 +14,66 @@ public sealed class LogParsingTests
         """;
 
     [Fact]
+    public void BepInExEntryKeepsLfAndIndentation()
+    {
+        const string text = "[Info   : BepInEx] boom\n  at A\n\tat B";
+
+        var entries = LogParsers.For(SourceKind.BepInEx).Parse(text, headTruncated: false);
+
+        var entry = Assert.Single(entries);
+        Assert.Equal(text, entry.Raw);
+        Assert.Equal("boom\n  at A\n\tat B", entry.Message);
+    }
+
+    [Fact]
+    public void BepInExEntryKeepsCrLfAndIndentation()
+    {
+        const string text = "[Info   : BepInEx] boom\r\n  at A\r\n\tat B";
+
+        var entries = LogParsers.For(SourceKind.BepInEx).Parse(text, headTruncated: false);
+
+        var entry = Assert.Single(entries);
+        Assert.Equal(text, entry.Raw);
+        Assert.Equal("boom\r\n  at A\r\n\tat B", entry.Message);
+    }
+
+    [Fact]
+    public void BepInExEntryKeepsLoneCrAndIndentation()
+    {
+        const string text = "[Error  : Unity Log] boom\r  at A\r\tat B";
+
+        var entries = LogParsers.For(SourceKind.BepInEx).Parse(text, headTruncated: false);
+
+        var entry = Assert.Single(entries);
+        Assert.Equal(text, entry.Raw);
+        Assert.Equal("boom\r  at A\r\tat B", entry.Message);
+    }
+
+    [Fact]
+    public void UnityEntryKeepsLoneCrAndIndentation()
+    {
+        const string text = "Line one\r  at X\r\tat Y";
+
+        var entries = LogParsers.For(SourceKind.UnityCurrent).Parse(text, headTruncated: false);
+
+        var entry = Assert.Single(entries);
+        Assert.Equal(text, entry.Raw);
+        Assert.Equal(text, entry.Message);
+    }
+
+    [Fact]
+    public void UnityEntryKeepsCrLfAndIndentation()
+    {
+        const string text = "Line one\r\n  at X\r\n  at Y";
+
+        var entries = LogParsers.For(SourceKind.UnityCurrent).Parse(text, headTruncated: false);
+
+        var entry = Assert.Single(entries);
+        Assert.Equal(text, entry.Raw);
+        Assert.Equal(text, entry.Message);
+    }
+
+    [Fact]
     public void BepInExParsesLevelSourceAndMessage()
     {
         var entries = LogParsers.For(SourceKind.BepInEx).Parse(BepInExSample, headTruncated: false);

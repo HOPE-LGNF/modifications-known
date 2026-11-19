@@ -33,7 +33,7 @@ public sealed class LogEntryRow
     {
         get
         {
-            var newline = Entry.Message.IndexOf('\n');
+            var newline = Entry.Message.IndexOfAny(['\r', '\n']);
             return newline < 0 ? Entry.Message : Entry.Message[..newline];
         }
     }

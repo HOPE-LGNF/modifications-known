@@ -17,6 +17,19 @@ public sealed class LogViewerCoordinatorTests
     private static LogReadResult Ok(params LogEntry[] entries) => LogReadResult.Ok(entries);
 
     [Fact]
+    public async Task LoadWithoutASourceReturnsAStructuredError()
+    {
+        var coordinator = new LogViewerCoordinator(new StubReader());
+
+        var result = await coordinator.LoadAsync();
+
+        Assert.False(result.Adopted);
+        Assert.Equal(LogReadOutcome.Failed, result.Outcome);
+        Assert.Null(result.Error);
+        Assert.Equal(LogLoadError.SourceNotSelected, result.ErrorKind);
+    }
+
+    [Fact]
     public async Task LoadStoresASnapshotWithTheSourceIdentity()
     {
         var reader = new StubReader { Result = Ok(Entry(LogLevel.Info, "hello")) };

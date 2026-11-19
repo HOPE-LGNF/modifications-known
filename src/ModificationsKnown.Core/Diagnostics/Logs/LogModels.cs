@@ -122,11 +122,18 @@ public sealed record LogSnapshot(
     public bool Truncated => Truncation != LogTruncation.None;
 }
 
+public enum LogLoadError
+{
+    None,
+    SourceNotSelected
+}
+
 public sealed record LogLoadResult(
     bool Adopted,
     LogReadOutcome Outcome,
     string? Error,
-    bool KeptPreviousSnapshot);
+    bool KeptPreviousSnapshot,
+    LogLoadError ErrorKind = LogLoadError.None);
 
 /// <summary>Reads one log source. Implementations open the file once per call
 /// and return a bounded snapshot; they never write to the log.</summary>
@@ -216,6 +223,21 @@ internal static class LogLines
     }
 }
 
+/// <summary>Helpers that keep the original text coordinates intact. Entry
+/// separators are dropped, but line breaks inside an entry are preserved.</summary>
+internal static class LogText
+{
+    public static int IndexOfBreak(string value) => value.IndexOfAny(['\r', '\n']);
+
+    public static string TrimTrailingBreak(string value)
+    {
+        if (value.EndsWith("\r\n", StringComparison.Ordinal)) return value[..^2];
+        return value.Length > 0 && (value[^1] == '\r' || value[^1] == '\n')
+            ? value[..^1]
+            : value;
+    }
+}
+
 /// <summary>BepInEx 5 LogOutput.log: "[Level: Source] message", with indented
 /// continuation lines (stack frames) belonging to the previous entry.</summary>
 internal sealed partial class BepInExLogParser : ILogTextParser
@@ -227,25 +249,29 @@ internal sealed partial class BepInExLogParser : ILogTextParser
     {
         var entries = new List<LogEntry>();
         var buffer = new List<string>();
+        var lineStart = 0;
         long entryOffset = 0;
         LogLevel level = LogLevel.Unknown;
         var levelText = "Unknown";
         var source = string.Empty;
 
-        void Flush()
+        void Flush(int endExclusive)
         {
             if (buffer.Count == 0) return;
 
-            var raw = string.Join('\n', buffer);
-            var firstLine = buffer[0];
-            var message = firstLine;
+            // Slice the original text so entry-internal line breaks and
+            // indentation survive exactly as written (LF, CRLF and CR alike).
+            var raw = LogText.TrimTrailingBreak(text[lineStart..endExclusive]);
+            var firstBreak = LogText.IndexOfBreak(raw);
+            var firstLine = firstBreak < 0 ? raw : raw[..firstBreak];
+            var message = raw;
             var match = PrefixPattern().Match(firstLine);
             if (match.Success)
             {
                 message = match.Groups["message"].Value;
-                if (buffer.Count > 1)
+                if (firstBreak >= 0)
                 {
-                    message += "\n" + string.Join('\n', buffer.Skip(1));
+                    message += raw[firstBreak..];
                 }
             }
 
@@ -259,7 +285,8 @@ internal sealed partial class BepInExLogParser : ILogTextParser
 
             if (match.Success)
             {
-                Flush();
+                Flush((int)offset);
+                lineStart = (int)offset;
                 entryOffset = offset;
                 var rawLevel = match.Groups["level"].Value.Trim();
                 levelText = rawLevel;
@@ -278,6 +305,7 @@ internal sealed partial class BepInExLogParser : ILogTextParser
             }
             else if (line.Length > 0)
             {
+                lineStart = (int)offset;
                 entryOffset = offset;
                 level = LogLevel.Unknown;
                 levelText = "Unknown";
@@ -286,7 +314,7 @@ internal sealed partial class BepInExLogParser : ILogTextParser
             }
         }
 
-        Flush();
+        Flush(text.Length);
         return entries;
     }
 
@@ -310,13 +338,14 @@ internal sealed class UnityLogParser : ILogTextParser
     {
         var entries = new List<LogEntry>();
         var buffer = new List<string>();
+        var lineStart = 0;
         long entryOffset = 0;
 
-        void Flush()
+        void Flush(int endExclusive)
         {
             if (buffer.Count == 0) return;
 
-            var raw = string.Join('\n', buffer);
+            var raw = LogText.TrimTrailingBreak(text[lineStart..endExclusive]);
             entries.Add(new LogEntry(LogLevel.Unknown, "Unknown", string.Empty, raw, raw, entryOffset));
             buffer.Clear();
         }
@@ -334,13 +363,14 @@ internal sealed class UnityLogParser : ILogTextParser
             }
             else
             {
-                Flush();
+                Flush((int)offset);
                 entryOffset = offset;
+                lineStart = (int)offset;
                 buffer.Add(line);
             }
         }
 
-        Flush();
+        Flush(text.Length);
         return entries;
     }
 }
