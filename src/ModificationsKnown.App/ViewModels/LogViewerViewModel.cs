@@ -42,10 +42,11 @@ public sealed record LogSearchScopeOption(LogSearchScope Value, string Label)
 /// The log page. Reads through <see cref="LogViewerCoordinator"/>; filtering is
 /// pure, copying needs no dialog, and no log text ever reaches the app logger.
 /// </summary>
-public partial class LogViewerViewModel : ObservableObject, IAsyncPage
+public partial class LogViewerViewModel : ObservableObject, IAsyncPage, IDisposable
 {
     private const string MissingText = "尚未找到日志。游戏运行后可能生成日志，也可以手动打开其他日志文件。";
     private const string EmptyText = "日志为空。";
+    private const string NoEntriesText = "没有可显示的完整日志条目。";
     private const string NoSnapshotText = "尚未读取任何日志。";
     private const string NoMatchText = "没有匹配的日志。";
     private const string NoInstanceText = "请选择一个游戏实例，或切换到 Unity 日志 / 选择其他日志文件。";
@@ -67,10 +68,29 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
     private bool _suppressReload;
     private Task? _loadTask;
     private bool _refreshing;
+    private bool _disposed;
 
     /// <summary>Completes when the latest load triggered by a source change or
     /// activation has settled. Tests use it instead of polling.</summary>
     public Task WaitForLoadAsync() => _loadTask ?? Task.CompletedTask;
+
+    /// <summary>Releases subscriptions and cancels work owned by the page.
+    /// The shell disposes the page when the application exits.</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _sourceProvider.SourcesChanged -= OnSourcesChanged;
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = null;
+    }
 
     [ObservableProperty]
     private LogSourceOption? _selectedSource;
@@ -244,6 +264,12 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
     {
         var path = await _filePicker.PickLogFileAsync();
         if (string.IsNullOrWhiteSpace(path)) return;
+
+        if (!LogSourceLocations.IsSupportedManualPath(path))
+        {
+            _shell.SetStatus("只能选择 .log 或 .txt 日志文件。", StatusKind.Warning);
+            return;
+        }
 
         _manualSource = LogSourceLocations.Manual(path);
         RefreshSources();
@@ -517,7 +543,9 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
             DecodeNote = snapshot.HadDecodeFallback ? DecodeNoteText : string.Empty;
             StatusText = snapshot.Outcome switch
             {
-                LogReadOutcome.Ok => $"已读取 {snapshot.Entries.Count} 条日志。",
+                LogReadOutcome.Ok => snapshot.Entries.Count == 0
+                    ? NoEntriesText
+                    : $"已读取 {snapshot.Entries.Count} 条日志。",
                 LogReadOutcome.Missing => MissingText,
                 LogReadOutcome.Empty => EmptyText,
                 _ => EmptyText
@@ -530,6 +558,13 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
         if (result.Outcome == LogReadOutcome.Cancelled)
         {
             StatusText = "已取消本次读取。";
+            return;
+        }
+
+        if (result.ErrorKind == LogLoadError.SourceNotSelected)
+        {
+            StatusText = NoInstanceText;
+            ClearSnapshotView(NoInstanceText);
             return;
         }
 
@@ -607,8 +642,9 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
         {
             LogReadOutcome.Missing => MissingText,
             LogReadOutcome.Empty => EmptyText,
+            LogReadOutcome.Ok => snapshot.Entries.Count == 0 ? NoEntriesText : NoMatchText,
             null => NoSnapshotText,
-            _ => snapshot.Entries.Count == 0 ? EmptyText : NoMatchText
+            _ => snapshot.Entries.Count == 0 ? NoEntriesText : NoMatchText
         };
     }
 
@@ -638,7 +674,19 @@ public partial class LogViewerViewModel : ObservableObject, IAsyncPage
             builder.AppendLine(row.Raw);
         }
 
-        if (await _clipboard.SetTextAsync(builder.ToString()))
+        bool copied;
+        try
+        {
+            copied = await _clipboard.SetTextAsync(builder.ToString());
+        }
+        catch (Exception)
+        {
+            // Platform clipboard failures must not escape the command; the log
+            // text itself never reaches the app logger.
+            copied = false;
+        }
+
+        if (copied)
         {
             _shell.SetStatus($"已复制 {rows.Count} 条日志到剪贴板。", StatusKind.Success);
         }

@@ -298,15 +298,50 @@ public sealed class LogViewerSnapshotStateTests
         Assert.Equal("请选择一个游戏实例，或切换到 Unity 日志 / 选择其他日志文件。", vm.StatusText);
     }
 
+    [Fact]
+    public async Task DisposeCancelsTheInFlightReadAndDropsItsResult()
+    {
+        var (vm, reader, _) = Build();
+        var gate = new TaskCompletionSource<LogReadResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        reader.Handlers[SourceKind.BepInEx] = _ => gate.Task;
+
+        var loading = vm.OnActivatedAsync();
+        vm.Dispose();
+
+        Assert.True(reader.LastCancellationToken.IsCancellationRequested);
+
+        gate.SetResult(Ok(Entry(LogLevel.Info, "late row")));
+        await loading;
+
+        Assert.Empty(vm.Entries);
+    }
+
+    [Fact]
+    public async Task ProviderEventsAfterDisposeDoNotReload()
+    {
+        var (vm, reader, provider) = Build();
+        reader.Handlers[SourceKind.BepInEx] = _ => Task.FromResult(Ok(Entry(LogLevel.Info, "row")));
+        await vm.OnActivatedAsync();
+        var calls = reader.Calls;
+
+        vm.Dispose();
+        provider.Raise();
+
+        Assert.Equal(calls, reader.Calls);
+    }
+
     private sealed class ScriptedReader : ILogReader
     {
         public Dictionary<SourceKind, Func<LogSource, Task<LogReadResult>>> Handlers { get; } = new();
 
         public int Calls { get; private set; }
 
+        public CancellationToken LastCancellationToken { get; private set; }
+
         public Task<LogReadResult> ReadAsync(LogSource source, CancellationToken cancellationToken = default)
         {
             Calls++;
+            LastCancellationToken = cancellationToken;
             return Handlers.TryGetValue(source.Kind, out var handler)
                 ? handler(source)
                 : Task.FromResult(LogReadResult.Ok(Array.Empty<LogEntry>()));

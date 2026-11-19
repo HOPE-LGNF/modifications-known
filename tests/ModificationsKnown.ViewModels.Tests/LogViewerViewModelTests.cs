@@ -59,6 +59,55 @@ public sealed class LogViewerViewModelTests
     }
 
     [Fact]
+    public async Task UnsupportedManualLogFileIsRejectedAndKeepsTheSnapshot()
+    {
+        var reader = new StubReader();
+        reader.ByKind[SourceKind.BepInEx] = Ok(Entry(LogLevel.Info, "kept"));
+        var provider = new StubSourceProvider([BepInExSource(@"C:\game-a"), UnitySource()]);
+        var picker = new StubFilePicker { LogPath = @"C:\tmp\notes.md" };
+        var shell = new StubShell();
+        var vm = new LogViewerViewModel(
+            shell, provider, picker, new StubClipboard(), new StubLauncher(), reader)
+        {
+            SearchDebounce = TimeSpan.Zero
+        };
+
+        await vm.OnActivatedAsync();
+        var source = vm.SelectedSource;
+
+        await vm.SelectLogFileCommand.ExecuteAsync(null);
+
+        Assert.Same(source, vm.SelectedSource);
+        Assert.Single(vm.Entries);
+        Assert.Equal(1, reader.Calls);
+        Assert.Equal(StatusKind.Warning, shell.LastKind);
+        Assert.Contains(".log", shell.LastStatus);
+        Assert.Contains(".txt", shell.LastStatus);
+    }
+
+    [Fact]
+    public async Task SupportedManualLogFileIsAcceptedWithAnUppercaseExtension()
+    {
+        var reader = new StubReader();
+        reader.ByKind[SourceKind.BepInEx] = Ok(Entry(LogLevel.Info, "old"));
+        reader.ByKind[SourceKind.ManualFile] = Ok(Entry(LogLevel.Info, "manual row", offset: 7));
+        var provider = new StubSourceProvider([BepInExSource(@"C:\game-a"), UnitySource()]);
+        var picker = new StubFilePicker { LogPath = @"C:\tmp\OLD.LOG" };
+        var vm = new LogViewerViewModel(
+            new StubShell(), provider, picker, new StubClipboard(), new StubLauncher(), reader)
+        {
+            SearchDebounce = TimeSpan.Zero
+        };
+
+        await vm.OnActivatedAsync();
+        await vm.SelectLogFileCommand.ExecuteAsync(null);
+
+        Assert.Equal(SourceKind.ManualFile, vm.SelectedSource!.Source.Kind);
+        Assert.EndsWith("OLD.LOG", vm.SelectedSource.PathText);
+        Assert.Equal("manual row", vm.Entries[0].Raw);
+    }
+
+    [Fact]
     public async Task ActivationLoadsTheFirstSource()
     {
         var (vm, reader, _, _, _, _) = Build(Ok(Entry(LogLevel.Info, "hello")));
@@ -84,6 +133,20 @@ public sealed class LogViewerViewModelTests
         Assert.False(vm.HasEntries);
         Assert.Equal("尚未找到日志。游戏运行后可能生成日志，也可以手动打开其他日志文件。", vm.StatusText);
         Assert.Equal(vm.StatusText, vm.EmptyMessage);
+    }
+
+    [Fact]
+    public async Task OkSnapshotWithoutEntriesIsNotReportedAsAnEmptyFile()
+    {
+        var (vm, _, _, _, _, _) = Build(LogReadResult.Ok(
+            Array.Empty<LogEntry>(), LogTruncation.Head));
+
+        await vm.OnActivatedAsync();
+
+        Assert.Empty(vm.Entries);
+        Assert.NotEqual("日志为空。", vm.EmptyMessage);
+        Assert.Contains("没有可显示的完整日志条目", vm.EmptyMessage);
+        Assert.NotEqual(string.Empty, vm.TruncatedText);
     }
 
     [Fact]
@@ -294,6 +357,34 @@ public sealed class LogViewerViewModelTests
         Assert.Equal(1, clipboard.Calls);
         Assert.Contains("drop me", clipboard.Text);
         Assert.DoesNotContain("keep me", clipboard.Text);
+    }
+
+    [Fact]
+    public async Task ClipboardFailureKeepsTheSnapshotAndReportsAnError()
+    {
+        var (vm, _, clipboard, _, shell, _) = Build(Ok(Entry(LogLevel.Info, "keep me")));
+        clipboard.Result = false;
+
+        await vm.OnActivatedAsync();
+        await vm.CopyFilteredCommand.ExecuteAsync(null);
+
+        Assert.Single(vm.Entries);
+        Assert.Equal(StatusKind.Error, shell.LastKind);
+        Assert.Contains("复制失败", shell.LastStatus);
+    }
+
+    [Fact]
+    public async Task ClipboardExceptionKeepsTheSnapshotAndReportsAnError()
+    {
+        var (vm, _, clipboard, _, shell, _) = Build(Ok(Entry(LogLevel.Info, "keep me")));
+        clipboard.Throw = true;
+
+        await vm.OnActivatedAsync();
+        await vm.CopyFilteredCommand.ExecuteAsync(null);
+
+        Assert.Single(vm.Entries);
+        Assert.Equal(StatusKind.Error, shell.LastKind);
+        Assert.Contains("复制失败", shell.LastStatus);
     }
 
     [Fact]
@@ -636,6 +727,8 @@ public sealed class LogViewerViewModelTests
     {
         public bool Result { get; set; } = true;
 
+        public bool Throw { get; set; }
+
         public int Calls { get; private set; }
 
         public string? Text { get; private set; }
@@ -644,6 +737,7 @@ public sealed class LogViewerViewModelTests
         {
             Calls++;
             Text = text;
+            if (Throw) throw new InvalidOperationException("clipboard unavailable");
             return Task.FromResult(Result);
         }
     }

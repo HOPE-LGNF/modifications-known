@@ -285,8 +285,7 @@ public sealed class FilePickerService : IFilePickerService
             AllowMultiple = false,
             FileTypeFilter =
             [
-                new FilePickerFileType("日志文件") { Patterns = ["*.log", "*.txt"] },
-                new FilePickerFileType("所有文件") { Patterns = ["*"] }
+                new FilePickerFileType("日志文件") { Patterns = ["*.log", "*.txt"] }
             ]
         });
 

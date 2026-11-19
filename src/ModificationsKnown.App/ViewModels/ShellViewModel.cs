@@ -27,6 +27,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private readonly SaveIsolationService _saveIsolation;
     private readonly ActivityLogService _activity;
     private readonly GameProcessMonitor _processMonitor;
+    private readonly GameLogSourceProvider _logSourceProvider;
     private readonly Dictionary<string, object> _pages;
     private bool _initialized;
 
@@ -163,6 +164,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             sources,
             _saveIsolation,
             logger);
+        _logSourceProvider = new GameLogSourceProvider(Game);
         _pages = new Dictionary<string, object>
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor, nxmRegistrar, dialogs),
@@ -171,7 +173,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger, _processMonitor),
             ["logs"] = new LogViewerViewModel(
                 this,
-                new GameLogSourceProvider(Game),
+                _logSourceProvider,
                 filePicker,
                 clipboard,
                 new ShellExternalLauncher(),
@@ -202,7 +204,12 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
     public GameProcessMonitor ProcessMonitor => _processMonitor;
 
-    public void Shutdown() => _processMonitor.Dispose();
+    public void Shutdown()
+    {
+        if (_pages.GetValueOrDefault("logs") is LogViewerViewModel logs) logs.Dispose();
+        _logSourceProvider.Dispose();
+        _processMonitor.Dispose();
+    }
 
     public IReadOnlyList<NavigationItem> NavigationItems { get; }
 
