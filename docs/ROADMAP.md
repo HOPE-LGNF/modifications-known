@@ -40,7 +40,7 @@
 
 ## 0.4 — Diagnostics
 
-- [ ] BepInEx/Unity log viewer
+- [x] BepInEx/Unity log viewer
 - [ ] Map stack frames/assembly names back to packages
 - [ ] Export a diagnostic bundle
 - [ ] Crash attribution with confidence
