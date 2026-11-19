@@ -288,8 +288,24 @@
                     <TextBlock Text="从 GitHub Releases 检查并安装新版本；更新会关闭当前窗口并在替换后自动重启。"
                                Classes="caption"
                                TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="更新通道"
+                                   Classes="muted"
+                                   FontSize="12"
+                                   VerticalAlignment="Center" />
+                        <ComboBox Width="132"
+                                  SelectedIndex="{Binding UpdateChannelIndex}"
+                                  IsEnabled="{Binding !IsCheckingAppUpdate}">
+                            <ComboBoxItem>稳定版</ComboBoxItem>
+                            <ComboBoxItem>预览版</ComboBoxItem>
+                        </ComboBox>
+                    </StackPanel>
+                    <TextBlock Text="预览通道包含 beta 版本，可能不稳定；切回稳定版只改变后续检查范围，不会自动降级当前程序。"
+                               Classes="caption"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource TextSecondaryBrush}" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Classes="Ghost"
+                        <Button Classes="Primary"
                                 Content="检查更新"
                                 IsEnabled="{Binding !IsCheckingAppUpdate}"
                                 Command="{Binding CheckAppUpdateCommand}" />
@@ -317,7 +333,7 @@
                 BorderThickness="1"
                 CornerRadius="10">
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-                <TextBlock Text="有未保存的修改。API Key 测试会先使用当前输入。"
+                <TextBlock Text="有未保存的修改，点击“保存设置”后生效（API Key 测试会先使用当前输入）。"
                            FontSize="12"
                            VerticalAlignment="Center" />
                 <Button Grid.Column="1"

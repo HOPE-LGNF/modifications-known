@@ -66,8 +66,10 @@ public sealed class GitHubAppReleaseFeedTests
         Assert.True(result.IsComplete);
         Assert.Single(requests);
         Assert.Equal(LatestPath, requests[0].RequestUri!.AbsolutePath);
-        Assert.Contains(requests[0].Headers.UserAgent, value => value.Product.Name.Contains("ModificationsKnown"));
-        Assert.Contains(requests[0].Headers.Accept, value => value.MediaType == "application/vnd.github+json");
+        Assert.Contains(requests[0].Headers.UserAgent,
+            value => value.Product?.Name?.Contains("ModificationsKnown") == true);
+        Assert.Contains(requests[0].Headers.Accept,
+            value => string.Equals(value.MediaType, "application/vnd.github+json", StringComparison.OrdinalIgnoreCase));
 
         var release = Assert.Single(result.Releases);
         Assert.Equal("v0.7.0", release.Tag);
