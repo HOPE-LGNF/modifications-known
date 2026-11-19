@@ -59,34 +59,52 @@
 
 入口：设置 → **启动器更新**。
 
-实现（`AppUpdateService`）：
+### 3.1 更新通道
 
-1. `GET https://api.github.com/repos/HOPE-LGNF/modifications-known/releases/latest`；
-2. 解析 `tag_name`、`html_url`、`assets`；
-3. 用 `VersionText.IsNewer` 比较当前程序集版本；
-4. 选择 `win-x64` 的 `.exe` 资产；
-5. 读取 GitHub asset 的 `digest`（`sha256:...`）；
-6. 下载到 `%TEMP%\ModificationsKnown-update`；
-7. 边下载边计算 SHA-256，与 digest 比较；
-8. 匹配后启动 PowerShell 辅助脚本：
-   - 等待当前 MK 进程退出；
-   - 覆盖原 exe；
-   - 启动新 exe；
-   - 删除脚本自身；
-9. 当前进程退出。
+- **稳定版（默认）**：只接收正式版，走 `GET /releases/latest`。
+- **预览版**：在全部公开发行（alpha / beta / rc 都算）里按语义版本取最高；正式版同样参与，不把“预览”理解成“只收 beta”。
+- 选择保存在 `settings.json` 的 `UpdateChannel`（`stable` / `preview`）；缺字段、未知值、`null` 一律按稳定版读取，不会因为这一个字段损坏而清空 API Key 等其它设置。
+- 切换遵守“改动 → 保存 / 撤销”：保存成功后清空旧候选并提示重新检查，**不会自动发请求，也不会自动降级当前程序**。
+
+### 3.2 版本比较
+
+启动器使用独立的 SemVer 2.0 比较器（模组更新仍用 `VersionText`，两者互不影响）：
+
+- 支持单个 `v`/`V` 前缀、三段数字、预发布标识、build metadata；
+- `0.8.0-beta.2 < 0.8.0-beta.10 < 0.8.0-rc.1 < 0.8.0 < 0.8.1-beta.1`；
+- `+commit` 只用于展示，不参与排序；
+- 坏格式、前导零、超长、溢出一律拒绝，不做字符串兜底猜测。
+
+当前版本从程序集的 `AssemblyInformationalVersion` 读取。**发布构建必须显式传 `-p:Version=<tag>`**（例如 `0.8.0-beta.2`），否则预发布标识会丢失，二进制自报成正式版号。
+
+### 3.3 发行与资产契约
+
+- 无预发布后缀的 tag 必须对应 `prerelease=false`，带后缀的必须对应 `prerelease=true`；矛盾的条目跳过并记录原因，避免误投稳定通道。
+- 历史包袱：v0.4.0、v0.3.1、v0.3.0、v0.2.x、v0.1.4 都是“普通 tag + `prerelease=true`”。按上面的规则它们会被预览通道忽略；这些版本都低于当前线，不影响实际升级。
+- 预览通道最多 10 页 / 30 秒；分页中途失败、链接越界或重复都算检查失败，不会把半份列表当作最新，也不会给安装入口。
+- 自动安装要求：唯一的 `win-x64` exe、合法的 `sha256:<64 hex>` digest、且下载地址是本仓库的 GitHub Release 链接。任一不满足只取消一键安装，仍可打开 Release 页手动下载。
+
+### 3.4 现有流程
+
+1. `GET`：稳定版 `/releases/latest`，预览版 `/releases?per_page=100` 并跟随 `Link rel=next`；
+2. 过滤 draft、非法 tag、标记冲突，交给纯策略选出候选；
+3. 候选严格高于当前版本才提示升级；
+4. 下载到 `%TEMP%\ModificationsKnown-update`，边下边算 SHA-256 并与 digest 比对；
+5. 匹配后启动 PowerShell 辅助脚本：等待当前进程退出、覆盖 exe、启动新 exe、删除脚本；
+6. 当前进程退出。
 
 校验策略：
 
 - **有 digest**：必须匹配，否则删除下载、拒绝替换；
 - **无 digest**：不自动安装，只打开 Release 页；
-- 下载/校验失败：不覆盖当前版本。
+- 下载/校验失败：不覆盖当前版本，候选保留以便重试。
 
 尚未实现：
 
 - Authenticode / 代码签名验证；
 - 差分更新；
 - 替换失败自动回滚旧 exe；
-- 预览/稳定双通道（当前 `/releases/latest` 不返回预发布，Beta 需手动下载）。
+- 旧二进制（0.7.0-beta 自报 0.7.0）无法自识别为预发布，升级到 0.7.0 正式版时需手动下载。
 
 ## 4. 主流启动器的做法（调研）
 
@@ -115,6 +133,5 @@
 
 1. 给启动器 Release 增加代码签名 / Authenticode 校验；
 2. 保留上一版 exe，替换失败自动回滚；
-3. 增加稳定/预览更新通道；
-4. 更新前检测用户修改文件，提供“保留/取消”而不是整体替换；
-5. 备份保留策略（最近 N 份/按时间清理）。
+3. 更新前检测用户修改文件，提供“保留/取消”而不是整体替换；
+4. 备份保留策略（最近 N 份/按时间清理）。
