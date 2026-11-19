@@ -12,6 +12,7 @@ using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Diagnostics.Logs;
 using ModificationsKnown.Infrastructure.Storage;
 using ModificationsKnown.Infrastructure.Windows;
 
@@ -142,6 +143,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             new("discover", "模组发现", "从 Nexus Mods 浏览与安装", "⌕"),
             new("installed", "已安装模组", "启用、停用与清理本地模组", "▣"),
             new("saves", "存档管理", "各版本的存档与备份", "▤"),
+            new("logs", "游戏日志", "BepInEx 与 Unity 日志", "☰"),
             new("appearance", "启动器外观", "主题变量与基础皮肤", "◈"),
             new("settings", "设置", "游戏、版本与 Nexus", "⚙")
         ];
@@ -166,6 +168,10 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs, updates, logger),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor, downloader, updates, nxmRegistrar, logger),
             ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger, _processMonitor),
+            ["logs"] = new LogViewerViewModel(
+                this,
+                new GameLogSourceProvider(Game),
+                new LocalLogReader()),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion, _processMonitor)

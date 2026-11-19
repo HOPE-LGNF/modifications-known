@@ -1,0 +1,185 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ModificationsKnown.App.Views.LogViewerView">
+    <UserControl.Styles>
+        <Style Selector="ListBoxItem">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="8,2" />
+        </Style>
+        <Style Selector="SelectableTextBlock">
+            <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <StackPanel Spacing="3">
+                <TextBlock Text="游戏日志" Classes="h2" />
+                <TextBlock Text="{Binding Explanation}"
+                           Classes="muted"
+                           FontSize="12"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+            <Button Grid.Column="1"
+                    Classes="Primary"
+                    Content="刷新"
+                    VerticalAlignment="Top"
+                    Command="{Binding RefreshCommand}" />
+        </Grid>
+
+        <Border Grid.Row="1" Classes="card" Padding="12">
+            <Grid ColumnDefinitions="Auto,280,Auto,140,*" ColumnSpacing="8">
+                <TextBlock Text="来源"
+                           Classes="muted"
+                           FontSize="12"
+                           VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding Sources}"
+                          SelectedItem="{Binding SelectedSource}"
+                          PlaceholderText="选择日志来源">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayName}"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding ToolTipText}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Grid.Column="2"
+                           Text="级别"
+                           Classes="muted"
+                           FontSize="12"
+                           VerticalAlignment="Center" />
+                <ComboBox Grid.Column="3"
+                          ItemsSource="{Binding LevelOptions}"
+                          SelectedItem="{Binding SelectedLevel}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayName}"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding DisplayName}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <TextBlock Text="{Binding SourcePathText}"
+                       Classes="muted"
+                       FontSize="11"
+                       TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding ReadAsOfText}"
+                       Classes="muted"
+                       FontSize="11"
+                       VerticalAlignment="Center"
+                       ToolTip.Tip="快照读取时间，不是日志发生时间。"
+                       IsVisible="{Binding ReadAsOfText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </Grid>
+
+        <Grid Grid.Row="3" ColumnDefinitions="45*,Auto,55*" ColumnSpacing="0">
+            <Border Classes="card" Padding="0" MinWidth="280">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="*,Auto" Margin="12,8,12,4">
+                        <TextBlock Text="日志条目"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding FilterSummary}"
+                                   Classes="muted"
+                                   FontSize="11"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                    <Grid Grid.Row="1">
+                        <ListBox ItemsSource="{Binding Entries}"
+                                 SelectedItem="{Binding SelectedEntry}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="Auto,110,*" ColumnSpacing="8">
+                                        <TextBlock Text="{Binding LevelText}"
+                                                   MinWidth="56"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{Binding LevelBrush}"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Source}"
+                                                   FontSize="11"
+                                                   Classes="muted"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding FirstLine}"
+                                                   FontFamily="Consolas, Menlo, monospace"
+                                                   FontSize="11"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <TextBlock Text="{Binding EmptyMessage}"
+                                   Classes="muted"
+                                   Margin="16,12"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Top"
+                                   IsVisible="{Binding EmptyMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1"
+                          Width="6"
+                          Background="Transparent"
+                          ResizeDirection="Columns" />
+
+            <Border Grid.Column="2" Classes="card" Padding="12" MinWidth="280">
+                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="详情"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <CheckBox Content="自动换行"
+                                      FontSize="11"
+                                      IsChecked="{Binding WrapDetail}"
+                                      VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1"
+                                  HorizontalScrollBarVisibility="{Binding DetailHorizontalScroll}"
+                                  VerticalScrollBarVisibility="Auto"
+                                  IsVisible="{Binding HasSelection}">
+                        <SelectableTextBlock Text="{Binding DetailText}"
+                                             TextWrapping="{Binding DetailWrapping}"
+                                             FontFamily="Consolas, Menlo, monospace"
+                                             FontSize="12" />
+                    </ScrollViewer>
+
+                    <TextBlock Grid.Row="1"
+                               Text="{Binding DetailPlaceholder}"
+                               Classes="muted"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Top"
+                               IsVisible="{Binding !HasSelection}" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <TextBlock Grid.Row="4"
+                   Text="{Binding TruncatedText}"
+                   FontSize="11"
+                   Foreground="{DynamicResource WarningBrush}"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding TruncatedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    </Grid>
+</UserControl>

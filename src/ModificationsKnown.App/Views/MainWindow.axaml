@@ -27,6 +27,9 @@
         <DataTemplate DataType="{x:Type vm:SavesViewModel}">
             <views:SavesView />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:LogViewerViewModel}">
+            <views:LogViewerView />
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:LauncherSkinViewModel}">
             <views:LauncherSkinView />
         </DataTemplate>
