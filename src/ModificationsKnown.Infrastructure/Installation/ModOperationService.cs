@@ -3,7 +3,7 @@ using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 
-namespace ModificationsKnown.App.Services;
+namespace ModificationsKnown.Infrastructure.Installation;
 
 /// <summary>
 /// Serializes writes for one game installation and keeps UI code from talking

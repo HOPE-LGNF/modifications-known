@@ -26,7 +26,7 @@
   - 版本/实例删除真机回归。
 - 已实现并完成代码级验证：
   - 发现页、已安装页、存档页、设置页、主题页；
-  - 更新事务：同盘暂存、全成功才删暂存、失败恢复、内容相同拒绝、Together 附属文件（manifest `auxiliaryFiles`）与卸载引用计数；
+  - 更新事务：同盘暂存、全成功才删暂存、失败恢复、内容相同记录新版本、Together 附属文件（manifest `auxiliaryFiles`）与卸载引用计数；
   - 多实例、BepInEx 安装/卸载、托管包清单；
   - Nexus 浏览/下载、NXM 回退；
   - 检查更新、单项更新、一键更新、跨卷备份/失败恢复；
@@ -80,7 +80,8 @@ src/
   ModificationsKnown.Infrastructure/ 实现
     Games/                           Steam locator, GameLauncher
     BepInEx/                         PE metadata, scanner, enable/disable/delete
-    Installation/                    ArchiveModInstaller, BepInExInstaller
+    Installation/                    ArchiveModInstaller, BepInExInstaller,
+                                     ModOperationService, PackageUpdateService
     Nexus/                           NexusModsClient
     Network/                         streaming downloader
     Storage/                         AppPaths, JSON settings, logger
@@ -89,7 +90,7 @@ src/
   ModificationsKnown.App/            Avalonia UI
     ViewModels/                      Shell, Home, Discover, Installed, Saves, Settings, Themes
     Views/                           XAML + 少量 code-behind（拖拽、焦点、滚动、对话框）
-    Services/                        GameContext, dialogs, thumbnails, package updates,
+    Services/                        GameContext, dialogs, thumbnails, update resolver,
                                      app updates, NXM flow, activity log
     Theming/                         ThemePalette, ThemeService
 ```
@@ -100,7 +101,7 @@ src/
 - `GameProcessMonitor`：按 exe 路径检测实例进程；启动后 350ms 快速轮询，最多 20 秒。
 - `DiscoverViewModel`：搜索/详情/下载/NXM/更新预检；403 文件页携带 `file_id` + `nmm=1`。
 - `InstalledViewModel`：扫描、启停、更新检查、单项/一键更新、BepInEx 状态。
-- `PackageUpdateService`：同盘暂存、可选跨卷备份、失败恢复。
+- `PackageUpdateService`（Infrastructure）：同盘暂存、跨卷备份、全成功提交、失败恢复、附属文件与内容校验。
 - `SettingsViewModel`：实例、BepInEx 安装/卸载、NXM 注册、API Key、启动器更新、深链焦点。
 - `AppUpdateService`：GitHub Releases API、版本比较、asset digest、SHA-256 下载校验。
 - `SaveIsolationService`：NTFS junction 存档隔离（用户已真机确认）。

@@ -2,6 +2,7 @@ using ModificationsKnown.Core.Common;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Nexus;
+using ModificationsKnown.Infrastructure.Installation;
 
 namespace ModificationsKnown.App.Services;
 

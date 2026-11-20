@@ -4,7 +4,7 @@ using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Infrastructure.Storage;
 
-namespace ModificationsKnown.App.Services;
+namespace ModificationsKnown.Infrastructure.Installation;
 
 public sealed record PackageUpdateResult(
     bool Success,

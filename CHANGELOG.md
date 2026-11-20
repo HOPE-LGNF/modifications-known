@@ -33,7 +33,8 @@
 - **更新安全**：`TryRestore` 只在暂存目录确实存在时才删除/恢复目标；包目录移动失败不再删除仍在使用的安装。
 - **部分成功**：更新只有全部包成功才删除暂存旧包；`ModInstallResult.AllSucceeded` 区分“至少一个成功”和“全部成功”。
 - **Together 多 DLL 更新**：允许已知更新目标携带 `plugins` 根目录 DLL 与 `BepInEx/patchers` 附属文件；附属文件与目标包一起暂存/回滚；更新后保留禁用状态。
-- **附属文件所有权**：manifest 记录 `auxiliaryFiles` 及哈希；卸载时仅删除未被其他托管包声明且哈希未变的附属文件。
+- **附属文件所有权**：manifest 记录 `auxiliaryFiles` 及哈希；卸载时仅删除未被其他托管包声明且哈希未变的附属文件；`.disabled` 变体一并保留/清理。
+- **结构整理**：`PackageUpdateService` 与 `ModOperationService` 移入 Infrastructure，测试项目可直接覆盖更新事务；`InstalledModItemViewModel`、Discover 下载/NXM 段、Installed 更新段拆为 partial 文件。
 - **更新内容校验**：安装后对比旧包与新包文件哈希；内容相同仍记录 Nexus 文件版本并显示警告，不再把同内容归档说成“已更新”，同时清除可更新徽标。
 - **更新版本身份**：检查/更新优先使用 manifest 记录的 Nexus 文件版本；Nexus 只给 `v1`/`v2` 时从文件/版本名提取 `1.8.3-v1` 这类语义版本；修复 Warning Editor 这类多 DLL/多文件包被旧文件误判为更新。
 - **一键更新**：仅对 Premium 账号显示；免费账号隐藏按钮，避免一次打开大量浏览器标签页。

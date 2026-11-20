@@ -12,6 +12,7 @@ using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Installation;
 using ModificationsKnown.Infrastructure.Storage;
 using ModificationsKnown.Infrastructure.Windows;
 
