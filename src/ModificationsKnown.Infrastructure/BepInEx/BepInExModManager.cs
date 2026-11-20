@@ -536,7 +536,7 @@ public sealed class BepInExModManager : IModManager
             if (!PackageManifestReader.TryRead(directory, out var manifest, out _))
                 continue;
 
-            if (manifest.AuxiliaryFiles.Any(file =>
+            if (manifest is not null && manifest.AuxiliaryFiles.Any(file =>
                     string.Equals(file.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase)))
                 return true;
         }

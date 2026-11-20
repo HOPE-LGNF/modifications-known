@@ -25,10 +25,10 @@ public partial class DiscoverView : UserControl
         _descriptionDragText = (sender as SelectableTextBlock)?.SelectedText ?? string.Empty;
     }
 
-    private async void OnDescriptionPointerMoved(object? sender, PointerEventArgs e)
+    private async void OnDescriptionDragHandleMoved(object? sender, PointerEventArgs e)
     {
-        if (!_descriptionPointerDown || sender is not SelectableTextBlock text) return;
-        if (!e.GetCurrentPoint(text).Properties.IsLeftButtonPressed)
+        if (!_descriptionPointerDown) return;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             _descriptionPointerDown = false;
             return;
@@ -37,23 +37,35 @@ public partial class DiscoverView : UserControl
         var position = e.GetPosition(this);
         var dx = position.X - _descriptionDragStart.X;
         var dy = position.Y - _descriptionDragStart.Y;
-        if ((dx * dx) + (dy * dy) < 36) return;
+        if ((dx * dx) + (dy * dy) < 6) return;
 
-        var selected = text.SelectedText;
-        if (string.IsNullOrWhiteSpace(selected)
-            || !string.Equals(selected, _descriptionDragText, StringComparison.Ordinal))
-            return;
+        var selected = _descriptionDragText;
+        if (string.IsNullOrWhiteSpace(selected)) return;
 
         _descriptionPointerDown = false;
+        DescriptionDragHandle.IsVisible = false;
         var data = new DataTransfer();
         data.Add(DataTransferItem.CreateText(selected));
         await DragDrop.DoDragDropAsync(e, data, DragDropEffects.Copy);
     }
 
+    private void OnDescriptionDragHandlePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        _descriptionDragText = DescriptionText.SelectedText;
+        if (string.IsNullOrWhiteSpace(_descriptionDragText)) return;
+        _descriptionPointerDown = true;
+        _descriptionDragStart = e.GetPosition(this);
+    }
+
+    private void OnDescriptionDragHandleReleased(object? sender, PointerReleasedEventArgs e) =>
+        _descriptionPointerDown = false;
+
     private void OnDescriptionPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         _descriptionPointerDown = false;
-        _descriptionDragText = string.Empty;
+        DescriptionDragHandle.IsVisible =
+            !string.IsNullOrWhiteSpace(DescriptionText.SelectedText);
     }
 
     private void OnSearchKeyDown(object? sender, KeyEventArgs e)

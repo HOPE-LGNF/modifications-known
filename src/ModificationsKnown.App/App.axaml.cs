@@ -34,6 +34,12 @@ public class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            try { NativeMethods.SetCurrentProcessExplicitAppUserModelID("HOPE.ModificationsKnown"); }
+            catch { }
+        }
+
         if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
         {
             base.OnFrameworkInitializationCompleted();
@@ -128,5 +134,11 @@ public class App : Application
         };
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static class NativeMethods
+    {
+        [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        internal static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
     }
 }

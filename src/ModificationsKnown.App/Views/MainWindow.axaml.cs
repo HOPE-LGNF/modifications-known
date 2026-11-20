@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -19,6 +21,17 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        try
+        {
+            using var stream = AssetLoader.Open(
+                new Uri("avares://ModificationsKnown.App/Assets/ModificationsKnown-64.png"));
+            Icon = new WindowIcon(stream);
+        }
+        catch
+        {
+            // The embedded icon is best effort; the exe icon still applies.
+        }
 
         AddHandler(DragDrop.DragEnterEvent, OnDragOver);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
