@@ -1,6 +1,7 @@
 using ModificationsKnown.App.Services;
 using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Storage;
 
 namespace ModificationsKnown.App.Tests;
 
@@ -90,6 +91,10 @@ internal sealed class FakeFilePickerService : IFilePickerService
     public Task<string?> PickThemeFileAsync() => Task.FromResult<string?>(null);
 
     public Task<string?> PickLogFileAsync() => Task.FromResult<string?>(null);
+
+    public Task<string?> PickSaveArchiveAsync() => Task.FromResult<string?>(null);
+
+    public Task<string?> PickSaveArchiveTargetAsync(string suggestedFileName) => Task.FromResult<string?>(null);
 
     public Task<string?> PickDataFolderAsync() => Task.FromResult<string?>(null);
 
