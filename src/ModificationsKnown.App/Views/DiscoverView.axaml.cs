@@ -11,6 +11,14 @@ public partial class DiscoverView : UserControl
     public DiscoverView()
     {
         InitializeComponent();
+
+        // Preserve an existing selection when the user presses inside it;
+        // otherwise a click clears the selection before a drag handle can be used.
+        DescriptionText.AddHandler(
+            PointerPressedEvent,
+            OnDescriptionPointerPressed,
+            RoutingStrategies.Tunnel,
+            handledEventsToo: true);
     }
 
     private Point _descriptionDragStart;
@@ -23,6 +31,18 @@ public partial class DiscoverView : UserControl
         _descriptionPointerDown = true;
         _descriptionDragStart = e.GetPosition(this);
         _descriptionDragText = (sender as SelectableTextBlock)?.SelectedText ?? string.Empty;
+
+        var start = Math.Min(DescriptionText.SelectionStart, DescriptionText.SelectionEnd);
+        var end = Math.Max(DescriptionText.SelectionStart, DescriptionText.SelectionEnd);
+        if (start == end) return;
+
+        var point = e.GetPosition(DescriptionText);
+        point = new Point(
+            point.X - DescriptionText.Padding.Left,
+            point.Y - DescriptionText.Padding.Top);
+        var hit = DescriptionText.TextLayout.HitTestPoint(point);
+        if (hit.IsInside && hit.TextPosition >= start && hit.TextPosition <= end)
+            e.Handled = true;
     }
 
     private async void OnDescriptionDragHandleMoved(object? sender, PointerEventArgs e)
