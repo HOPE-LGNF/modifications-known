@@ -114,23 +114,18 @@ public partial class HomeViewModel : ObservableObject, IAsyncPage
     private Task LaunchGame() => _shell.LaunchGameAsync();
 
     [RelayCommand]
-    private async Task ChecklistActionAsync(HomeChecklistItem? item)
+    private Task ChecklistActionAsync(HomeChecklistItem? item)
     {
-        if (item is null) return;
+        if (item is null) return Task.CompletedTask;
 
         if (string.Equals(item.TargetPage, "nxm", StringComparison.OrdinalIgnoreCase))
-        {
             _shell.NavigateSettings("nxm");
-            return;
-        }
-
-        if (string.Equals(item.TargetPage, "settings#bepinex", StringComparison.OrdinalIgnoreCase))
-        {
+        else if (string.Equals(item.TargetPage, "settings#bepinex", StringComparison.OrdinalIgnoreCase))
             _shell.NavigateSettings("bepinex");
-            return;
-        }
+        else
+            _shell.NavigateTo(item.TargetPage);
 
-        _shell.NavigateTo(item.TargetPage);
+        return Task.CompletedTask;
     }
 
     public bool HasActivity => RecentActivity.Count > 0;

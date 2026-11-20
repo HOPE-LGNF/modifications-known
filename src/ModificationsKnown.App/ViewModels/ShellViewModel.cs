@@ -264,12 +264,24 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         _initialized = true;
 
         ThemeService.Apply(Settings.Current.ThemePreset);
-        SetStatus("正在加载版本列表…");
+        ReportProgress("正在加载版本列表…");
         await LoadInstancesAsync(rediscover: false);
         await ActivateCurrentPageAsync();
     }
 
-    public void SetStatus(string message, StatusKind kind = StatusKind.Info)
+    /// <summary>Transient progress: status bar only. Progress must never be
+    /// recorded as an activity outcome or shown as a toast.</summary>
+    public void ReportProgress(string message)
+    {
+        SetStatusCore(message, StatusKind.Info, recordActivity: false, showToast: false);
+    }
+
+    /// <summary>Operation outcome: status bar, activity log and toast. The kind
+    /// is explicit; never inferred from Chinese message prefixes.</summary>
+    public void SetStatus(string message, StatusKind kind = StatusKind.Info) =>
+        SetStatusCore(message, kind, recordActivity: kind is not StatusKind.Info, showToast: true);
+
+    private void SetStatusCore(string message, StatusKind kind, bool recordActivity, bool showToast)
     {
         StatusMessage = message;
         StatusKind = kind;
@@ -286,15 +298,10 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         else
             _logger.Info(message);
 
-        if (kind is not StatusKind.Info
-            && !message.StartsWith("正在", StringComparison.Ordinal)
-            && !message.StartsWith("准备", StringComparison.Ordinal)
-            && !message.StartsWith("已检测到", StringComparison.Ordinal))
-        {
+        if (recordActivity)
             _activity.Add(kind == StatusKind.Error ? "error" : "success", message);
-        }
 
-        ShowToast(message, kind);
+        if (showToast) ShowToast(message, kind);
     }
 
     private async void ShowToast(string message, StatusKind kind)
@@ -411,7 +418,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         IsClosing = true;
         try
         {
-            SetStatus($"正在关闭「{installation.DisplayLabel}」…", StatusKind.Info);
+            ReportProgress($"正在关闭「{installation.DisplayLabel}」…");
             var closed = await _processMonitor.CloseInstanceAsync(installation);
             SetStatus(
                 closed > 0
@@ -456,7 +463,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
                 return;
             }
 
-            SetStatus($"正在启动 {installation.DisplayLabel}…");
+            ReportProgress($"正在启动 {installation.DisplayLabel}…");
             _logger.Info($"Launch requested for {installation.Profile.EditionLabel} at {installation.GameDirectory}");
 
             // Steam paths may fall back to the steam:// protocol; manual/portable
@@ -478,7 +485,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
             if (result.Success)
             {
-                SetStatus($"正在等待「{installation.DisplayLabel}」启动…");
+                ReportProgress($"正在等待「{installation.DisplayLabel}」启动…");
                 var detected = await _processMonitor.WaitForRunningAsync(
                     installation,
                     TimeSpan.FromSeconds(20));

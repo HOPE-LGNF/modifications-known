@@ -18,6 +18,8 @@ public interface IAppShell
 
     void SetStatus(string message, StatusKind kind = StatusKind.Info);
 
+    void ReportProgress(string message);
+
     Task RefreshGameAsync();
 
     bool CanLaunch { get; }

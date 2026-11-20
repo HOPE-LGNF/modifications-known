@@ -230,7 +230,7 @@ public partial class InstalledViewModel
                 $"{item.Name}-{effectiveVersion}-{DateTime.Now:HHmmss}{extension}");
             var destination = Path.Combine(AppPaths.DownloadsDirectory, fileName);
 
-            _shell.SetStatus($"正在下载「{item.Name}」{VersionText.Label(effectiveVersion)}…");
+            _shell.ReportProgress($"正在下载「{item.Name}」{VersionText.Label(effectiveVersion)}…");
             _logger.Info($"[Update] downloading {link.Url} -> {destination}");
             var download = await _downloader.DownloadAsync(link.Url, destination);
             _logger.Info($"[Update] download success={download.Success} message={download.Message}");

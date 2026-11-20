@@ -97,7 +97,7 @@ src/
 
 ### 关键文件
 
-- `ShellViewModel`：导航、启动/关闭、NXM 分发、Toast、设置深链、`ModsChanged` 通知。
+- `ShellViewModel`：导航、启动/关闭、NXM 分发、Toast、设置深链、`ModsChanged` 通知；`SetStatus` = 结果（活动+Toast），`ReportProgress` = 仅状态栏。
 - `GameProcessMonitor`：按 exe 路径检测实例进程；启动后 350ms 快速轮询，最多 20 秒。
 - `DiscoverViewModel`：搜索/详情/下载/NXM/更新预检；403 文件页携带 `file_id` + `nmm=1`。
 - `InstalledViewModel`：扫描、启停、更新检查、单项/一键更新、BepInEx 状态。

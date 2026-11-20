@@ -240,12 +240,18 @@
                                     <TextBlock Text="{Binding SelectedCard.Downloads}" Classes="caption" VerticalAlignment="Center" />
                                     <TextBlock Text="{Binding SelectedCard.FileSize}" Classes="caption" VerticalAlignment="Center" />
                                 </StackPanel>
-                                <SelectableTextBlock Text="{Binding Details.DescriptionText}"
-                                                     Classes="muted"
+                                <SelectableTextBlock x:Name="DescriptionText"
+                                                     Text="{Binding Details.DescriptionText}"
                                                      FontSize="12"
+                                                     Foreground="{DynamicResource TextSecondaryBrush}"
+                                                     SelectionBrush="{DynamicResource AccentSoftBrush}"
+                                                     SelectionForegroundBrush="{DynamicResource TextPrimaryBrush}"
                                                      TextWrapping="Wrap"
                                                      MaxHeight="{Binding DescriptionMaxHeight}"
-                                                     TextTrimming="CharacterEllipsis" />
+                                                     TextTrimming="CharacterEllipsis"
+                                                     PointerPressed="OnDescriptionPointerPressed"
+                                                     PointerMoved="OnDescriptionPointerMoved"
+                                                     PointerReleased="OnDescriptionPointerReleased" />
                                 <Button Classes="Ghost"
                                         Content="{Binding DescriptionToggleText}"
                                         Command="{Binding ToggleDescriptionCommand}"
