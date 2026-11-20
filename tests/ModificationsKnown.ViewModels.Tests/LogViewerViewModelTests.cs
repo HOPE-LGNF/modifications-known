@@ -781,6 +781,10 @@ public sealed class LogViewerViewModelTests
 
         public Task<string?> PickLogFileAsync() => Task.FromResult(LogPath);
 
+        public Task<string?> PickSaveArchiveAsync() => Task.FromResult<string?>(null);
+
+        public Task<string?> PickSaveArchiveTargetAsync(string suggestedFileName) => Task.FromResult<string?>(null);
+
         public Task<string?> PickDataFolderAsync() => Task.FromResult<string?>(null);
 
         public Task<string?> PickBackupFolderAsync() => Task.FromResult<string?>(null);
