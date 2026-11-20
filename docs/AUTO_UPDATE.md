@@ -48,6 +48,7 @@ Together 这类归档的严格路径：
 - 目标包目录：`BepInEx/plugins/Together/`；
 - 附属文件：`BepInEx/plugins/CUCoreLib.dll`、`BepInEx/patchers/CT_AutoUpdateApplier.dll`；
 - 附属文件写入包 manifest 的 `auxiliaryFiles`（相对游戏根目录、哈希）；卸载时只删除未被其他托管包声明且哈希未变的文件；
+- 更新时若 `.disabled` 附属文件存在，新内容继续写为 `.disabled`，并清理同名的启用残留；已被 manifest 声明的根 DLL 不再在扫描器里显示为“本地模组”；
 - `ArchiveInstallOptions(TargetPackageName, AllowAuxiliaryFiles)` 只在已知更新目标时启用附属文件；
 - 普通安装仍拒绝无法归属的散放文件；散放根 DLL 不再出现在“可更新”列表。
 

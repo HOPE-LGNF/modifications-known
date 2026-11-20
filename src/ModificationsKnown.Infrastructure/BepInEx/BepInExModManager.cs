@@ -106,10 +106,25 @@ public sealed class BepInExModManager : IModManager
             });
         }
 
+        // A managed package may own a plugins-root DLL as an auxiliary file
+        // (Together/CUCoreLib). Keep it out of the loose-DLL list so it cannot
+        // appear as an unmanaged duplicate that cannot be toggled or removed.
+        var claimedAuxiliary = mods
+            .SelectMany(mod => mod.AuxiliaryFiles)
+            .SelectMany(file =>
+            {
+                var path = Path.GetFullPath(Path.Combine(
+                    installation.GameDirectory,
+                    file.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+                return new[] { path, path + ".disabled" };
+            })
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         // Loose DLLs directly in plugins are kept read-only: there is no reliable
         // ownership boundary for a single file.
         foreach (var file in Directory.EnumerateFiles(pluginsDirectory, "*", SearchOption.TopDirectoryOnly)
                      .Where(IsDllFile)
+                     .Where(file => !claimedAuxiliary.Contains(Path.GetFullPath(file)))
                      .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -456,13 +471,11 @@ public sealed class BepInExModManager : IModManager
                 continue;
             }
 
-            var actualPath = File.Exists(path)
-                ? path
-                : File.Exists(path + ".disabled")
-                    ? path + ".disabled"
-                    : null;
+            var variants = new[] { path, path + ".disabled" }
+                .Where(File.Exists)
+                .ToList();
 
-            if (actualPath is null)
+            if (variants.Count == 0)
             {
                 missing++;
                 continue;
@@ -474,21 +487,24 @@ public sealed class BepInExModManager : IModManager
                 continue;
             }
 
-            try
+            foreach (var actualPath in variants)
             {
-                if (string.Equals(HashFile(actualPath), aux.Sha256, StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    File.Delete(actualPath);
-                    deleted++;
+                    if (string.Equals(HashFile(actualPath), aux.Sha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Delete(actualPath);
+                        deleted++;
+                    }
+                    else
+                    {
+                        preserved++;
+                    }
                 }
-                else
+                catch
                 {
                     preserved++;
                 }
-            }
-            catch
-            {
-                preserved++;
             }
         }
 

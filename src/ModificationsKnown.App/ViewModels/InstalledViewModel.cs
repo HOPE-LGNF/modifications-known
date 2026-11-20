@@ -362,8 +362,9 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             latestForPage = latest;
             var file = latest.File;
             var version = latest.Version;
-            _logger.Info($"[Update] candidate file={file.Id} version={version.Version} fileVersionId={version.GameScopedId}");
-            if (!VersionText.IsNewer(version.Version, item.Mod.UpdateVersion))
+            var effectiveVersion = latest.EffectiveVersion;
+            _logger.Info($"[Update] candidate file={file.Id} version={effectiveVersion} fileVersionId={version.GameScopedId}");
+            if (!VersionText.IsNewer(effectiveVersion, item.Mod.UpdateVersion))
             {
                 ClearUpdate(item);
                 UpdateSummary = "已是最新版本。";
@@ -388,7 +389,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             {
                 var choice = await _dialogs.ConfirmUpdateAsync(
                     "更新模组",
-                    $"「{item.Name}」已安装 {item.Mod.VersionLabel}，将更新到 {VersionText.Label(version.Version)}。\n\n下载后替换旧包；更新失败会尝试回滚。",
+                    $"「{item.Name}」已安装 {item.Mod.VersionLabel}，将更新到 {VersionText.Label(effectiveVersion)}。\n\n下载后替换旧包；更新失败会尝试回滚。",
                     showBackupOption: true);
                 if (choice is null) return false;
                 backup = choice.Backup;
@@ -398,10 +399,10 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             var extension = Path.GetExtension(new Uri(link.Url).AbsolutePath);
             if (string.IsNullOrWhiteSpace(extension) || extension.Length > 8) extension = ".zip";
             var fileName = PathSafety.GetSafeFileName(
-                $"{item.Name}-{version.Version}-{DateTime.Now:HHmmss}{extension}");
+                $"{item.Name}-{effectiveVersion}-{DateTime.Now:HHmmss}{extension}");
             var destination = Path.Combine(AppPaths.DownloadsDirectory, fileName);
 
-            _shell.SetStatus($"正在下载「{item.Name}」{VersionText.Label(version.Version)}…");
+            _shell.SetStatus($"正在下载「{item.Name}」{VersionText.Label(effectiveVersion)}…");
             _logger.Info($"[Update] downloading {link.Url} -> {destination}");
             var download = await _downloader.DownloadAsync(link.Url, destination);
             _logger.Info($"[Update] download success={download.Success} message={download.Message}");
@@ -417,7 +418,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 match.GameScopedId,
                 match.ModUid,
                 file.Id,
-                version.Version);
+                effectiveVersion);
             var result = await _updates.InstallReplacingAsync(
                 installation,
                 item.Mod,
@@ -462,7 +463,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                     domain,
                     match.GameScopedId,
                     latest.Version.Name,
-                    latest.Version.Version,
+                    latest.EffectiveVersion,
                     latest.Version.UploadedAt);
 
                 if (legacyFileId is null)
@@ -471,7 +472,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                         domain,
                         match.GameScopedId,
                         latest.File.Name,
-                        latest.Version.Version,
+                        latest.EffectiveVersion,
                         latest.File.LastUploadedAt);
                 }
             }
@@ -547,10 +548,10 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
                 {
                     var latest = await _updateResolver.ResolveLatestAsync(item.NexusMatch);
                     if (latest is not null
-                        && VersionText.IsNewer(latest.Version.Version, item.Mod.UpdateVersion))
+                        && VersionText.IsNewer(latest.EffectiveVersion, item.Mod.UpdateVersion))
                     {
                         item.HasUpdate = true;
-                        item.LatestVersionLabel = VersionText.Label(latest.Version.Version);
+                        item.LatestVersionLabel = VersionText.Label(latest.EffectiveVersion);
                         _updateCache[item.Mod.PackageId] = (true, item.LatestVersionLabel);
                         _latestFiles[item.Mod.PackageId] = latest;
                         updates++;

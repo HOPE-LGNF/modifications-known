@@ -173,7 +173,7 @@ public sealed class ArchiveModInstallerTests
 
         var manager = new BepInExModManager();
         var scanned = await manager.ScanAsync(CreateInstallation(temp.Path));
-        var together = Assert.Single(scanned.Where(mod => mod.PackageId == "Together"));
+        var together = Assert.Single(scanned, mod => mod.PackageId == "Together");
         Assert.Equal(2, together.AuxiliaryFiles.Count);
 
         var result = await manager.UninstallManagedAsync(CreateInstallation(temp.Path), together);
@@ -181,6 +181,35 @@ public sealed class ArchiveModInstallerTests
         Assert.True(result.Success, result.Message);
         Assert.False(File.Exists(Path.Combine(temp.Path, "BepInEx", "plugins", "CUCoreLib.dll")));
         Assert.False(File.Exists(Path.Combine(temp.Path, "BepInEx", "patchers", "CT_AutoUpdateApplier.dll")));
+    }
+
+
+    [Fact]
+    public async Task PreservesDisabledAuxiliaryFileAndHidesItFromLooseDlls()
+    {
+        using var temp = new TempDirectory();
+        Directory.CreateDirectory(Path.Combine(temp.Path, "BepInEx", "plugins"));
+        Directory.CreateDirectory(Path.Combine(temp.Path, "BepInEx", "patchers"));
+        File.WriteAllText(Path.Combine(temp.Path, "BepInEx", "plugins", "CUCoreLib.dll.disabled"), "old core");
+        var archive = CreateArchive(
+            temp,
+            "together.zip",
+            ("BepInEx/plugins/Together/Together.dll", "fake dll"),
+            ("BepInEx/plugins/CUCoreLib.dll", "new core"));
+
+        var installer = new ArchiveModInstaller();
+        var installed = await installer.InstallArchiveAsync(
+            CreateInstallation(temp.Path),
+            archive,
+            options: new ArchiveInstallOptions("Together", AllowAuxiliaryFiles: true));
+        Assert.True(installed.AllSucceeded, installed.Message);
+        Assert.True(File.Exists(Path.Combine(temp.Path, "BepInEx", "plugins", "CUCoreLib.dll.disabled")));
+        Assert.False(File.Exists(Path.Combine(temp.Path, "BepInEx", "plugins", "CUCoreLib.dll")));
+
+        var manager = new BepInExModManager();
+        var scanned = await manager.ScanAsync(CreateInstallation(temp.Path));
+        Assert.DoesNotContain(scanned, mod =>
+            string.Equals(mod.DirectoryPath, Path.Combine(temp.Path, "BepInEx", "plugins"), StringComparison.OrdinalIgnoreCase));
     }
 
 }

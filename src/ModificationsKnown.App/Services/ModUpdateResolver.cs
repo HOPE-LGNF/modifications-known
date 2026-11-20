@@ -5,7 +5,10 @@ using ModificationsKnown.Core.Nexus;
 
 namespace ModificationsKnown.App.Services;
 
-public sealed record LatestFile(NexusModFile File, NexusFileVersion Version);
+public sealed record LatestFile(NexusModFile File, NexusFileVersion Version)
+{
+    public string EffectiveVersion => NexusVersionText.Resolve(Version, File);
+}
 
 /// <summary>Shared update target/version resolution for Discover and Installed.
 /// Keeps package identity and "highest file version" rules in one place.</summary>
@@ -35,9 +38,10 @@ public sealed class ModUpdateResolver
             {
                 if (string.IsNullOrWhiteSpace(version.Version)) continue;
 
+                var candidateVersion = NexusVersionText.Resolve(version, file);
                 if (best is null
-                    || VersionText.IsNewer(version.Version, best.Version.Version)
-                    || (string.Equals(version.Version.Trim(), best.Version.Version.Trim(), StringComparison.OrdinalIgnoreCase)
+                    || VersionText.IsNewer(candidateVersion, best.EffectiveVersion)
+                    || (string.Equals(candidateVersion.Trim(), best.EffectiveVersion.Trim(), StringComparison.OrdinalIgnoreCase)
                         && version.UploadedAt > best.Version.UploadedAt))
                 {
                     best = new LatestFile(file, version);

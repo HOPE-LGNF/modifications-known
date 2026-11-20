@@ -477,6 +477,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
         var card = SelectedCard;
         var version = SelectedVersion;
         var file = SelectedFile;
+        var effectiveVersion = NexusVersionText.Resolve(version, file);
 
         IsDownloading = true;
         ShowFreeDownloadWhy = false;
@@ -497,7 +498,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
             DownloadStatus = "正在下载…";
             var extension = GetExtension(link.Url);
-            var fileName = $"{PathSafety.GetSafeFileName(card.Summary.Name)}-{PathSafety.GetSafeFileName(version.Version)}{extension}";
+            var fileName = $"{PathSafety.GetSafeFileName(card.Summary.Name)}-{PathSafety.GetSafeFileName(effectiveVersion)}{extension}";
             var destination = Path.Combine(AppPaths.DownloadsDirectory, fileName);
 
             var progress = new Progress<double>(value => DownloadProgress = value);
@@ -512,7 +513,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                 installation,
                 card.Summary.Name,
                 card.Summary.GameScopedId,
-                version.Version);
+                effectiveVersion);
             if (!proceed) return;
 
             DownloadStatus = updateTarget is null ? "正在安装…" : "正在更新…";
@@ -522,7 +523,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                 card.Summary.GameScopedId,
                 card.Summary.Id,
                 file?.Id,
-                version.Version);
+                effectiveVersion);
             ModInstallResult installed;
             if (updateTarget is null)
             {
@@ -554,7 +555,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     _settings.Current.NexusGameDomain,
                     card.Summary.GameScopedId,
                     card.Summary.Id,
-                    version.Version,
+                    effectiveVersion,
                     file?.Id);
                 _shell.SetStatus(
                     installed.Message,
@@ -581,7 +582,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
                     long.TryParse(card.Summary.GameScopedId, out var mg) ? mg : 0,
                     long.TryParse(file?.Id, out var fi) ? fi : 0,
                     card.Name,
-                    version.Version,
+                    effectiveVersion,
                     card.Summary.Id,
                     file?.Id);
                 DownloadStatus = nxmReady
@@ -658,7 +659,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
             if (version is not null)
             {
                 legacyFileId = await _nexus.GetLegacyFileIdAsync(
-                    domain, modId, version.Name, version.Version, version.UploadedAt);
+                    domain, modId, version.Name, NexusVersionText.Resolve(version, file), version.UploadedAt);
             }
 
             if (legacyFileId is null && file is not null)
@@ -989,7 +990,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
     public string SelectedVersionLabel => SelectedVersion is null
         ? "尚未选择版本"
-        : $"{SelectedVersion.VersionLabel} · {SelectedVersion.CategoryLabel} · {SelectedVersion.UploadedLabel}";
+        : $"{NexusVersionText.Label(SelectedVersion, SelectedFile)} · {SelectedVersion.CategoryLabel} · {SelectedVersion.UploadedLabel}";
 
     partial void OnSelectedFileChanged(NexusModFile? value)
     {

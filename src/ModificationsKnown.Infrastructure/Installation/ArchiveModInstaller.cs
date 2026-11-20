@@ -193,17 +193,29 @@ public sealed class ArchiveModInstaller : IModInstaller
                         if (!PathSafety.IsWithinDirectory(destination, installation.GameDirectory))
                             throw new InvalidDataException($"附属文件越界：{item.RelativePath}");
 
-                        if (File.Exists(destination))
+                        var disabledDestination = destination + ".disabled";
+                        var keepDisabled = File.Exists(disabledDestination);
+                        var actualDestination = keepDisabled ? disabledDestination : destination;
+
+                        foreach (var existing in new[] { destination, disabledDestination }.Distinct())
                         {
-                            var backup = Path.Combine(backupRoot, item.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+                            if (!File.Exists(existing)) continue;
+                            var backup = Path.Combine(
+                                backupRoot,
+                                Path.GetRelativePath(installation.GameDirectory, existing));
                             Directory.CreateDirectory(Path.GetDirectoryName(backup)!);
-                            File.Copy(destination, backup, overwrite: true);
-                            backups.Add((destination, backup));
+                            File.Copy(existing, backup, overwrite: true);
+                            backups.Add((existing, backup));
                         }
 
-                        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                        File.Copy(item.SourcePath, destination, overwrite: true);
-                        copied.Add(destination);
+                        // A disabled auxiliary file stays disabled, and a stale
+                        // enabled duplicate from an older update is removed.
+                        if (keepDisabled && File.Exists(destination))
+                            File.Delete(destination);
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(actualDestination)!);
+                        File.Copy(item.SourcePath, actualDestination, overwrite: true);
+                        copied.Add(actualDestination);
                         auxiliaryFiles.Add(item.RelativePath);
                     }
                 }
