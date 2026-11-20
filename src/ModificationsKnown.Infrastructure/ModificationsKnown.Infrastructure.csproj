@@ -12,4 +12,8 @@
     <ProjectReference Include="..\ModificationsKnown.Core\ModificationsKnown.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ModificationsKnown.Tests" />
+  </ItemGroup>
+
 </Project>

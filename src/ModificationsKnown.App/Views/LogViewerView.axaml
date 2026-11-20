@@ -1,0 +1,296 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ModificationsKnown.App.Views.LogViewerView">
+    <UserControl.Styles>
+        <Style Selector="ListBoxItem">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="8,2" />
+        </Style>
+        <Style Selector="SelectableTextBlock">
+            <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="TextBlock.infolevel">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="TextBlock.warnlevel">
+            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+        </Style>
+        <Style Selector="TextBlock.errorlevel">
+            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="10">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <StackPanel Spacing="3">
+                <TextBlock Text="游戏日志" Classes="h2" />
+                <TextBlock Text="{Binding Explanation}"
+                           Classes="muted"
+                           FontSize="12"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+                <Button Content="更多 ▾">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuItem Header="用默认程序打开当前日志"
+                                      Command="{Binding OpenCurrentExternallyCommand}" />
+                            <MenuItem Header="打开所在文件夹"
+                                      Command="{Binding OpenCurrentFolderCommand}" />
+                            <Separator />
+                            <MenuItem Header="选择其他日志文件…"
+                                      Command="{Binding SelectLogFileCommand}" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+                <Button Classes="Primary"
+                        Content="刷新"
+                        Command="{Binding RefreshCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="1" Classes="card" Padding="12">
+            <Grid RowDefinitions="Auto,Auto" RowSpacing="10">
+                <Grid ColumnDefinitions="Auto,280,Auto,140,*" ColumnSpacing="8">
+                    <TextBlock Text="日志文件"
+                               Classes="muted"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding Sources}"
+                              SelectedItem="{Binding SelectedSource}"
+                              PlaceholderText="选择日志文件">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayName}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip.Tip="{Binding ToolTipText}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBlock Grid.Column="2"
+                               Text="级别"
+                               Classes="muted"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="3"
+                              ItemsSource="{Binding LevelOptions}"
+                              SelectedItem="{Binding SelectedLevel}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayName}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip.Tip="{Binding DisplayName}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </Grid>
+                <Grid Grid.Row="1" ColumnDefinitions="Auto,140,*" ColumnSpacing="8">
+                    <TextBlock Text="范围"
+                               Classes="muted"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               ToolTip.Tip="「日志来源」是日志行方括号里的来源字段（例如 BepInEx、Together），不等于已安装插件名。" />
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding ScopeOptions}"
+                              SelectedItem="{Binding SelectedScope}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DisplayName}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip.Tip="{Binding DisplayName}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <TextBox Grid.Column="2"
+                             Text="{Binding SearchText}"
+                             Watermark="{Binding SearchWatermark}" />
+                </Grid>
+            </Grid>
+        </Border>
+
+        <StackPanel Grid.Row="2" Spacing="3">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                <TextBlock Text="{Binding SourcePathText}"
+                           Classes="muted"
+                           FontSize="11"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding ReadAsOfText}"
+                           Classes="muted"
+                           FontSize="11"
+                           VerticalAlignment="Center"
+                           ToolTip.Tip="快照读取时间，不是日志发生时间。"
+                           IsVisible="{Binding ReadAsOfText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <TextBlock Grid.Column="2"
+                           Text="{Binding TruncatedText}"
+                           FontSize="11"
+                           Foreground="{DynamicResource WarningBrush}"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding TruncatedText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </Grid>
+            <TextBlock Text="{Binding StatusText}"
+                       Classes="muted"
+                       FontSize="11"
+                       TextWrapping="Wrap" />
+            <TextBlock Text="{Binding AttributionText}"
+                       Classes="muted"
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding AttributionText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <TextBlock Text="{Binding DecodeNote}"
+                       FontSize="11"
+                       Foreground="{DynamicResource WarningBrush}"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding DecodeNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
+
+        <Grid Grid.Row="3" ColumnDefinitions="45*,Auto,55*" ColumnSpacing="0">
+            <Border Classes="card" Padding="0" MinWidth="280">
+                <Grid RowDefinitions="Auto,Auto,*">
+                    <Grid ColumnDefinitions="*,Auto" Margin="12,8,12,4">
+                        <TextBlock Text="日志条目"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding FilterSummary}"
+                                   Classes="muted"
+                                   FontSize="11"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+
+                    <!-- Sticky header: same columns, spacing and padding as the
+                         rows; its right margin follows the list scrollbar so
+                         the columns stay aligned (see code-behind). -->
+                    <Border x:Name="ListHeader"
+                            Grid.Row="1"
+                            Background="{DynamicResource SurfaceBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="8,4">
+                        <Grid ColumnDefinitions="Auto,110,*"
+                              ColumnSpacing="8">
+                            <TextBlock Text="级别"
+                                       Classes="muted"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       MinWidth="56" />
+                            <TextBlock Grid.Column="1"
+                                       Text="日志来源"
+                                       Classes="muted"
+                                       FontSize="11"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="2"
+                                       Text="日志内容"
+                                       Classes="muted"
+                                       FontSize="11"
+                                       FontWeight="SemiBold" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="2">
+                        <ListBox x:Name="EntriesList"
+                                 ItemsSource="{Binding Entries}"
+                                 SelectedItem="{Binding SelectedEntry}"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="Auto,110,*" ColumnSpacing="8">
+                                        <TextBlock Text="{Binding LevelText}"
+                                                   MinWidth="56"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                   Classes.infolevel="{Binding IsInfoLevel}"
+                                                   Classes.warnlevel="{Binding IsWarningLevel}"
+                                                   Classes.errorlevel="{Binding IsErrorLevel}"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Source}"
+                                                   FontSize="11"
+                                                   Classes="muted"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding FirstLine}"
+                                                   FontFamily="Consolas, Menlo, monospace"
+                                                   FontSize="11"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <TextBlock Text="{Binding EmptyMessage}"
+                                   Classes="muted"
+                                   Margin="16,12"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Top"
+                                   IsVisible="{Binding EmptyMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1"
+                          Width="6"
+                          Background="Transparent"
+                          ResizeDirection="Columns" />
+
+            <Border Grid.Column="2" Classes="card" Padding="12" MinWidth="280">
+                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="详情"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <CheckBox Content="自动换行"
+                                      FontSize="11"
+                                      IsChecked="{Binding WrapDetail}"
+                                      VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Content="复制此条日志"
+                                ToolTip.Tip="复制右侧选中的那一条完整日志（含堆栈）"
+                                IsEnabled="{Binding HasSelection}"
+                                Command="{Binding CopyEntryCommand}" />
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1"
+                                  HorizontalScrollBarVisibility="{Binding DetailHorizontalScroll}"
+                                  VerticalScrollBarVisibility="Auto"
+                                  IsVisible="{Binding HasSelection}">
+                        <SelectableTextBlock Text="{Binding DetailText}"
+                                             TextWrapping="{Binding DetailWrapping}"
+                                             FontFamily="Consolas, Menlo, monospace"
+                                             FontSize="12" />
+                    </ScrollViewer>
+
+                    <TextBlock Grid.Row="1"
+                               Text="{Binding DetailPlaceholder}"
+                               Classes="muted"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Top"
+                               IsVisible="{Binding !HasSelection}" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="4" ColumnDefinitions="Auto,*" ColumnSpacing="10">
+            <Button Content="{Binding CopyFilteredText}"
+                    ToolTip.Tip="复制左侧当前显示的全部条目，包括未滚动到的行"
+                    Command="{Binding CopyFilteredCommand}" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding CopyHint}"
+                       Classes="muted"
+                       FontSize="11"
+                       VerticalAlignment="Center"
+                       TextWrapping="Wrap" />
+        </Grid>
+    </Grid>
+</UserControl>

@@ -159,6 +159,8 @@ public interface IFilePickerService
 
     Task<string?> PickThemeFileAsync();
 
+    Task<string?> PickLogFileAsync();
+
     Task<string?> PickDataFolderAsync();
 
     Task<string?> PickBackupFolderAsync();
@@ -266,6 +268,24 @@ public sealed class FilePickerService : IFilePickerService
             [
                 new FilePickerFileType("主题 JSON") { Patterns = ["*.json"] },
                 new FilePickerFileType("所有文件") { Patterns = ["*"] }
+            ]
+        });
+
+        return files.Count == 0 ? null : files[0].Path.LocalPath;
+    }
+
+    public async Task<string?> PickLogFileAsync()
+    {
+        var owner = _ownerProvider();
+        if (owner is null) return null;
+
+        var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "打开日志文件",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("日志文件") { Patterns = ["*.log", "*.txt"] }
             ]
         });
 

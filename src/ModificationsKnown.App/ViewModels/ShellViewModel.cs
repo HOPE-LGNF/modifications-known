@@ -12,6 +12,7 @@ using ModificationsKnown.Core.Mods;
 using ModificationsKnown.Core.Network;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Infrastructure.Diagnostics.Logs;
 using ModificationsKnown.Infrastructure.Storage;
 using ModificationsKnown.Infrastructure.Windows;
 
@@ -26,6 +27,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private readonly SaveIsolationService _saveIsolation;
     private readonly ActivityLogService _activity;
     private readonly GameProcessMonitor _processMonitor;
+    private readonly GameLogSourceProvider _logSourceProvider;
     private readonly Dictionary<string, object> _pages;
     private bool _initialized;
 
@@ -109,6 +111,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         IGameLauncher launcher,
         IUserDialogService dialogs,
         IFilePickerService filePicker,
+        IClipboardService clipboard,
         ThumbnailService thumbnails)
     {
         Settings = settings;
@@ -142,6 +145,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             new("discover", "模组发现", "从 Nexus Mods 浏览与安装", "⌕"),
             new("installed", "已安装模组", "启用、停用与清理本地模组", "▣"),
             new("saves", "存档管理", "各版本的存档与备份", "▤"),
+            new("logs", "日志", "BepInEx 与 Unity 日志", "☰"),
             new("appearance", "启动器外观", "主题变量与基础皮肤", "◈"),
             new("settings", "设置", "游戏、版本与 Nexus", "⚙")
         ];
@@ -160,12 +164,20 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             sources,
             _saveIsolation,
             logger);
+        _logSourceProvider = new GameLogSourceProvider(Game);
         _pages = new Dictionary<string, object>
         {
             ["home"] = new HomeViewModel(this, locator, modManager, launcher, settings, nexus, _activity, _saveIsolation, _processMonitor, nxmRegistrar, dialogs),
             ["discover"] = new DiscoverViewModel(this, nexus, settings, downloader, operations, thumbnails, sources, nxmRegistrar, dialogs, updates, logger),
             ["installed"] = new InstalledViewModel(this, operations, dialogs, settings, nexusMatch, sources, filePicker, manualMatches, modGroups, nexus, thumbnails, _processMonitor, downloader, updates, nxmRegistrar, logger),
             ["saves"] = new SavesViewModel(this, _saveIsolation, dialogs, filePicker, logger, _processMonitor),
+            ["logs"] = new LogViewerViewModel(
+                this,
+                _logSourceProvider,
+                filePicker,
+                clipboard,
+                new ShellExternalLauncher(),
+                new LocalLogReader()),
             ["appearance"] = new LauncherSkinViewModel(this, settings, filePicker, logger),
             ["gameskin"] = new GameSkinViewModel(),
             ["settings"] = new SettingsViewModel(this, settings, locator, nexus, filePicker, logger, nxmRegistrar, dialogs, instanceStore, deletion, _processMonitor)
@@ -192,7 +204,12 @@ public partial class ShellViewModel : ObservableObject, IAppShell
 
     public GameProcessMonitor ProcessMonitor => _processMonitor;
 
-    public void Shutdown() => _processMonitor.Dispose();
+    public void Shutdown()
+    {
+        if (_pages.GetValueOrDefault("logs") is LogViewerViewModel logs) logs.Dispose();
+        _logSourceProvider.Dispose();
+        _processMonitor.Dispose();
+    }
 
     public IReadOnlyList<NavigationItem> NavigationItems { get; }
 
