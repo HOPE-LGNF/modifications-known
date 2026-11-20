@@ -106,7 +106,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
     public string GroupHint => IsModified
         ? "有未保存的组修改"
-        : "启用/禁用立即生效；保存只更新组快照";
+        : "切换组会立即应用该组的启用快照";
 
     partial void OnIsModifiedChanged(bool value)
     {
@@ -687,13 +687,18 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
     public async Task<bool> TrySelectGroupAsync(ModGroup group)
     {
         if (SelectedGroup?.Id == group.Id) return true;
+        if (IsBusy) return false;
+
+        var installation = _shell.Game.Selected;
+        if (installation is null) return false;
+        if (!EnsureGameNotRunning(installation, "切换 Mod 组")) return false;
 
         if (IsModified)
         {
             var confirmed = await _dialogs.ConfirmAsync(
                 "切换 Mod 组",
                 $"「{SelectedGroup?.Name ?? "当前组"}」有尚未保存到组快照的启用状态修改。\n\n" +
-                "切换会丢弃这些修改。磁盘上的启用状态保持不变，但不会写回任何组快照。要继续吗？",
+                "切换会丢弃这些修改，并立即应用目标组的启用快照。要继续吗？",
                 "丢弃并切换",
                 "取消");
             if (!confirmed) return false;
@@ -701,10 +706,31 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
 
         SelectedGroup = Groups.FirstOrDefault(candidate => candidate.Id == group.Id) ?? group;
         IsModified = false;
+
+        var failures = await ApplyGroupStateAsync(installation, SelectedGroup);
         _shell.SetStatus(
-            $"已切换到 Mod 组「{SelectedGroup.Name}」；点“应用该组”才会改写启用状态。",
-            StatusKind.Info);
+            failures.Count == 0
+                ? $"已切换到 Mod 组「{SelectedGroup.Name}」并应用其启用快照。"
+                : $"已切换到 Mod 组「{SelectedGroup.Name}」，但部分包失败：{string.Join("；", failures)}",
+            failures.Count == 0 ? StatusKind.Success : StatusKind.Warning);
         return true;
+    }
+
+    private async Task<List<string>> ApplyGroupStateAsync(GameInstallation installation, ModGroup group)
+    {
+        var enabledIds = group.EnabledPackageIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var failures = new List<string>();
+        foreach (var item in _allItems.ToList())
+        {
+            var desired = enabledIds.Contains(item.Mod.PackageId);
+            if (item.Mod.IsEnabled == desired) continue;
+            var result = await _operations.SetEnabledAsync(installation, item.Mod, desired);
+            if (!result.Success) failures.Add($"{item.Name}: {result.Message}");
+        }
+
+        if (failures.Count == 0) IsModified = false;
+        await RefreshCoreAsync();
+        return failures;
     }
 
     [RelayCommand]
@@ -806,47 +832,6 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         IsModified = false;
         _shell.SetStatus($"已把当前启用集合保存到「{group.Name}」。", StatusKind.Success);
         await Task.CompletedTask;
-    }
-
-    [RelayCommand]
-    private async Task ApplyGroupAsync()
-    {
-        if (IsBusy || SelectedGroup is not { } group) return;
-        var installation = _shell.Game.Selected;
-        if (installation is null || !EnsureGameNotRunning(installation, "应用 Mod 组")) return;
-
-        var confirmed = await _dialogs.ConfirmAsync(
-            "应用 Mod 组",
-            $"将把启用状态切换为「{group.Name}」的快照。\n\n组内启用 {group.EnabledPackageIds.Count} 个包，其余包会被禁用。",
-            "应用",
-            "取消");
-        if (!confirmed) return;
-
-        IsBusy = true;
-        try
-        {
-            var enabledIds = group.EnabledPackageIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var failures = new List<string>();
-            foreach (var item in _allItems.ToList())
-            {
-                var desired = enabledIds.Contains(item.Mod.PackageId);
-                if (item.Mod.IsEnabled == desired) continue;
-                var result = await _operations.SetEnabledAsync(installation, item.Mod, desired);
-                if (!result.Success) failures.Add($"{item.Name}: {result.Message}");
-            }
-
-            _shell.SetStatus(
-                failures.Count == 0
-                    ? $"已应用 Mod 组「{group.Name}」。"
-                    : $"Mod 组应用部分失败：{string.Join("；", failures)}",
-                failures.Count == 0 ? StatusKind.Success : StatusKind.Warning);
-            await RefreshCoreAsync();
-            if (failures.Count == 0) IsModified = false;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
     }
 
     [RelayCommand]

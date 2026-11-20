@@ -83,11 +83,6 @@
                                     IsEnabled="{Binding HasSelectedGroup}"
                                     Classes.modified="{Binding IsModified}"
                                     ToolTip.Tip="把当前启用状态写回选中的 Mod 组快照" />
-                            <Button Classes="Ghost"
-                                    Content="应用该组"
-                                    Command="{Binding ApplyGroupCommand}"
-                                    IsEnabled="{Binding HasSelectedGroup}"
-                                    ToolTip.Tip="把选中组的启用快照应用到当前版本；组外的包会被禁用" />
                         </StackPanel>
                         <Button Grid.Column="3"
                                 Classes="Ghost"
