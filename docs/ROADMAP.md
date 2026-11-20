@@ -54,7 +54,7 @@
 - [ ] Differential updates
 - [ ] Automatic rollback when replacement fails
 - [ ] Portable mode
-- [ ] UI automation tests (Avalonia.Headless)
+- [x] UI automation tests (Avalonia.Headless)
 
 ## Later
 
