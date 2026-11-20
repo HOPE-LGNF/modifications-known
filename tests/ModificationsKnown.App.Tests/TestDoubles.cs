@@ -89,6 +89,8 @@ internal sealed class FakeFilePickerService : IFilePickerService
 
     public Task<string?> PickThemeFileAsync() => Task.FromResult<string?>(null);
 
+    public Task<string?> PickLogFileAsync() => Task.FromResult<string?>(null);
+
     public Task<string?> PickDataFolderAsync() => Task.FromResult<string?>(null);
 
     public Task<string?> PickBackupFolderAsync() => Task.FromResult<string?>(null);
