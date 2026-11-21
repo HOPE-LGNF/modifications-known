@@ -217,11 +217,15 @@
                                     <DataTemplate>
                                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="0,0,0,9">
                                             <Border Width="24" Height="24" CornerRadius="7"
-                                                    Background="{DynamicResource AccentSoftBrush}"
+                                                    Classes="activity-icon"
+                                                    Classes.warning="{Binding IsWarning}"
+                                                    Classes.error="{Binding IsError}"
                                                     VerticalAlignment="Top">
                                                 <TextBlock Text="{Binding Glyph}"
+                                                           Classes="activity-glyph"
+                                                           Classes.warning="{Binding IsWarning}"
+                                                           Classes.error="{Binding IsError}"
                                                            FontSize="11"
-                                                           Foreground="{DynamicResource AccentBrush}"
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center" />
                                             </Border>

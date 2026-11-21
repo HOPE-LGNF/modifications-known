@@ -156,6 +156,30 @@
             <Setter Property="BoxShadow" Value="{DynamicResource CardShadow}" />
         </Style>
 
+        <Style Selector="Border.activity-icon">
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+        </Style>
+
+        <Style Selector="Border.activity-icon.warning">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+        </Style>
+
+        <Style Selector="Border.activity-icon.error">
+            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+        </Style>
+
+        <Style Selector="TextBlock.activity-glyph">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        </Style>
+
+        <Style Selector="TextBlock.activity-glyph.warning">
+            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+        </Style>
+
+        <Style Selector="TextBlock.activity-glyph.error">
+            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+        </Style>
+
         <Style Selector="Border.installed-row">
             <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />

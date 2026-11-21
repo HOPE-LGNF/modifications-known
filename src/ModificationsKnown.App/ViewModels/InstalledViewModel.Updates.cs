@@ -49,9 +49,12 @@ public partial class InstalledViewModel
         UpdateSummary = HasUpdates ? "仍有可更新项，可重新检查。" : string.Empty;
     }
 
+    private bool _openNexusWithNxm = true;
+
     private async Task EnsureNxmReadyAsync()
     {
-        if (_nxmRegistrar.GetStatus().RegisteredForCurrentExecutable) return;
+        _openNexusWithNxm = _nxmRegistrar.GetStatus().RegisteredForCurrentExecutable;
+        if (_openNexusWithNxm) return;
 
         var premium = false;
         try
@@ -67,9 +70,14 @@ public partial class InstalledViewModel
         if (premium) return;
 
         var go = await _dialogs.PromptNxmAsync();
-        if (!go) return;
+        if (!go)
+        {
+            _openNexusWithNxm = false;
+            return;
+        }
 
         await NxmRegistrationFlow.RegisterAsync(_dialogs, _nxmRegistrar, _shell);
+        _openNexusWithNxm = _nxmRegistrar.GetStatus().RegisteredForCurrentExecutable;
     }
 
     [RelayCommand]
@@ -207,7 +215,9 @@ public partial class InstalledViewModel
             if (link is null)
             {
                 _shell.SetStatus(
-                    $"Nexus 没有为「{item.Name}」返回直链；免费账号请到模组发现用 NXM 或浏览器下载。",
+                    _openNexusWithNxm
+                        ? $"Nexus 没有为「{item.Name}」返回直链；已打开 Nexus 文件页，可使用 NXM 接管。"
+                        : $"Nexus 没有为「{item.Name}」返回直链；已打开普通 Nexus 文件页，请手动 Slow download。",
                     StatusKind.Warning);
                 await OpenNexusFilePageAsync(match, domain, latest);
                 return false;
@@ -315,8 +325,10 @@ public partial class InstalledViewModel
         else
             _logger.Warn("[Update] no legacy file id; opening file page without file_id");
 
-        url += "&nmm=1";
-        _logger.Info($"[Update] opening {url}");
+        if (_openNexusWithNxm)
+            url += "&nmm=1";
+
+        _logger.Info($"[Update] nxm={_openNexusWithNxm} opening {url}");
 
         try
         {

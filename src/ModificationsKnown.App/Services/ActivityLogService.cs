@@ -22,6 +22,9 @@ public sealed record ActivityEntry(
         }
     }
 
+    public bool IsWarning => string.Equals(Kind, "warning", StringComparison.OrdinalIgnoreCase);
+    public bool IsError => string.Equals(Kind, "error", StringComparison.OrdinalIgnoreCase);
+
     public string Glyph => Kind switch
     {
         "launch" => "▶",
@@ -30,6 +33,7 @@ public sealed record ActivityEntry(
         "settings" => "⚙",
         "warning" => "!",
         "error" => "×",
+        "info" => "•",
         _ => "✓"
     };
 }

@@ -299,7 +299,16 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             _logger.Info(message);
 
         if (recordActivity)
-            _activity.Add(kind == StatusKind.Error ? "error" : "success", message);
+        {
+            var activityKind = kind switch
+            {
+                StatusKind.Error => "error",
+                StatusKind.Warning => "warning",
+                StatusKind.Success => "success",
+                _ => "info"
+            };
+            _activity.Add(activityKind, message);
+        }
 
         if (showToast) ShowToast(message, kind);
     }

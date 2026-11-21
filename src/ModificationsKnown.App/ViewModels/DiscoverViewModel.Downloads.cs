@@ -21,7 +21,8 @@ public partial class DiscoverViewModel
 {
     private async Task EnsureNxmReadyAsync()
     {
-        if (NxmRegistered || NxmNotRegistered == false) return;
+        _openNexusWithNxm = NxmRegistered;
+        if (NxmRegistered) return;
 
         var premium = false;
         try
@@ -37,10 +38,17 @@ public partial class DiscoverViewModel
         if (premium) return;
 
         var go = await _dialogs.PromptNxmAsync();
-        if (!go) return;
+        if (!go)
+        {
+            // The user declined NXM: the fallback page must not be opened with
+            // nmm=1, otherwise Nexus immediately starts the NXM flow anyway.
+            _openNexusWithNxm = false;
+            return;
+        }
 
         await NxmRegistrationFlow.RegisterAsync(_dialogs, _nxmRegistrar, _shell);
         RefreshNxmStatus();
+        _openNexusWithNxm = NxmRegistered;
     }
 
     private async Task<(bool Proceed, InstalledMod? Target, bool Backup)> PrepareUpdateAsync(
@@ -117,8 +125,8 @@ public partial class DiscoverViewModel
 
         await EnsureNxmReadyAsync();
 
-        // Get the current NXM status for log.
-        var nxmReady = NxmRegistered;
+        // Get the current NXM status for log/fallback page.
+        var nxmReady = NxmRegistered && _openNexusWithNxm;
 
         // Pin the operation inputs. The user may change the selection while a
         // long download is running; the installation must still belong to the
@@ -236,7 +244,7 @@ public partial class DiscoverViewModel
                     file?.Id);
                 DownloadStatus = nxmReady
                     ? "普通 API Key 无法获取直链。已打开 Nexus 文件页，请点击页面上的 “Slow download”，并允许浏览器打开 MK，MK 会接管 NXM 下载。"
-                    : "普通 API Key 无法获取直链，且 NXM 尚未注册，MK 无法自动接管下载。已打开 Nexus 文件页，请点击页面上的 “Slow download” 下载模组包后手动添加；到 设置 → 浏览器集成（NXM）注册后即可自动接管。";
+                    : "普通 API Key 无法获取直链。已打开普通 Nexus 文件页，请用 Slow download 手动下载后添加；未使用 NXM。";
                 ShowFreeDownloadWhy = true;
                 await OpenNexusFilePageAsync(card, version, file);
                 _shell.SetStatus(DownloadStatus, StatusKind.Warning);
@@ -287,10 +295,10 @@ public partial class DiscoverViewModel
         // NXM registration is not required just to *view* the file page. Keep
         // the page openable with the file/nmm parameters even if the protocol
         // is not registered yet; downloading still needs NXM or a manual click.
-        if (!NxmRegistered)
+        if (!NxmRegistered || !_openNexusWithNxm)
         {
             _shell.SetStatus(
-                "还未注册 NXM 链接；已打开文件页，可手动完成 Slow download，或先到设置注册 NXM。",
+                "已打开普通 Nexus 文件页（未使用 NXM）；可手动完成 Slow download。",
                 StatusKind.Warning);
         }
 
@@ -331,8 +339,10 @@ public partial class DiscoverViewModel
         else
             _shell.SetStatus("未能解析这个文件的网站 file_id，已打开文件页；请手动选择文件。", StatusKind.Warning);
 
-        url += "&nmm=1";
-        _logger.Info($"[NexusPage] opening {url}");
+        if (NxmRegistered && _openNexusWithNxm)
+            url += "&nmm=1";
+
+        _logger.Info($"[NexusPage] nxm={NxmRegistered && _openNexusWithNxm} opening {url}");
 
         try
         {

@@ -207,6 +207,7 @@ public partial class DiscoverViewModel : ObservableObject, IAsyncPage
 
     private string? _nxmFallbackUrl;
     private PendingFreeDownload? _pendingFreeDownload;
+    private bool _openNexusWithNxm = true;
     private readonly List<ModCardViewModel> _allCards = [];
 
     public const string AllCategories = "全部分类";
