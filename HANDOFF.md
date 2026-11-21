@@ -5,7 +5,7 @@
 > 仓库：<https://github.com/HOPE-LGNF/modifications-known>  
 > Beta Release：<https://github.com/HOPE-LGNF/modifications-known/releases/tag/v0.7.0-beta>  
 > 构建：.NET 8 / Avalonia 11.3 / Windows x64 单文件  
-> 测试：63 passed / 0 failed  
+> 测试：78 core + 5 headless UI passed / 0 failed  
 > 许可证：Apache-2.0
 
 ---
@@ -15,7 +15,7 @@
 ### 已完成并验证
 
 - `dotnet build` 0 warning / 0 error。
-- `dotnet test`：63 passed。
+- `dotnet test`：78 core + 5 headless UI passed。
 - GitHub `main` 已推送，Beta Release 已发布：
   - tag：`v0.7.0-beta`
   - 资产：`ModificationsKnown-v0.7.0-beta-win-x64.exe`
