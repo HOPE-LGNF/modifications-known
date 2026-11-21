@@ -29,6 +29,12 @@ internal sealed class FakeAppShell : IAppShell
         LastStatusKind = kind;
     }
 
+    public void ReportProgress(string message)
+    {
+        LastStatus = message;
+        LastStatusKind = StatusKind.Info;
+    }
+
     public Task RefreshGameAsync() => Task.CompletedTask;
 
     public bool CanLaunch => false;
