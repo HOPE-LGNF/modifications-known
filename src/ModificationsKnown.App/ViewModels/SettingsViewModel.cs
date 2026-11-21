@@ -9,6 +9,7 @@ using ModificationsKnown.Core.Diagnostics;
 using ModificationsKnown.Core.Games;
 using ModificationsKnown.Core.Nexus;
 using ModificationsKnown.Core.Settings;
+using ModificationsKnown.Core.Updates;
 using ModificationsKnown.Infrastructure.Installation;
 using ModificationsKnown.Infrastructure.Windows;
 
@@ -30,6 +31,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private readonly DataLocationService _dataLocation = new();
     private readonly BepInExInstaller _bepInExInstaller;
     private readonly AppUpdateService _appUpdates = new();
+    private readonly AppUpdateCoordinator _updateCoordinator;
     private bool _loadingSettings;
 
     [ObservableProperty]
@@ -54,6 +56,19 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private bool _preventMultipleInstances = true;
 
     [ObservableProperty]
+    private AppUpdateChannel _updateChannel = AppUpdateChannel.Stable;
+
+    /// <summary>Two-way bridge for the ComboBox: 0 = stable, 1 = preview.</summary>
+    public int UpdateChannelIndex
+    {
+        get => UpdateChannel == AppUpdateChannel.Preview ? 1 : 0;
+        set => UpdateChannel = value == 1 ? AppUpdateChannel.Preview : AppUpdateChannel.Stable;
+    }
+
+    partial void OnUpdateChannelChanged(AppUpdateChannel value) =>
+        OnPropertyChanged(nameof(UpdateChannelIndex));
+
+    [ObservableProperty]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -68,11 +83,9 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     [ObservableProperty]
     private string _appUpdateStatus = "检查 GitHub Release 是否有新版本。";
 
-    private string? _pendingUpdateAssetUrl;
-    private string? _pendingUpdateSha256;
     private string _pendingReleaseUrl = string.Empty;
 
-    public string CurrentAppVersion => $"v{_appUpdates.CurrentVersion}";
+    public string CurrentAppVersion => FormatVersion(_appUpdates.CurrentVersion);
 
     public string RequestedFocus { get; private set; } = string.Empty;
 
@@ -117,7 +130,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         nameof(PageSize),
         nameof(IncludeAdultMods),
         nameof(ConfirmBeforeDelete),
-        nameof(PreventMultipleInstances)
+        nameof(PreventMultipleInstances),
+        nameof(UpdateChannel)
     ];
 
     public bool HasUnsavedChanges
@@ -131,7 +145,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
                    || Math.Clamp(PageSize, 1, 100) != saved.PageSize
                    || IncludeAdultMods != saved.IncludeAdultMods
                    || ConfirmBeforeDelete != saved.ConfirmBeforeDelete
-                   || PreventMultipleInstances != saved.PreventMultipleInstances;
+                   || PreventMultipleInstances != saved.PreventMultipleInstances
+                   || UpdateChannel != saved.UpdateChannel;
         }
     }
 
@@ -179,6 +194,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         _deletion = deletion;
         _processMonitor = processMonitor;
         _bepInExInstaller = new BepInExInstaller(logger);
+        _updateCoordinator = _appUpdates.CreateCoordinator();
         _processMonitor.Changed += (_, _) => Dispatcher.UIThread.Post(UpdateRunningStates);
         _shell.Game.Changed += OnGameChanged;
         DataRoot = _dataLocation.CurrentRoot;
@@ -550,6 +566,7 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     private async Task SaveAsync()
     {
         IsBusy = true;
+        var previousChannel = _settings.Current.UpdateChannel;
         try
         {
             _settings.Current.GamePath = NormalizeGamePath(GamePath);
@@ -559,13 +576,25 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
             _settings.Current.IncludeAdultMods = IncludeAdultMods;
             _settings.Current.ConfirmBeforeDelete = ConfirmBeforeDelete;
             _settings.Current.PreventMultipleInstances = PreventMultipleInstances;
+            _settings.Current.UpdateChannel = UpdateChannel;
             await _settings.SaveAsync();
+
+            if (_updateCoordinator.SetSavedChannel(UpdateChannel))
+            {
+                AppUpdateAvailable = false;
+                _pendingReleaseUrl = string.Empty;
+                AppUpdateStatus = "更新通道已保存，请重新检查更新。";
+            }
+
             OnPropertyChanged(nameof(HasUnsavedChanges));
             _shell.SetStatus("设置已保存。", StatusKind.Success);
             await _shell.RefreshGameAsync();
         }
         catch (Exception exception)
         {
+            // The channel is the one setting with a state machine behind it: keep
+            // the on-disk value authoritative and leave the user's choice pending.
+            _settings.Current.UpdateChannel = previousChannel;
             _shell.SetStatus($"保存设置失败：{exception.Message}", StatusKind.Error);
         }
         finally
@@ -690,12 +719,17 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         AppUpdateStatus = "正在检查更新…";
         try
         {
-            var check = await _appUpdates.CheckAsync();
-            _pendingUpdateAssetUrl = check.AssetUrl;
-            _pendingUpdateSha256 = check.AssetSha256;
-            _pendingReleaseUrl = check.ReleaseUrl;
-            AppUpdateAvailable = check.HasUpdate;
-            AppUpdateStatus = check.Message;
+            var result = await _updateCoordinator.CheckAsync();
+
+            if (result.State == UpdateCheckState.Busy)
+            {
+                AppUpdateStatus = result.Error ?? "正在安装更新，完成后再检查。";
+                return;
+            }
+
+            AppUpdateAvailable = result.Outcome == UpdateOutcome.UpdateAvailable;
+            _pendingReleaseUrl = result.Candidate?.ReleaseUrl ?? string.Empty;
+            AppUpdateStatus = DescribeUpdateResult(result);
         }
         finally
         {
@@ -708,15 +742,17 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
     {
         if (!AppUpdateAvailable) return;
 
-        if (string.IsNullOrWhiteSpace(_pendingUpdateAssetUrl))
+        var candidate = _updateCoordinator.Candidate;
+        if (candidate is null)
         {
-            OpenReleasePage();
+            AppUpdateStatus = "更新候选已失效，请重新检查更新。";
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_pendingUpdateSha256))
+        if (string.IsNullOrWhiteSpace(candidate.AssetUrl) || string.IsNullOrWhiteSpace(candidate.AssetSha256))
         {
-            AppUpdateStatus = "Release 未提供 SHA-256 校验值，已打开 Release 页，请手动下载并核对。";
+            AppUpdateStatus = candidate.InstallNote
+                              ?? "这个 Release 没有可自动安装的安装包，已打开 Release 页，请手动下载。";
             OpenReleasePage();
             return;
         }
@@ -728,28 +764,36 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
             "取消");
         if (!confirmed) return;
 
-        var target = Environment.ProcessPath;
-        if (string.IsNullOrWhiteSpace(target) || !File.Exists(target))
+        // Re-validate after the dialog: the saved channel may have changed while
+        // it was open, which invalidates this candidate.
+        if (!_updateCoordinator.TryBeginInstall(candidate.Generation))
         {
-            AppUpdateStatus = "无法定位当前启动器路径，请手动下载更新。";
-            OpenReleasePage();
-            return;
-        }
-
-        var downloadDirectory = Path.Combine(Path.GetTempPath(), "ModificationsKnown-update");
-        Directory.CreateDirectory(downloadDirectory);
-        var downloaded = Path.Combine(downloadDirectory, $"ModificationsKnown-{DateTime.Now:HHmmss}.exe");
-
-        AppUpdateStatus = "正在下载更新…";
-        if (!await _appUpdates.DownloadAsync(_pendingUpdateAssetUrl, downloaded, _pendingUpdateSha256))
-        {
-            AppUpdateStatus = "下载校验失败（SHA-256 不匹配或网络失败），已打开 Release 页。";
-            OpenReleasePage();
+            AppUpdateStatus = "更新候选已失效，请重新检查更新。";
             return;
         }
 
         try
         {
+            var target = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(target) || !File.Exists(target))
+            {
+                AppUpdateStatus = "无法定位当前启动器路径，请手动下载更新。";
+                OpenReleasePage();
+                return;
+            }
+
+            var downloadDirectory = Path.Combine(Path.GetTempPath(), "ModificationsKnown-update");
+            Directory.CreateDirectory(downloadDirectory);
+            var downloaded = Path.Combine(downloadDirectory, $"ModificationsKnown-{DateTime.Now:HHmmss}.exe");
+
+            AppUpdateStatus = "正在下载更新…";
+            if (!await _appUpdates.DownloadAsync(candidate.AssetUrl, downloaded, candidate.AssetSha256))
+            {
+                AppUpdateStatus = "下载校验失败（SHA-256 不匹配或网络失败），已打开 Release 页。";
+                OpenReleasePage();
+                return;
+            }
+
             var escapedTarget = target.Replace("'", "''");
             var escapedSource = downloaded.Replace("'", "''");
             var scriptPath = Path.Combine(downloadDirectory, $"apply-{Guid.NewGuid():N}.ps1");
@@ -796,6 +840,48 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
         {
             AppUpdateStatus = $"启动更新脚本失败：{exception.Message}";
         }
+        finally
+        {
+            // A failed download keeps the candidate so the user can retry.
+            _updateCoordinator.EndInstall(keepCandidate: true);
+        }
+    }
+
+    private static string DescribeUpdateResult(UpdateCheckResult result)
+    {
+        var label = result.Channel == AppUpdateChannel.Preview ? "预览通道" : "稳定通道";
+        var current = FormatVersion(result.CurrentVersion);
+
+        if (result.Outcome == UpdateOutcome.UpdateAvailable && result.Candidate is { } candidate)
+        {
+            var note = string.IsNullOrWhiteSpace(candidate.InstallNote) ? string.Empty : " " + candidate.InstallNote;
+            return $"{label}发现新版本 v{candidate.Version}（当前 {current}）。{note}".Trim();
+        }
+
+        return result.Outcome switch
+        {
+            UpdateOutcome.NoEligibleRelease => $"{label}没有可用的发行版本。",
+            UpdateOutcome.UpToDate => $"{label}已是最新版本（{current}）。",
+            _ => result.Error ?? "检查更新失败。"
+        };
+    }
+
+    /// <summary>Version for display: prerelease is kept, the git build metadata
+    /// is shortened to its first seven characters.</summary>
+    private static string FormatVersion(string version)
+    {
+        if (string.IsNullOrWhiteSpace(version)) return "v未知";
+
+        var text = version.Trim();
+        if (text.StartsWith('v') || text.StartsWith('V')) text = text[1..];
+
+        var plus = text.IndexOf('+');
+        if (plus <= 0) return $"v{text}";
+
+        var core = text[..plus];
+        var metadata = text[(plus + 1)..];
+        var shortMetadata = metadata.Length > 7 ? metadata[..7] : metadata;
+        return $"v{core} ({shortMetadata})";
     }
 
     private void OpenReleasePage()
@@ -862,6 +948,8 @@ public partial class SettingsViewModel : ObservableObject, IAsyncPage
             IncludeAdultMods = _settings.Current.IncludeAdultMods;
             ConfirmBeforeDelete = _settings.Current.ConfirmBeforeDelete;
             PreventMultipleInstances = _settings.Current.PreventMultipleInstances;
+            UpdateChannel = _settings.Current.UpdateChannel;
+            _updateCoordinator.SetSavedChannel(UpdateChannel);
         }
         finally
         {
