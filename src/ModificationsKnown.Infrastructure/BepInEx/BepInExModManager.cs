@@ -136,7 +136,7 @@ public sealed class BepInExModManager : IModManager
                 Plugins = [ReadPlugin(file)],
                 ManifestState = PackageManifestState.Unmanaged,
                 CanDeleteWhole = false,
-                CanAdopt = false
+                CanAdopt = true
             });
         }
 
@@ -332,6 +332,14 @@ public sealed class BepInExModManager : IModManager
         PackageSource? source,
         CancellationToken cancellationToken)
     {
+        if (string.Equals(
+                Path.GetFullPath(mod.DirectoryPath).TrimEnd(Path.DirectorySeparatorChar),
+                Path.GetFullPath(installation.PluginsDirectory).TrimEnd(Path.DirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return AdoptLooseDllCore(installation, mod, source, cancellationToken);
+        }
+
         if (!IsSafePackage(installation, mod, allowRoot: false, out var error))
             return OperationResult.Fail(error);
 
@@ -352,7 +360,7 @@ public sealed class BepInExModManager : IModManager
                 files.Add(new PackageFile(relative, new FileInfo(file).Length, HashFile(file)));
             }
 
-            if (!files.Any(file => file.RelativePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+            if (!files.Any(file => IsDllFile(file.RelativePath)))
                 return OperationResult.Fail("这个目录没有 DLL，不能接管为模组包。");
 
             var manifest = new PackageManifest
@@ -379,6 +387,110 @@ public sealed class BepInExModManager : IModManager
             _logger?.Warn($"Adopt failed for {mod.PackageId}: {exception.Message}");
             return OperationResult.Fail($"接管失败：{exception.Message}");
         }
+    }
+
+    private OperationResult AdoptLooseDllCore(
+        GameInstallation installation,
+        InstalledMod mod,
+        PackageSource? source,
+        CancellationToken cancellationToken)
+    {
+        if (mod.Plugins.Count != 1)
+            return OperationResult.Fail("这个裸 DLL 条目包含多个插件，无法安全判断包边界。");
+
+        var dllPath = mod.Plugins[0].FilePath;
+        if (!File.Exists(dllPath)
+            || !IsDllFile(dllPath)
+            || !PathSafety.IsWithinDirectory(dllPath, installation.PluginsDirectory))
+            return OperationResult.Fail("裸 DLL 路径无效或不在 plugins 根目录。");
+
+        var baseName = Path.GetFileNameWithoutExtension(dllPath);
+        if (baseName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            baseName = baseName[..^".dll".Length];
+        baseName = PathSafety.GetSafeFileName(baseName);
+        if (string.IsNullOrWhiteSpace(baseName))
+            baseName = "LooseMod";
+
+        var target = Path.Combine(installation.PluginsDirectory, baseName);
+        if (Directory.Exists(target) || File.Exists(target))
+            return OperationResult.Fail($"已存在同名目标「{baseName}」；未移动任何文件。");
+
+        var companions = Directory.EnumerateFiles(installation.PluginsDirectory, "*", SearchOption.TopDirectoryOnly)
+            .Where(path => !string.Equals(path, dllPath, StringComparison.OrdinalIgnoreCase))
+            .Where(path => IsCompanionOf(path, baseName))
+            .ToList();
+        var moved = new List<(string Source, string Destination)>();
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Directory.CreateDirectory(target);
+
+            void MoveOne(string source)
+            {
+                var destination = Path.Combine(target, Path.GetFileName(source));
+                if (File.Exists(destination))
+                    throw new IOException($"目标已存在：{Path.GetFileName(destination)}");
+                File.Move(source, destination);
+                moved.Add((source, destination));
+            }
+
+            MoveOne(dllPath);
+            foreach (var companion in companions)
+                MoveOne(companion);
+
+            var files = moved
+                .Select(pair => new PackageFile(
+                    Path.GetRelativePath(target, pair.Destination).Replace('\\', '/'),
+                    new FileInfo(pair.Destination).Length,
+                    HashFile(pair.Destination)))
+                .ToList();
+
+            var manifest = new PackageManifest
+            {
+                LocalId = Guid.NewGuid().ToString("N"),
+                PackageName = baseName,
+                InstalledAt = DateTimeOffset.UtcNow,
+                Source = source ?? PackageSource.Local,
+                Files = files
+            };
+            var manifestDirectory = Path.Combine(target, PackageManifest.DirectoryName);
+            Directory.CreateDirectory(manifestDirectory);
+            var manifestPath = Path.Combine(manifestDirectory, PackageManifest.FileName);
+            var temporaryPath = manifestPath + ".tmp";
+            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(manifest, ManifestJsonOptions));
+            File.Move(temporaryPath, manifestPath, overwrite: true);
+
+            _logger?.Info($"Adopted loose DLL into package: {baseName} ({files.Count} files)");
+            return OperationResult.Ok($"已把裸 DLL 及其 {companions.Count} 个同名附属文件移入「{baseName}」并接管。");
+        }
+        catch (Exception exception)
+        {
+            _logger?.Warn($"Loose DLL adopt failed for {baseName}: {exception.Message}");
+            foreach (var (original, destination) in moved.AsEnumerable().Reverse())
+            {
+                try { if (File.Exists(destination) && !File.Exists(original)) File.Move(destination, original); } catch { }
+            }
+            try { if (Directory.Exists(target)) Directory.Delete(target, recursive: true); } catch { }
+            return OperationResult.Fail($"接管裸 DLL 失败：{exception.Message}");
+        }
+    }
+
+    private static bool IsCompanionOf(string path, string baseName)
+    {
+        var name = Path.GetFileName(path);
+        var stem = Path.GetFileNameWithoutExtension(name);
+        if (stem.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            stem = stem[..^".dll".Length];
+        if (!string.Equals(stem, baseName, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var extension = Path.GetExtension(name);
+        return extension.Equals(".pdb", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".xml", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".json", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".config", StringComparison.OrdinalIgnoreCase)
+               || name.EndsWith(".dll.disabled", StringComparison.OrdinalIgnoreCase);
     }
 
     private OperationResult UninstallManagedCore(

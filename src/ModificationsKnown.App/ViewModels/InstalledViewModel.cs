@@ -351,13 +351,21 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         if (IsBusy) return;
         if (!mod.CanAdopt)
         {
-            _shell.SetStatus("这个包不能接管；只有未托管的普通目录可以生成基线清单。", StatusKind.Warning);
+            _shell.SetStatus("这个包不能接管；只有未托管的目录或 plugins 根目录的裸 DLL 可以生成基线清单。", StatusKind.Warning);
             return;
         }
 
+        var installation = _shell.Game.Selected;
+        var isLooseDll = installation is not null
+            && string.Equals(
+                Path.GetFullPath(mod.DirectoryPath).TrimEnd(Path.DirectorySeparatorChar),
+                Path.GetFullPath(installation.PluginsDirectory).TrimEnd(Path.DirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase);
         var confirmed = await _dialogs.ConfirmAsync(
             "接管为托管模组",
-            $"会把「{mod.Name}」当前目录中的所有文件写入托管清单。\n之后“卸载”会按清单删除未修改文件；用户新增/修改的文件仍会保留。\n\n{mod.DirectoryPath}",
+            isLooseDll
+                ? $"会为这个裸 DLL 新建同名文件夹，并只把「{mod.Name}」及其同名 PDB/XML/JSON/配置一起移入。\n\n不会把 plugins 根目录的其他裸 DLL 合并进来；每个裸 DLL 需要单独接管。\n\n{mod.Plugins.FirstOrDefault()?.FilePath}"
+                : $"会把「{mod.Name}」当前目录中的所有文件写入托管清单。\n之后“卸载”会按清单删除未修改文件；用户新增/修改的文件仍会保留。\n\n{mod.DirectoryPath}",
             "接管",
             "取消");
         if (!confirmed) return;
@@ -365,7 +373,7 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
         IsBusy = true;
         try
         {
-            var installation = _shell.Game.Selected
+            installation ??= _shell.Game.Selected
                 ?? throw new InvalidOperationException("尚未选择游戏安装。");
             var sidecar = _sources.Get(installation.GameDirectory, mod.PackageId);
             var source = sidecar is null

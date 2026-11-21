@@ -329,7 +329,7 @@ public sealed class ArchiveModInstaller : IModInstaller
     private static List<PackageCandidate> CollectPackagesFromArchiveRoot(string root, string archivePath)
     {
         var rootFiles = Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly).ToList();
-        var rootDlls = Directory.EnumerateFiles(root, "*.dll", SearchOption.TopDirectoryOnly).ToList();
+        var rootDlls = rootFiles.Where(IsDllFile).ToList();
         var directories = Directory.EnumerateDirectories(root).ToList();
 
         if (rootDlls.Count > 0)
@@ -374,7 +374,8 @@ public sealed class ArchiveModInstaller : IModInstaller
 
     private static string ResolvePackageName(string directory, string archivePath)
     {
-        var pluginName = Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories)
+        var pluginName = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
+            .Where(IsDllFile)
             .Select(ReadPackageName)
             .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));
 
@@ -389,7 +390,11 @@ public sealed class ArchiveModInstaller : IModInstaller
     }
 
     private static bool ContainsDll(string directory) =>
-        Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories).Any();
+        Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Any(IsDllFile);
+
+    private static bool IsDllFile(string path) =>
+        path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+        || path.EndsWith(".dll.disabled", StringComparison.OrdinalIgnoreCase);
 
     private static PackageManifest BuildManifest(
         string sourceDirectory,
@@ -416,7 +421,7 @@ public sealed class ArchiveModInstaller : IModInstaller
             files.Add(new PackageFile(normalized, info.Length, HashFile(file)));
         }
 
-        if (!files.Any(file => file.RelativePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)))
+        if (!files.Any(file => IsDllFile(file.RelativePath)))
             throw new InvalidDataException("安装包没有可加载的 DLL。");
 
         return new PackageManifest
@@ -490,7 +495,7 @@ public sealed class ArchiveModInstaller : IModInstaller
     private static List<AuxiliaryCandidate> CollectAuxiliaryCandidates(string pluginsRoot)
     {
         var result = new List<AuxiliaryCandidate>();
-        foreach (var file in Directory.EnumerateFiles(pluginsRoot, "*.dll", SearchOption.TopDirectoryOnly))
+        foreach (var file in Directory.EnumerateFiles(pluginsRoot, "*", SearchOption.TopDirectoryOnly).Where(IsDllFile))
         {
             result.Add(new AuxiliaryCandidate(
                 file,
@@ -503,7 +508,7 @@ public sealed class ArchiveModInstaller : IModInstaller
         var patchers = Path.Combine(bepInExRoot, "patchers");
         if (!Directory.Exists(patchers)) return result;
 
-        foreach (var file in Directory.EnumerateFiles(patchers, "*.dll", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(patchers, "*", SearchOption.AllDirectories).Where(IsDllFile))
         {
             var relative = Path.GetRelativePath(bepInExRoot, file).Replace('\\', '/');
             result.Add(new AuxiliaryCandidate(file, $"BepInEx/{relative}"));

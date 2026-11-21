@@ -212,4 +212,22 @@ public sealed class ArchiveModInstallerTests
             string.Equals(mod.DirectoryPath, Path.Combine(temp.Path, "BepInEx", "plugins"), StringComparison.OrdinalIgnoreCase));
     }
 
+
+    [Fact]
+    public async Task InstallsPackageContainingOnlyDisabledDll()
+    {
+        using var temp = new TempDirectory();
+        Directory.CreateDirectory(Path.Combine(temp.Path, "BepInEx", "plugins"));
+        var archive = CreateArchive(
+            temp,
+            "disabled.zip",
+            ("BepInEx/plugins/DisabledMod/DisabledMod.dll.disabled", "disabled"));
+
+        var installer = new ArchiveModInstaller();
+        var result = await installer.InstallArchiveAsync(CreateInstallation(temp.Path), archive);
+
+        Assert.True(result.AllSucceeded, result.Message);
+        Assert.True(File.Exists(Path.Combine(temp.Path, "BepInEx", "plugins", "DisabledMod", "DisabledMod.dll.disabled")));
+    }
+
 }
