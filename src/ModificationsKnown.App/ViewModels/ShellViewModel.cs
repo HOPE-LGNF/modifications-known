@@ -29,6 +29,7 @@ public partial class ShellViewModel : ObservableObject, IAppShell
     private readonly GameProcessMonitor _processMonitor;
     private readonly Dictionary<string, object> _pages;
     private bool _initialized;
+    private bool _isLoadingInstances;
 
     [ObservableProperty]
     private NavigationItem? _selectedNavigation;
@@ -183,6 +184,11 @@ public partial class ShellViewModel : ObservableObject, IAppShell
             OnPropertyChanged(nameof(IsSelectedInstanceRunning));
             OnPropertyChanged(nameof(LaunchButtonText));
             OnPropertyChanged(nameof(IsCloseAction));
+
+            // Persist user-initiated switches immediately. The initial list load
+            // skips this and saves once after LoadInstancesAsync has settled.
+            if (!_isLoadingInstances)
+                PersistSelectedInstance(Game.Selected);
         };
     }
 
@@ -367,9 +373,29 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         try
         {
             if (rediscover)
-                await Game.RefreshAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
+            {
+                _isLoadingInstances = true;
+                try
+                {
+                    await Game.RefreshAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
+                }
+                finally
+                {
+                    _isLoadingInstances = false;
+                }
+            }
             else
-                await Game.InitializeAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
+            {
+                _isLoadingInstances = true;
+                try
+                {
+                    await Game.InitializeAsync(_locator, Settings.Current.PreferredGamePath, Settings.Current.PreferredInstallationId);
+                }
+                finally
+                {
+                    _isLoadingInstances = false;
+                }
+            }
 
             if (Game.Selected is null)
             {
@@ -394,6 +420,35 @@ public partial class ShellViewModel : ObservableObject, IAppShell
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private void PersistSelectedInstance(GameInstallation? installation)
+    {
+        if (installation is null) return;
+
+        if (string.Equals(Settings.Current.PreferredGamePath, installation.GameDirectory,
+                StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Settings.Current.PreferredInstallationId, installation.Profile.Id,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Settings.Current.PreferredGamePath = installation.GameDirectory;
+        Settings.Current.PreferredInstallationId = installation.Profile.Id;
+        _ = SaveSelectedInstanceAsync();
+    }
+
+    private async Task SaveSelectedInstanceAsync()
+    {
+        try
+        {
+            await Settings.SaveAsync();
+        }
+        catch (Exception exception)
+        {
+            _logger.Warn($"保存当前实例选择失败：{exception.Message}");
         }
     }
 
