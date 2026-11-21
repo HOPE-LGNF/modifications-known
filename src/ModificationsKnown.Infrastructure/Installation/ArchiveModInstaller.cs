@@ -33,6 +33,49 @@ public sealed class ArchiveModInstaller : IModInstaller
         _logger = logger;
     }
 
+    public Task<ArchiveInspection> InspectArchiveAsync(
+        string archivePath,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() => InspectCore(archivePath, cancellationToken), cancellationToken);
+    }
+
+    private ArchiveInspection InspectCore(string archivePath, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(archivePath)) return ArchiveInspection.Empty;
+
+        Directory.CreateDirectory(AppPaths.TempDirectory);
+        var tempRoot = Path.Combine(AppPaths.TempDirectory, "inspect-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        try
+        {
+            ExtractSafely(archivePath, tempRoot, cancellationToken);
+            var pluginsRoot = FindBepInExPluginsDirectory(tempRoot);
+            var packages = pluginsRoot is not null
+                ? CollectPackagesFromPluginsRoot(pluginsRoot, allowLooseFiles: true)
+                : CollectPackagesFromArchiveRoot(tempRoot, archivePath);
+
+            var result = packages
+                .Select(package => new ArchivedPackage(
+                    package.PackageName,
+                    Directory.EnumerateFiles(package.SourceDirectory, "*", SearchOption.AllDirectories)
+                        .Where(IsDllFile)
+                        .Select(path => BepInExAssemblyReader.Read(path).Version)
+                        .FirstOrDefault(version => !string.IsNullOrWhiteSpace(version))))
+                .ToList();
+            return new ArchiveInspection(result);
+        }
+        catch (Exception exception)
+        {
+            _logger?.Warn($"Archive inspection failed: {exception.Message}");
+            return ArchiveInspection.Empty;
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
     public Task<ModInstallResult> InstallArchiveAsync(
         GameInstallation installation,
         string archivePath,

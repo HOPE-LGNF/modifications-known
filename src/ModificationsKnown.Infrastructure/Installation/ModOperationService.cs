@@ -22,6 +22,11 @@ public sealed class ModOperationService
         _installer = installer;
     }
 
+    public Task<ArchiveInspection> InspectArchiveAsync(
+        string archivePath,
+        CancellationToken cancellationToken = default) =>
+        _installer.InspectArchiveAsync(archivePath, cancellationToken);
+
     public Task<IReadOnlyList<InstalledMod>> ScanAsync(
         GameInstallation installation,
         CancellationToken cancellationToken = default) =>

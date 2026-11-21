@@ -244,7 +244,7 @@ public partial class DiscoverViewModel
                     file?.Id);
                 DownloadStatus = nxmReady
                     ? "普通 API Key 无法获取直链。已打开 Nexus 文件页，请点击页面上的 “Slow download”，并允许浏览器打开 MK，MK 会接管 NXM 下载。"
-                    : "普通 API Key 无法获取直链。已打开普通 Nexus 文件页，请用 Slow download 手动下载后添加；未使用 NXM。";
+                    : "普通 API Key 无法获取直链，且暂未使用 NXM。已打开普通 Nexus 文件页，请点击 Slow Download 下载压缩包，再拖入 MK 安装。";
                 ShowFreeDownloadWhy = true;
                 await OpenNexusFilePageAsync(card, version, file);
                 _shell.SetStatus(DownloadStatus, StatusKind.Warning);

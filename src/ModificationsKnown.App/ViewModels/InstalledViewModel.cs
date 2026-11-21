@@ -542,13 +542,61 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             ModInstallResult? last = null;
             foreach (var path in paths)
             {
-                last = await _operations.InstallArchiveAsync(installation, path);
+                var inspection = await _operations.InspectArchiveAsync(path);
+                var archived = inspection.Packages.Count == 1 ? inspection.Packages[0] : null;
+                var installed = archived is null
+                    ? null
+                    : _allItems
+                        .Select(item => item.Mod)
+                        .FirstOrDefault(mod => string.Equals(
+                            mod.PackageId,
+                            archived.PackageName,
+                            StringComparison.OrdinalIgnoreCase));
+
+                if (installed is not null && archived is not null)
+                {
+                    if (!string.IsNullOrWhiteSpace(archived.Version)
+                        && !string.IsNullOrWhiteSpace(installed.UpdateVersion)
+                        && !VersionText.IsNewer(archived.Version, installed.UpdateVersion))
+                    {
+                        failures.Add($"{Path.GetFileName(path)}：已安装 {installed.UpdateVersion}，归档版本 {archived.Version} 不高于当前，已跳过。");
+                        continue;
+                    }
+
+                    var choice = await _dialogs.ConfirmUpdateAsync(
+                        "更新模组",
+                        $"检测到已安装「{installed.Name}」{installed.VersionLabel}。\n\n将使用本地归档 {Path.GetFileName(path)} 更新到 {VersionText.Label(archived.Version)}。旧版本可备份，失败会尝试恢复。",
+                        showBackupOption: true);
+                    if (choice is null) continue;
+
+                    var update = await _updates.InstallReplacingAsync(
+                        installation,
+                        installed,
+                        path,
+                        installed.Source ?? PackageSource.Local,
+                        choice.Backup);
+                    last = new ModInstallResult(
+                        update.Success,
+                        update.Message,
+                        update.Success
+                            ? [new InstalledPackageResult(installed.PackageId, true, update.Message)]
+                            : []);
+                }
+                else
+                {
+                    last = await _operations.InstallArchiveAsync(installation, path);
+                }
+
                 if (!last.AllSucceeded) failures.Add($"{Path.GetFileName(path)}：{last.Message}");
             }
 
-            if (paths.Count == 1)
+            if (paths.Count == 1 && last is not null)
             {
-                _shell.SetStatus(last!.Message, last.Success ? StatusKind.Success : StatusKind.Error);
+                _shell.SetStatus(last.Message, last.AllSucceeded ? StatusKind.Success : StatusKind.Warning);
+            }
+            else if (paths.Count == 1)
+            {
+                _shell.SetStatus(failures.FirstOrDefault() ?? "没有安装任何压缩包。", StatusKind.Warning);
             }
             else if (failures.Count == 0)
             {
@@ -557,8 +605,8 @@ public partial class InstalledViewModel : ObservableObject, IAsyncPage
             else
             {
                 _shell.SetStatus(
-                    $"{paths.Count - failures.Count}/{paths.Count} 个压缩包安装成功。失败：{string.Join("；", failures)}",
-                    StatusKind.Error);
+                    $"{paths.Count - failures.Count}/{paths.Count} 个压缩包处理完成。问题：{string.Join("；", failures)}",
+                    StatusKind.Warning);
             }
 
             await RefreshCoreAsync();

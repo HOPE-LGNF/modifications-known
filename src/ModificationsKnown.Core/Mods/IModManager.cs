@@ -37,6 +37,10 @@ public interface IModManager
 
 public interface IModInstaller
 {
+    Task<ArchiveInspection> InspectArchiveAsync(
+        string archivePath,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Installs a downloaded archive into BepInEx/plugins. Implementations must
     /// reject path traversal and must not leave a half-installed package behind.

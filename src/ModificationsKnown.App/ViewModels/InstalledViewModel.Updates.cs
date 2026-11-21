@@ -217,7 +217,7 @@ public partial class InstalledViewModel
                 _shell.SetStatus(
                     _openNexusWithNxm
                         ? $"Nexus 没有为「{item.Name}」返回直链；已打开 Nexus 文件页，可使用 NXM 接管。"
-                        : $"Nexus 没有为「{item.Name}」返回直链；已打开普通 Nexus 文件页，请手动 Slow download。",
+                        : $"Nexus 没有为「{item.Name}」返回直链，且暂未使用 NXM；已打开普通 Nexus 文件页，请点击 Slow Download 下载压缩包，再拖入 MK 更新。",
                     StatusKind.Warning);
                 await OpenNexusFilePageAsync(match, domain, latest);
                 return false;

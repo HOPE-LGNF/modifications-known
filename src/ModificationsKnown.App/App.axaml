@@ -20,7 +20,9 @@
         <SolidColorBrush x:Key="DialogScrimBrush" Color="#8C080B09" />
         <SolidColorBrush x:Key="SuccessBrush" Color="#7DCE9A" />
         <SolidColorBrush x:Key="WarningBrush" Color="#E5B567" />
+        <SolidColorBrush x:Key="WarningSoftBrush" Color="#26E5B567" />
         <SolidColorBrush x:Key="DangerBrush" Color="#E07A7A" />
+        <SolidColorBrush x:Key="DangerSoftBrush" Color="#26E07A7A" />
         <SolidColorBrush x:Key="DangerDeepBrush" Color="#B04C4C" />
         <SolidColorBrush x:Key="DangerContrastBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="HeroStartBrush" Color="#1B3A2B" />
@@ -161,11 +163,11 @@
         </Style>
 
         <Style Selector="Border.activity-icon.warning">
-            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="Background" Value="{DynamicResource WarningSoftBrush}" />
         </Style>
 
         <Style Selector="Border.activity-icon.error">
-            <Setter Property="Background" Value="{DynamicResource SurfaceAltBrush}" />
+            <Setter Property="Background" Value="{DynamicResource DangerSoftBrush}" />
         </Style>
 
         <Style Selector="TextBlock.activity-glyph">
