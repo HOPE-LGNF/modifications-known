@@ -50,7 +50,7 @@
 - [x] GitHub release update check
 - [x] Windows self-update with SHA-256 digest verification
 - [ ] Authenticode / signed release artifacts
-- [ ] Stable / preview update channels
+- [x] Stable / preview update channels
 - [ ] Differential updates
 - [ ] Automatic rollback when replacement fails
 - [ ] Portable mode
